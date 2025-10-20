@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Standalone WebGPU Reduce Primitive Test</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css" />
+</head>
+
+<body>
+    <h1>WebGPU Reduce Primitive Example</h1>
+    <p>
+        This example is a self-contained use of the <code>reduce</code> primitive.
+        It computes a sum-reduction on an input array of 2<sup>24</sup>
+        i32s, producing a single output value.
+        <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/reduce_example.mjs">The entire JS source
+            file is in github.</a>
+        While the entire file contains substantial WebGPU and input-output setup
+        boilerplate, the important parts follow.
+    </p>
+    <p>
+        First, we declare the reduce primitive. We configure its datatype (i32), the
+        binary operation for reduce (sum-reduction on i32s), and the type
+        (reduce).
+    </p>
+    <pre><code class="language-javascript">const datatype = "i32";
+const binop = new BinOpAdd({ datatype });
+const reducePrimitive = new DLDFScan({
+  device,
+  binop,
+  type: "reduce",
+  datatype,
+});
+const primitive = reducePrimitive;</code></pre>
+    <p>
+        We have declared buffers (using WebGPU's <code>device.createBuffer</code>)
+        called <code>memsrcBuffer</code> and <code>memdestBuffer</code>. Note that
+        for reduce, the output buffer is only 4 bytes (a single value). We then
+        call the primitive's <code>execute</code> procedure (note that
+        <code>execute</code> is <code>async</code>):
+    </p>
+    <pre><code class="language-javascript">await primitive.execute({
+  inputBuffer: memsrcBuffer,
+  outputBuffer: memdestBuffer,
+});</code></pre>
+    <p>We then read back the result from the GPU and validate it.</p>
+    <p>
+        Your developer console should show a result that allows you to inspect the
+        input array and the single output value, and prints "Validation passed" if the output
+        matches the (CPU-computed) reference.
+    </p>
+    <pre><code>input Int32Array(16777216) [array of values...]
+output Int32Array(1) [reduced_value]
+Validation passed
+</code></pre>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+        hljs.highlightAll();
+    </script>
+    <div id="plot"></div>
+    <script src="reduce_example.mjs" type="module"></script>
+</body>
+
+</html>
