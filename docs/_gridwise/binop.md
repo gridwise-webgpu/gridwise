@@ -2,6 +2,7 @@
 layout: post
 title: "Gridwise's Binary Operator Class"
 date: 2025-09-16
+excerpt: "Understanding the BinOp class that represents monoids with binary operations, datatypes, and identity elements for use in primitives."
 ---
 
 Gridwise's binary operator class is called `binop`. This class represents a [monoid](https://en.wikipedia.org/wiki/Monoid), which has as its constituent parts a binary operation, a datatype for the data on which the operator is applied, and an identity element. (If we call the identity element `I` and the operator `op`, then `x = I op x`. For instance, addition's identity is zero, and multiplication's is one.) In Gridwise, we package these elements into an instance of a JS class, `BinOp`. This class then defines a number of objects that are used in WGSL code generation and CPU correctness checking.

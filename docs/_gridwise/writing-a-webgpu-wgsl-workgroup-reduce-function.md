@@ -2,6 +2,7 @@
 layout: post
 title: "Abstraction Challenges in Writing a WebGPU/WGSL Workgroup Reduce Function"
 date: 2025-04-08
+excerpt: "A practical walkthrough of implementing a workgroupReduce function in WGSL, exploring language challenges and abstraction pain points."
 ---
 
 In this post, we'll walk through the process of writing a `workgroupReduce` function in WGSL. We write this function as if we were a library writer who would implement `workgroupReduce` with the intent that other unknown developers will call our function. Our goal is to explore the WGSL issues facing the library writer. Through this practical example of creating a `reduceWorkgroup` function, we will identify and discuss several pain points in the language.

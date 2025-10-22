@@ -2,6 +2,7 @@
 layout: post
 title: "Gridwise's Buffer Class"
 date: 2025-09-16
+excerpt: "The Buffer class encapsulates data that spans both CPU (typed arrays) and GPU (GPUBuffer), providing a unified interface for data management."
 ---
 
 During Gridwise's development, we found a need to encapsulate the concept of a single wad of data that spans CPU and GPU. We call this class `Buffer`. It contains both a CPU-side JS typed array and a GPU-side `GPUBuffer`. The abstraction is that these two objects are (roughly) consistent with each other (they are not meant to store two logically different objects).

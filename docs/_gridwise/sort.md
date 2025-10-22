@@ -2,6 +2,7 @@
 layout: post
 title: "Gridwise Sort"
 date: 2025-09-16
+excerpt: "GPU radix sort implementation using the OneSweep architecture with chained scan and forward-progress guarantees."
 ---
 
 The dominant approach to GPU sorting is a [radix sort](https://en.wikipedia.org/wiki/Radix_sort) over input keys. In general, radix sorts deliver high performance on GPUs because they require _O(n)_ work for inputs of _n_ elements, because their constituent memory accesses are generally fairly coalesced and thus deliver good memory performance, and because the underlying compute primitives that compose to make the sort are good matches for GPUs.

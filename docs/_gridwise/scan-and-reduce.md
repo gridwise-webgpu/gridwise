@@ -2,6 +2,7 @@
 layout: post
 title: "Gridwise Scan and Reduce"
 date: 2025-09-16
+excerpt: "Implementation details of scan (parallel prefix) and reduce operations in Gridwise, including our SPAA 2025 paper findings."
 ---
 
 [Scan](https://en.wikipedia.org/wiki/Prefix_sum) (parallel prefix) is a fundamental parallel compute primitive useful in both other primitives as well as a wide range of application domains. (The [Wikipedia page](https://en.wikipedia.org/wiki/Prefix_sum#Applications) describes many possible uses of scan.) Here we describe how our implementation works and how it is used in Gridwise. We published a [paper on our scan implementation](https://dl.acm.org/doi/10.1145/3694906.3743326) at SPAA 2025. Here we instead aim for a higher-level, more informal description of our implementation.

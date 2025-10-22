@@ -1,0 +1,32 @@
+# Gridwise Jekyll Configuration
+
+title: "Gridwise: WebGPU Compute Primitives in JavaScript"
+email: jowens@ece.ucdavis.edu
+description: >-
+  Gridwise defines WebGPU compute primitives using JavaScript.
+baseurl: "/gridwise"
+url: "https://gridwise-webgpu.github.io"
+github_username: Gridwise
+
+show_excerpts: true
+
+theme: minima
+plugins:
+  - jekyll-feed
+
+collections:
+  gridwise:
+    output: true
+    permalink: /gridwise/:title/
+
+defaults:
+  - scope:
+      path: ""
+      type: "gridwise"
+    values:
+      layout: "post"
+
+exclude:
+  - misc/
+  - Gemfile
+  - Gemfile.lock
