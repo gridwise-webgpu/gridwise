@@ -25,6 +25,7 @@ if (typeof process !== "undefined" && process.release.name === "node") {
   await import("https://cdnjs.cloudflare.com/ajax/libs/canvg/3.0.9/umd.js");
   /* svg-exportJS plugin */
   await import("https://sharonchoong.github.io/svg-exportJS/svg-export.min.js");
+  await import("https://cdn.jsdelivr.net/gh/sharonchoong/svg-exportJS@master/dist/umd/svg-export.umd.min.js");
   /* end https://github.com/sharonchoong/svg-exportJS */
   const urlParams = new URL(window.location.href).searchParams;
   saveJSON = urlParams.get("saveJSON"); // string or undefined
@@ -35,7 +36,7 @@ if (typeof process !== "undefined" && process.release.name === "node") {
   if (saveSVG === "false") {
     saveSVG = false;
   }
-  if (Window.crossOriginIsolated) {
+  if (window.crossOriginIsolated) {
     console.info("IS cross-origin isolated");
   } else {
     console.info("is NOT cross-origin isolated");
