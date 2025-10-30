@@ -332,13 +332,19 @@ export class BasePrimitive {
         "Primitive:getSimpleDispatchGeometry(): Must specify either a workgroupCount in args or this.workgroupCount."
       );
     }
-    let dispatchGeometry = [workgroupCount, 1];
-    while (
-      dispatchGeometry[0] > this.device.limits.maxComputeWorkgroupsPerDimension
-    ) {
+    let dispatchGeometry = [workgroupCount, 1, 1];
+    const maxDim = this.device.limits.maxComputeWorkgroupsPerDimension;
+
+    while (dispatchGeometry[0] > maxDim) {
       /* too big */
       dispatchGeometry[0] = Math.ceil(dispatchGeometry[0] / 2);
       dispatchGeometry[1] *= 2;
+
+      //If Y exceeds maxDim, split into Z
+      if (dispatchGeometry[1] > maxDim) {
+        dispatchGeometry[1] = Math.ceil(dispatchGeometry[1] / 2);
+        dispatchGeometry[2] *= 2;
+      }
     }
     return dispatchGeometry;
   }
@@ -650,9 +656,8 @@ export class BasePrimitive {
             /** Don't think it's feasible to cache bind groups because we don't have a
              * canonical way to name a buffer */
             const kernelBindGroup = this.device.createBindGroup({
-              label: `bindGroup ${bindGroupIndex} for ${this.label} ${
-                action.entryPoint && action.entryPoint
-              } kernel`,
+              label: `bindGroup ${bindGroupIndex} for ${this.label} ${action.entryPoint && action.entryPoint
+                } kernel`,
               layout: computePipeline.getBindGroupLayout(bindGroupIndex),
               entries,
             });

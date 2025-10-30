@@ -4,64 +4,11 @@
   <head>
     <meta charset="utf-8" />
     <title>Standalone WebGPU Scan/Reduce Primitive Test</title>
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css"
-    />
   </head>
 
   <body>
-    <p>
-      This example is a self-contained use of the <code>scan</code> primitive.
-      It computes an exclusive sum-scan on an input array of 2<sup>24</sup>
-      i32s.
-      <a
-        href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_example.mjs"
-        >The entire JS source file is in github.</a
-      >
-      While the entire file contains substantial WebGPU and input-output setup
-      boilerplate, the important parts follow.
-    </p>
-    <p>
-      First, we declare the scan primitive. We configure its datatype (i32), the
-      binary operation for scan (sum-scan on i32s), and the scan type
-      (exclusive).
-    </p>
-    <pre><code class="language-javascript">const datatype = "i32";
-const binop = new BinOpAdd({ datatype });
-const scanType = "exclusive";
-const dldfscanPrimitive = new DLDFScan({
-  device,
-  binop,
-  type: scanType,
-  datatype,
-});
-const primitive = dldfscanPrimitive;</code></pre>
-    <p>
-      We have declared buffers (using WebGPU's <code>device.createBuffer</code>)
-      called <code>memsrcBuffer</code> and <code>memdestBuffer</code>. We then
-      call the primitive's <code>execute</code> procedure (note that
-      <code>execute</code> is <code>async</code>):
-    </p>
-    <pre><code class="language-javascript">await primitive.execute({
-  inputBuffer: memsrcBuffer,
-  outputBuffer: memdestBuffer,
-});</code></pre>
-    <p>We then read back the result from the GPU and validate it.</p>
-    <p>
-      Your developer console should show a result that allows you to inspect the
-      input and output arrays, and prints "Validation passed" if the output
-      matches the (CPU-computed) reference.
-    </p>
-    <pre><code>input Int32Array(16777216)
-output Int32Array(16777216)
-Validation passed
-</code></pre>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script>
-      hljs.highlightAll();
-    </script>
     <div id="plot"></div>
     <script src="scan_example.mjs" type="module"></script>
+    </script>
   </body>
 </html>

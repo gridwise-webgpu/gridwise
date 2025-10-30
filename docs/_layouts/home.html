@@ -1,0 +1,37 @@
+---
+layout: default
+---
+
+<div class="home">
+    {%- if page.title -%}
+    <h1 class="page-heading">{{ page.title }}</h1>
+    {%- endif -%}
+
+    {{ content }}
+
+    {%- if site.posts.size > 0 -%}
+    <h2 class="post-list-heading">{{ page.list_title | default: "Posts" }}</h2>
+    <ul class="post-list">
+        {%- assign ordered_titles = "Gridwise Architecture,Gridwise WebGPU Object Caching Strategy,Gridwise WebGPU
+        Timing Strategy,Gridwise WebGPU Primitive Strategy wrt Subgroups,Gridwise WebGPU @builtins Strategy,Gridwise
+        WebGPU Subgroup Emulation Strategy,Abstraction Challenges in Writing a WebGPU/WGSL Workgroup Reduce
+        Function,Gridwise's Binary Operator Class,Gridwise Scan and Reduce,Gridwise Sort" | split: "," -%}
+        {%- for title in ordered_titles -%}
+        {%- assign found_post = site.posts | where: "title", title | first -%}
+        {%- if found_post -%}
+        <li>
+            <h3>
+                <a class="post-link" href="{{ found_post.url | relative_url }}">
+                    {{ found_post.title | escape }}
+                </a>
+            </h3>
+            {%- if site.show_excerpts -%}
+            {{ found_post.excerpt }}
+            {%- endif -%}
+        </li>
+        {%- endif -%}
+        {%- endfor -%}
+    </ul>
+    {%- endif -%}
+
+</div>

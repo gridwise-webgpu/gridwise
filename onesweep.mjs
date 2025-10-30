@@ -1056,12 +1056,12 @@ export class OneSweepSort extends BaseSort {
       ${
         this.type === "keyvalue"
           ? /* WGSL */ `
-      let digits = array<u32, KEYS_PER_THREAD>(); // this could be u8 if supported
+      var digits = array<u32, KEYS_PER_THREAD>(); // this could be u8 if supported
       /* TODO: "I save the key's digit, not the global offset. I was trying to save on
        * registers---u8 vs u32---but given that the minimal addressable memory size for
        * registers is u32, it probably doesn't save anything over simply saving the
        * global scatter location." */
-      let values = array<u32, KEYS_PER_THREAD>();`
+      var values = array<u32, KEYS_PER_THREAD>();`
           : ""
       }
 
@@ -1437,34 +1437,38 @@ export class OneSweepSort extends BaseSort {
           values
         );
       }
-
-      /* Array.from converts from typed array, because map on
-       * typed array ONLY returns the same typed array */
-      const combined = Array.from(keys).map((key, index) => ({
-        key,
-        value: values[index],
-      }));
-
-      switch (direction) {
-        case "descending":
-          combined.sort((a, b) => {
-            if (a.key < b.key) return 1;
-            if (a.key > b.key) return -1;
-            return 0;
-          });
-          break;
-        default:
-        case "ascending":
-          combined.sort((a, b) => {
-            if (a.key < b.key) return -1;
-            if (a.key > b.key) return 1;
-            return 0;
-          });
-          break;
+      /*build index*/
+      const indices = new Uint32Array(keys.length);
+      for (let i = 0; i < indices.length; i++) {
+        indices[i] = i;
       }
 
-      const sortedKeys = combined.map((item) => item.key);
-      const sortedValues = combined.map((item) => item.value);
+      /*compare keys at 2 indices */
+      const compareFn = direction === "descending"
+        ? (idxA, idxB) => {
+          const a = keys[idxA];
+          const b = keys[idxB];
+          if (a < b) return 1;
+          if (a > b) return -1;
+          return 0;
+        }
+        : (idxA, idxB) => {
+          const a = keys[idxA];
+          const b = keys[idxB];
+          if (a < b) return -1;
+          if (a > b) return 1;
+          return 0;
+        };
+      indices.sort(compareFn);
+
+      const sortedKeys = new keys.constructor(keys.length);
+      const sortedValues = new values.constructor(values.length);
+
+      for (let i = 0; i < indices.length; i++) {
+        const srcIdx = indices[i];
+        sortedKeys[i] = keys[srcIdx];
+        sortedValues[i] = values[srcIdx];
+      }
 
       return { keys: sortedKeys, values: sortedValues };
     }

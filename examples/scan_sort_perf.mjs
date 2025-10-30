@@ -12,12 +12,6 @@ let Plot = await import(
   "https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm"
 );
 
-if (Window.crossOriginIsolated) {
-  console.info("IS cross-origin isolated");
-} else {
-  console.info("is NOT cross-origin isolated");
-}
-
 /* set up a WebGPU device */
 const adapter = await navigator.gpu?.requestAdapter();
 const hasSubgroups = adapter.features.has("subgroups");
@@ -68,6 +62,7 @@ pane
       inclusive_scan: "inclusive",
       reduce: "reduce",
       sort_keys: "sort_keys",
+      sort_pairs: "sort_pairs",
     },
   })
   /* this specializes the options to each primitive */
@@ -80,7 +75,7 @@ pane
         directionPane.hidden = true;
         break;
       case "sort_keys":
-      case "sort_values":
+      case "sort_pairs":
         binopPane.hidden = true;
         directionPane.hidden = false;
         break;
@@ -140,7 +135,7 @@ button.on("click", async () => {
   <li>Primitive: ${params.primitive}
   <li>Datatype: ${params.datatype}
   <li>Binop: ${params.binop}
-  <li>Input lengths (in items): ${params.inputCount} lengths from ${params.inputLengthStart} to ${params.inputLengthEnd}
+  <li>Input length: ${params.inputCount} lengths from ${params.inputLengthStart} to ${params.inputLengthEnd} (items)
   </ul>
   <p>${validation}</p>`;
 });
@@ -158,6 +153,10 @@ async function buildAndRun() {
   )) {
     /* generate an input dataset */
     const memsrc = new (datatypeToTypedArray(params.datatype))(inputLength);
+
+    /*for values*/
+    const payLoadsrc = new (datatypeToTypedArray(params.datatype))(inputLength);
+
 
     /* generate ~random input datasets that are friendly for a
      * particular primitive */
@@ -181,12 +180,13 @@ async function buildAndRun() {
           }
           break;
         case "sort_keys":
-        case "sort_values":
+
           /* for sorting, we want all different values */
           switch (params.datatype) {
             case "u32":
               /* roughly, [0, 2^28] */
               memsrc[i] = Math.floor(Math.random() * Math.pow(2, 28));
+
               break;
             case "f32":
             case "i32":
@@ -197,7 +197,21 @@ async function buildAndRun() {
               break;
           }
           break;
-        default:
+        case "sort_pairs":
+          switch (params.datatype) {
+            case "u32":
+              memsrc[i] = Math.floor(Math.random() * Math.pow(2, 28));
+              payLoadsrc[i] = Math.floor(Math.random() * Math.pow(2, 28));
+              break;
+            case "f32":
+            case "i32":
+              memsrc[i] = (Math.random() < 0.5 ? 1 : -1) *
+                Math.floor(Math.random() * Math.pow(2, 28));
+
+              payLoadsrc[i] = (Math.random() < 0.5 ? 1 : -1) *
+                Math.floor(Math.random() * Math.pow(2, 28))
+              break;
+          }
           break;
       }
     }
@@ -212,6 +226,17 @@ async function buildAndRun() {
           datatype: params.datatype,
           direction: params.direction,
           copyOutputToTemp: true,
+          inputLength: inputLength,
+        });
+        break;
+      case "sort_pairs":
+        primitive = new OneSweepSort({
+          device,
+          datatype: params.datatype,
+          direction: params.direction,
+          copyOutputToTemp: true,
+          type: "keyvalue",
+          inputLength: inputLength,
         });
         break;
       default:
@@ -258,6 +283,32 @@ async function buildAndRun() {
       usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
+    /*buffers for values*/
+    const payLoadsrcBuffer = device.createBuffer({
+      label: `value source buffer (${params.datatype})`,
+      size: payLoadsrc.byteLength,
+      usage:
+        GPUBufferUsage.STORAGE |
+        GPUBufferUsage.COPY_SRC |
+        GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(payLoadsrcBuffer, 0, payLoadsrc);
+
+    const payloadDestBuffer = device.createBuffer({
+      label: "value destination buffer",
+      size: memdestBytes,
+      usage:
+        GPUBufferUsage.STORAGE |
+        GPUBufferUsage.COPY_SRC |
+        GPUBufferUsage.COPY_DST
+    });
+
+    const mappablePayloadDestBuffer = device.createBuffer({
+      label: "mappable value destination buffer",
+      size: memdestBytes,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+
     /* actually run the primitive */
     /* sort and scan have different arguments */
     const primitiveOptions = {
@@ -279,13 +330,32 @@ async function buildAndRun() {
           ...primitiveOptions,
         });
         break;
+
+      case "sort_pairs":
+        /*call once, ignore results*/
+        await primitive.execute({
+          keysInOut: memsrcBuffer,
+          keysTemp: memdestBuffer,
+          payloadInOut: payLoadsrcBuffer,
+          payloadTemp: payloadDestBuffer,
+        });
+        /*call trials times*/
+        await primitive.execute({
+          keysInOut: memsrcBuffer,
+          keysTemp: memdestBuffer,
+          payloadInOut: payLoadsrcBuffer,
+          payloadTemp: payloadDestBuffer,
+          ...primitiveOptions,
+        })
+        break;
+
       default:
-        /* call once, ignore result */
+        /*call once, ignore results*/
         await primitive.execute({
           inputBuffer: memsrcBuffer,
           outputBuffer: memdestBuffer,
         });
-        /* call trials times */
+        /*call trials times*/
         await primitive.execute({
           inputBuffer: memsrcBuffer,
           outputBuffer: memdestBuffer,
@@ -337,8 +407,19 @@ async function buildAndRun() {
       0,
       mappableMemdestBuffer.size
     );
+    if (params.primitive == "sort_pairs") {
+      encoder.copyBufferToBuffer(
+        payloadDestBuffer,
+        0,
+        mappablePayloadDestBuffer,
+        0,
+        mappablePayloadDestBuffer.size
+      );
+    }
     const commandBuffer = encoder.finish();
     device.queue.submit([commandBuffer]);
+
+
 
     await mappableMemdestBuffer.mapAsync(GPUMapMode.READ);
     const memdest = new (datatypeToTypedArray(params.datatype))(
@@ -346,7 +427,20 @@ async function buildAndRun() {
     );
     mappableMemdestBuffer.unmap();
 
+    /*Read values back to cpu(only for sort_pairs)*/
+    let payloadDest;
+    if (params.primitive == "sort_pairs") {
+      await mappablePayloadDestBuffer.mapAsync(GPUMapMode.READ);
+      payloadDest = new (datatypeToTypedArray(params.datatype))(
+        mappablePayloadDestBuffer.getMappedRange().slice()
+      );
+      mappablePayloadDestBuffer.unmap();
+
+    }
     console.log("output array", memdest);
+    if (params.primitive === "sort_pairs") {
+      console.log("output values", payloadDest);
+    }
 
     if (primitive.validate) {
       let errorstr;
@@ -355,6 +449,15 @@ async function buildAndRun() {
           errorstr = primitive.validate({
             inputKeys: memsrc,
             outputKeys: memdest,
+          });
+          break;
+        case "sort_pairs":
+          errorstr = primitive.validate({
+            inputKeys: memsrc,
+            outputKeys: memdest,
+            inputPayload: payLoadsrc,
+            outputPayload: payloadDest,
+
           });
           break;
         default:
@@ -368,12 +471,12 @@ async function buildAndRun() {
           break;
       }
       if (errorstr === "") {
-        returnStr += `Validation passed (input length: ${inputLength} items)<br/ >`;
+        returnStr += `Validation passed (input length: ${inputLength})<br/ >`;
       } else {
-        returnStr += `Validation failed (input length: ${inputLength} items)<br/ >${errorstr}<br/ >`;
+        returnStr += `Validation failed (input length: ${inputLength})<br/ >${errorstr}<br/ >`;
       }
     } else {
-      returnStr += `Validation not performed (input length: ${inputLength} items)<br/ >`;
+      returnStr += `Validation not performed (input length: ${inputLength})<br/ >`;
     }
   } /* end loop over input lengths */
   plotResults(results);

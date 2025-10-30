@@ -4,15 +4,18 @@ title: About
 permalink: /about/
 ---
 
-This is the base Jekyll theme. You can find out more info about customizing your Jekyll theme, as well as basic Jekyll usage documentation at [jekyllrb.com](https://jekyllrb.com/)
+Gridwise is a JavaScript library that provides high-performance WebGPU compute primitives. Our goal is to deliver best-in-class performance while minimizing the code complexity for developers.
 
-You can find the source code for Minima at GitHub:
-[jekyll][jekyll-organization] /
-[minima](https://github.com/jekyll/minima)
+## Key Features
 
-You can find the source code for Jekyll at GitHub:
-[jekyll][jekyll-organization] /
-[jekyll](https://github.com/jekyll/jekyll)
+- **WebGPU Compute Primitives**: Scan, reduce, sort, and other fundamental parallel operations
+- **High Performance**: Optimized implementations using modern GPU architectures
+- **Easy to Use**: Simple JavaScript API that handles low-level WebGPU details
+- **Cross-Platform**: Works across different WebGPU-capable devices and browsers
 
+## Getting Started
 
-[jekyll-organization]: https://github.com/jekyll
+Gridwise primitives are designed to be instantiated and executed with minimal setup. The library handles WebGPU object creation, memory management, and shader compilation automatically.
+
+You can find the source code for Gridwise at GitHub:
+[gridwise](https://github.com/gridwise-js/gridwise)

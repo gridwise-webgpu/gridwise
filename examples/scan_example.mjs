@@ -59,7 +59,7 @@ export async function main(navigator) {
         break;
     }
   }
-  console.log("input", memsrc);
+  console.log("input array", memsrc);
 
   /* declare the primitive */
   const dldfscanPrimitive = new DLDFScan({
