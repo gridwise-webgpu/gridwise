@@ -22,9 +22,9 @@ if (typeof process !== "undefined" && process.release.name === "node") {
   );
   /* begin https://github.com/sharonchoong/svg-exportJS */
   /* svg-exportJS prerequisite: canvg */
-  await import("https://cdnjs.cloudflare.com/ajax/libs/canvg/3.0.9/umd.js");
+  // await import("https://cdnjs.cloudflare.com/ajax/libs/canvg/3.0.9/umd.js");
   /* svg-exportJS plugin */
-  await import("https://sharonchoong.github.io/svg-exportJS/svg-export.min.js");
+  // await import("https://cdn.jsdelivr.net/npm/svg-export@1.0.1/dist/svg-export.min.js");
   /* end https://github.com/sharonchoong/svg-exportJS */
   const urlParams = new URL(window.location.href).searchParams;
   saveJSON = urlParams.get("saveJSON"); // string or undefined
@@ -65,6 +65,10 @@ import {
   SortOneSweep64v32Suite,
   SortOneSweep64v321MNoPlotSuite,
 } from "./onesweep.mjs";
+import {
+  WGHistogramTestSuite,
+  HierarchicalHistogramTestSuite,
+} from "./histogram.mjs";
 import { BasePrimitive } from "./primitive.mjs";
 
 async function main(navigator) {
@@ -135,7 +139,7 @@ async function main(navigator) {
   //);
   // let testSuites = [DLDFScanMiniSuite];
   // let testSuites = [DLDFScanAccuracyRegressionSuite];
-  let testSuites = [DLDFPerfSuite];
+  // let testSuites = [DLDFPerfSuite];
   // let testSuites = [DLDFDottedCachePerfTestSuite];
   // let testSuites = [DLDFDottedCachePerf2TestSuite];
   // let testSuites = [DLDFSingletonWithTimingSuite];
@@ -144,6 +148,9 @@ async function main(navigator) {
   // let testSuites = [SortOneSweepFunctionalRegressionSuite];
   // let testSuites = [SortOneSweep64v32Suite];
   // let testSuites = [SortOneSweep64v321MNoPlotSuite];
+  // let testSuites = [WGHistogramTestSuite];
+  // let testSuites = [HierarchicalHistogramTestSuite];
+  let testSuites = [WGHistogramTestSuite, HierarchicalHistogramTestSuite];
 
   const expts = new Array(); // push new rows (experiments) onto this
   let primitiveCacheStats;
@@ -240,13 +247,17 @@ async function main(navigator) {
             device,
             datatype:
               testSuite.category === "subgroups" &&
-              testSuite.testSuite === "subgroupBallot"
+                testSuite.testSuite === "subgroupBallot"
                 ? "vec4u"
-                : primitive.datatype,
+                : testSuite.category === "histogram"
+                  ? "u32"
+                  : primitive.datatype,
             length:
               "type" in primitive && primitive.type === "reduce"
                 ? 1
-                : primitive.inputLength,
+                : testSuite.category === "histogram"
+                  ? primitive.numBins
+                  : primitive.inputLength,
             label: "outputBuffer",
             createGPUBuffer: true,
             createMappableGPUBuffer: true,

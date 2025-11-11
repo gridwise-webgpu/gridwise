@@ -214,9 +214,9 @@ export function formatWGSL(wgslCode) {
     const pushLeft =
       /* lines like ") -> f32 {" */
       braceCount == 0 &&
-      (trimmedLine.startsWith(")") ||
-        trimmedLine.startsWith("]") ||
-        trimmedLine.startsWith("}"))
+        (trimmedLine.startsWith(")") ||
+          trimmedLine.startsWith("]") ||
+          trimmedLine.startsWith("}"))
         ? -1
         : 0;
 
@@ -256,4 +256,34 @@ export function formatWGSL(wgslCode) {
     }
   });
   return formattedLines.join("\n");
+}
+export function createUniformBuffer(fields) {
+  const dataSize = fields.length * 4;
+
+  //multiple of 16 bytes
+  const alignedSize = Math.ceil(dataSize / 16) * 16;
+
+  const buffer = new ArrayBuffer(alignedSize);
+  const dataView = new DataView(buffer);
+
+  let offset = 0;
+  for (const field of fields) {
+    switch (field.type) {
+      case 'u32':
+        dataView.setUint32(offset, field.value, true);
+        break;
+      case 'i32':
+        dataView.setInt32(offset, field.value, true);
+        break;
+      case 'f32':
+        dataView.setFloat32(offset, field.value, true);
+        break;
+      default:
+        throw new Error(`Unsupported uniform type: ${field.type}`);
+    }
+    offset += 4;
+  }
+
+  // Remaining paddings are automatically zero
+  return new Uint8Array(buffer);
 }

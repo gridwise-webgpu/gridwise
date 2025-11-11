@@ -5,7 +5,7 @@ const isLocalhost =
 
 const modulePath =
   (isLocalhost ? window.location.origin : "https://gridwise-webgpu.github.io") +
-  "/gridwise/benchmarking.mjs";
+  "/benchmarking.mjs";
 
 import(modulePath)
   .then(({ main }) => {
