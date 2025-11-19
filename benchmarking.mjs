@@ -20,21 +20,12 @@ if (typeof process !== "undefined" && process.release.name === "node") {
   Plot = await import(
     "https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm"
   );
-  /* begin https://github.com/sharonchoong/svg-exportJS */
-  /* svg-exportJS prerequisite: canvg */
-  await import("https://cdnjs.cloudflare.com/ajax/libs/canvg/3.0.9/umd.js");
-  /* svg-exportJS plugin */
-  await import("https://sharonchoong.github.io/svg-exportJS/svg-export.min.js");
-  /* end https://github.com/sharonchoong/svg-exportJS */
   const urlParams = new URL(window.location.href).searchParams;
-  saveJSON = urlParams.get("saveJSON"); // string or undefined
+  saveJSON = urlParams.get("saveJSON");
   if (saveJSON === "false") {
     saveJSON = false;
   }
-  saveSVG = urlParams.get("saveSVG"); // string or undefined
-  if (saveSVG === "false") {
-    saveSVG = false;
-  }
+  saveSVG = false;
   if (Window.crossOriginIsolated) {
     console.info("IS cross-origin isolated");
   } else {
@@ -45,7 +36,7 @@ if (typeof process !== "undefined" && process.release.name === "node") {
 // tests
 // import { NoAtomicPKReduceTestSuite } from "./reduce.mjs";
 // import { HierarchicalScanTestSuite } from "./scan.mjs";
-import {
+/*import {
   // DLDFScanTestSuite,
   // DLDFReduceTestSuite,
   DLDFScanAccuracyRegressionSuite,
@@ -64,7 +55,8 @@ import {
   SortOneSweepFunctionalRegressionSuite,
   SortOneSweep64v32Suite,
   SortOneSweep64v321MNoPlotSuite,
-} from "./onesweep.mjs";
+} from "./onesweep.mjs";*/
+import { EvenBinsHistogramTestSuite, CustomBinsHistogramTestSuite } from "./baseHistogram.mjs"
 import { BasePrimitive } from "./primitive.mjs";
 
 async function main(navigator) {
@@ -135,7 +127,7 @@ async function main(navigator) {
   //);
   // let testSuites = [DLDFScanMiniSuite];
   // let testSuites = [DLDFScanAccuracyRegressionSuite];
-  let testSuites = [DLDFPerfSuite];
+  let testSuites = [EvenBinsHistogramTestSuite, CustomBinsHistogramTestSuite];
   // let testSuites = [DLDFDottedCachePerfTestSuite];
   // let testSuites = [DLDFDottedCachePerf2TestSuite];
   // let testSuites = [DLDFSingletonWithTimingSuite];
@@ -240,7 +232,7 @@ async function main(navigator) {
             device,
             datatype:
               testSuite.category === "subgroups" &&
-              testSuite.testSuite === "subgroupBallot"
+                testSuite.testSuite === "subgroupBallot"
                 ? "vec4u"
                 : primitive.datatype,
             length:
@@ -409,10 +401,8 @@ async function main(navigator) {
       }
       if (validations.done > 0) {
         console.info(
-          `${validations.done} validation${
-            validations.done === 1 ? "" : "s"
-          } complete${validations?.tested ? ` (${validations.tested})` : ""}, ${
-            validations.errors
+          `${validations.done} validation${validations.done === 1 ? "" : "s"
+          } complete${validations?.tested ? ` (${validations.tested})` : ""}, ${validations.errors
           } error${validations.errors === 1 ? "" : "s"}.`
         );
       }
@@ -424,9 +414,9 @@ async function main(navigator) {
       /* default: if filter not specified, only take expts from the last test we ran */
       let filteredExpts = expts.filter(
         plot.filter ??
-          ((row) =>
-            row.testSuite === lastTestSeen.testSuite &&
-            row.category === lastTestSeen.category)
+        ((row) =>
+          row.testSuite === lastTestSeen.testSuite &&
+          row.category === lastTestSeen.category)
       );
       const mark = plot.mark ?? "lineY";
       console.info(
@@ -500,12 +490,6 @@ async function main(navigator) {
       const div = document.querySelector("#plot");
       div.append(plotted);
       if (saveSVG) {
-        // eslint-disable-next-line no-undef
-        svgExport.downloadSvg(
-          div.lastChild,
-          `${testSuite.testsuite}-${testSuite.category}`, // chart title: file name of exported image
-          {}
-        );
       }
       div.append(document.createElement("hr"));
     }
@@ -579,6 +563,7 @@ function processAndRecordResults(
     bandwidth: result.bandwidthCPU,
     inputItemsPerSecondE9: result.inputItemsPerSecondE9CPU,
   });
+  console.log(`[${testSuite.category}] GPU BW: ${result.bandwidthGPU.toFixed(2)} GB/s | CPU BW: ${result.bandwidthCPU.toFixed(2)} GB/s | Input: ${result.inputBytes} bytes`);
 }
 
 export { main };
