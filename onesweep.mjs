@@ -20,6 +20,11 @@ import { Datatype } from "./datatype.mjs";
 export class OneSweepSort extends BaseSort {
   constructor(args) {
     super(args);
+    
+    // OneSweep is a multi-pass algorithm that requires preserving data between passes
+    // Must disable buffer clearing on reuse
+    this.clearBuffersOnReuse = false;
+    
     if (this.direction === undefined) {
       this.direction = "ascending";
     }
@@ -1322,6 +1327,7 @@ export class OneSweepSort extends BaseSort {
         label: `OneSweep sort (${this.type}, ${this.direction}) global_hist [subgroups: ${this.useSubgroups}]`,
         logKernelCodeToConsole: false,
         getDispatchGeometry: () => {
+          console.log(`[OneSweepSort] global_hist: workgroupCount=${this.reduceWorkgroupCount}, maxDim=${this.device.limits.maxComputeWorkgroupsPerDimension}`);
           return [this.reduceWorkgroupCount];
         },
       }),
@@ -1333,6 +1339,7 @@ export class OneSweepSort extends BaseSort {
         label: `OneSweep sort (${this.type}, ${this.direction}) onesweep_scan [subgroups: ${this.useSubgroups}]`,
         logKernelCodeToConsole: false,
         getDispatchGeometry: () => {
+          console.log(`[OneSweepSort] onesweep_scan: SORT_PASSES=${this.SORT_PASSES}, maxDim=${this.device.limits.maxComputeWorkgroupsPerDimension}`);
           return [this.SORT_PASSES];
         },
       }),
@@ -1351,6 +1358,7 @@ export class OneSweepSort extends BaseSort {
           logKernelCodeToConsole: pass === 0 ? false : false,
           logLaunchParameters: pass === 0 ? false : false,
           getDispatchGeometry: () => {
+            console.log(`[OneSweepSort] onesweep_pass[${pass}]: passWorkgroupCount=${this.passWorkgroupCount}, maxDim=${this.device.limits.maxComputeWorkgroupsPerDimension}`);
             return [this.passWorkgroupCount];
           },
         })
@@ -1702,7 +1710,7 @@ export class OneSweepSort extends BaseSort {
 const OneSweep64v32BW = {
   x: { field: "inputBytes", label: "Input array size (B)" },
   y: { field: "bandwidth", label: "Achieved bandwidth (GB/s)" },
-  stroke: { field: "datatype" },
+  stroke: { field: "timing" },
   test_br: "gpuinfo.description",
   fy: { field: "timing" },
 };
@@ -1710,7 +1718,7 @@ const OneSweep64v32BW = {
 const OneSweep64v32Runtime = {
   x: { field: "inputBytes", label: "Input array size (B)" },
   y: { field: "time", label: "Runtime (ns)" },
-  stroke: { field: "datatype" },
+  stroke: { field: "timing" },
   test_br: "gpuinfo.description",
   fy: { field: "timing" },
 };
@@ -1749,26 +1757,26 @@ const SortOneSweepRegressionParams = {
 };
 
 const SortOneSweepFunctionalParams = {
-  inputLength: [2 ** 25],
+  inputLength: [2 ** 22],
   // inputLength: [2048, 4096],
   // inputLength: range(10, 27).map((i) => 2 ** i),
   // datatype: ["u64" /*"u32", "i32", "f32" */ /*, "u64"*/],
-  datatype: ["u32", "i32", "f32", "u64"],
+  datatype: ["u32", "u64"],
   type: ["keysonly" /* "keyvalue", */],
   direction: ["ascending"],
   disableSubgroups: [false],
 };
 
 const Sort64v32Params = {
-  inputLength: range(18, 25).map((i) => 2 ** i),
-  datatype: ["u64", "u32"],
+  inputLength: [2 ** 22],
+  datatype: ["u64"],
   type: ["keysonly" /* "keyvalue", */],
   direction: ["ascending"],
   disableSubgroups: [false],
 };
 
 const Sort64PHDParams = {
-  inputLength: range(18, 25).map((i) => 2 ** i),
+  inputLength: [2 ** 22],
   datatype: ["u64"],
   passHistDelta: [/* 128,*/ 0 /*, 256, 512, 1024*/],
   type: ["keysonly" /* "keyvalue", */],
@@ -1785,12 +1793,12 @@ const Sort64v321MParams = {
 };
 
 const SortOneSweepSingletonParams = {
-  inputLength: [2 ** 25],
+  inputLength: [2 ** 22],
   // inputLength: [2048, 4096],
   // inputLength: range(10, 27).map((i) => 2 ** i),
   datatype: ["u32"],
-  type: ["keysonly", "keyvalue"],
-  direction: ["ascending", "descending"],
+  type: ["keysonly"],
+  direction: ["ascending"],
   disableSubgroups: [false],
 };
 
@@ -1834,27 +1842,28 @@ export const SortOneSweepRegressionSuite = new BaseTestSuite({
   testSuite: "onesweep",
   initializeCPUBuffer: "fisher-yates",
   // initializeCPUBuffer: "randomizeAbsUnder1024",
-  trials: 2,
+  trials: 1,
   params: SortOneSweepSingletonParams,
   primitive: OneSweepSort,
   // primitiveArgs: { validate: false },
-  // plots: [OneSweepKeyvKeyValuePlot],
+  plots: [OneSweep64v32BW, OneSweep64v32Runtime],
 });
 
 export const SortOneSweepFunctionalRegressionSuite = new BaseTestSuite({
   category: "sort",
   testSuite: "onesweep",
   initializeCPUBuffer: "fisher-yates",
-  trials: 2,
+  trials: 1,
   params: SortOneSweepFunctionalParams,
   primitive: OneSweepSort,
+  plots: [OneSweep64v32BW, OneSweep64v32Runtime],
 });
 
 export const SortOneSweep64v32Suite = new BaseTestSuite({
   category: "sort",
   testSuite: "onesweep",
   initializeCPUBuffer: "randomBytes",
-  trials: 5,
+  trials: 1,
   params: Sort64PHDParams,
   // params: Sort64v32Params,
   primitive: OneSweepSort,

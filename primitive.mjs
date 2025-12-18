@@ -174,6 +174,12 @@ export class BasePrimitive {
 
     // not sure a Map gives me anything I don't get from {}
     this.__buffers = {}; // this is essentially private
+    
+    // Set default for buffer clearing on reuse
+    if (!('clearBuffersOnReuse' in this)) {
+      this.clearBuffersOnReuse = true; 
+    }
+    
     this.useSubgroups = this.device.features.has("subgroups");
     if (args.disableSubgroups) {
       this.useSubgroups = false;
@@ -797,11 +803,8 @@ dispatchGeometry: ${dispatchGeometry}`);
            */
           const existingBuffer = this.getBuffer(action.label);
           if (existingBuffer && existingBuffer.size === action.size) {
-            /* just use the existing buffer, but it might be full of non-zero data */
-            if (action.populateWith) {
-              /* do nothing, because we will fill the buffer with data */
-            } else {
-              /* this is the default -- clear the buffer */
+            /* just use the existing buffer */
+            if (this.clearBuffersOnReuse && !action.populateWith) {
               encoder.clearBuffer(existingBuffer.buffer.buffer);
             }
           } else {

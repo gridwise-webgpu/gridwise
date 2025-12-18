@@ -23,8 +23,6 @@ if (typeof process !== "undefined" && process.release.name === "node") {
   /* begin https://github.com/sharonchoong/svg-exportJS */
   /* svg-exportJS prerequisite: canvg */
   await import("https://cdnjs.cloudflare.com/ajax/libs/canvg/3.0.9/umd.js");
-  /* svg-exportJS plugin */
-  await import("https://sharonchoong.github.io/svg-exportJS/svg-export.min.js");
   await import("https://cdn.jsdelivr.net/gh/sharonchoong/svg-exportJS@master/dist/umd/svg-export.umd.min.js");
   /* end https://github.com/sharonchoong/svg-exportJS */
   const urlParams = new URL(window.location.href).searchParams;
@@ -136,13 +134,13 @@ async function main(navigator) {
   //);
   // let testSuites = [DLDFScanMiniSuite];
   // let testSuites = [DLDFScanAccuracyRegressionSuite];
-  let testSuites = [DLDFPerfSuite];
+  //let testSuites = [DLDFPerfSuite];
   // let testSuites = [DLDFDottedCachePerfTestSuite];
   // let testSuites = [DLDFDottedCachePerf2TestSuite];
   // let testSuites = [DLDFSingletonWithTimingSuite];
   // let testSuites = [DLDFFailureSuite];
   // let testSuites = [StoneberryScanMiniSuite];
-  // let testSuites = [SortOneSweepFunctionalRegressionSuite];
+   let testSuites = [SortOneSweepFunctionalRegressionSuite];
   // let testSuites = [SortOneSweep64v32Suite];
   // let testSuites = [SortOneSweep64v321MNoPlotSuite];
 
