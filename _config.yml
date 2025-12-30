@@ -12,9 +12,10 @@ plugins:
   - jekyll-feed
   - jekyll-remote-theme
 
-# Only show About in header navigation
+
 header_pages:
   - about.markdown
+
 
 exclude:
   - misc/

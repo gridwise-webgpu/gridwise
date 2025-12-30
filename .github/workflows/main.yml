@@ -2,9 +2,7 @@ name: Test Jekyll Build
 
 on:
   push:
-    branches: [ test-css-fix-github-actions ]
   pull_request:
-    branches: [ main ]
 
 jobs:
   build:
@@ -16,13 +14,10 @@ jobs:
     - name: Setup Ruby
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: '3.1'
+        ruby-version: '3.2'
         bundler-cache: true
-        working-directory: ./docs
     
     - name: Build site
-      run: |
-        cd docs
-        bundle exec jekyll build
+      run: bundle exec jekyll build
       env:
         JEKYLL_ENV: production

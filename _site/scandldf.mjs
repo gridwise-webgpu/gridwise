@@ -173,6 +173,8 @@ fn main(builtinsUniform: BuiltinsUniform,
 
   // acquire partition index, initialize previous reduction var, set the lock
   if (builtinsNonuniform.lidx == 0u) {
+    /** we reset scan_bump back to zero at the end of the kernel to make this
+     * kernel idempotent (so we can dispatch it multiple times for timing) */
     wg_broadcast_tile_id = atomicAdd(&scan_bump, 1u);
     /* this next initialization is important for block 0 because that block never
      * enters lookback and thus this broadcast value is never otherwise set */
@@ -357,7 +359,6 @@ fn main(builtinsUniform: BuiltinsUniform,
     atomicStore(&spine[tile_id][builtinsNonuniform.lidx], t);
   }
 
-    /* reduce looks clean up to here */ ////
   /* Begin lookback. Only a single subgroup per workgroup does lookback. */
   if (tile_id != 0u) {
     var prev_red: ${this.datatype} = ${this.binop.identity};
@@ -500,6 +501,11 @@ fn main(builtinsUniform: BuiltinsUniform,
         }
 
         if (tile_id == scanParameters.work_tiles - 1u) { // this is the last tile
+          if (builtinsNonuniform.lidx == 0u) {
+            /** reset scan_bump to 0
+             * reset is safe here because I'm the last wg who incremented it */
+            atomicStore(&scan_bump, 0);
+          }
           for(var k = 0u; k < VEC4_SPT; k += 1u) {
             if (i < scanParameters.vec_size) {
               outputBuffer[i] = vec4ScalarBinopV4(prev, t_scan[k]);
@@ -515,6 +521,9 @@ fn main(builtinsUniform: BuiltinsUniform,
       kernel += /* wgsl */ `
         if (tile_id == scanParameters.work_tiles - 1u) { // this is the last tile
           if (builtinsNonuniform.lidx == 0u) {
+            /** reset scan_bump to 0
+             * reset is safe here because I'm the last wg who incremented it */
+            atomicStore(&scan_bump, 0);
             outputBuffer[0] = binop(wg_broadcast_prev_red, wg_partials[local_spine - 1u]);
           }
         }`;

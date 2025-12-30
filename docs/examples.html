@@ -1,0 +1,172 @@
+---
+layout: home
+title: Examples
+permalink: /examples-guide/
+---
+
+<style>
+    .doc-btn {
+        display: inline-block;
+        padding: 8px 14px;
+        background: #39bda7;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        margin-right: 8px;
+        margin-bottom: 10px;
+        font-size: 14px;
+        transition: background 0.2s;
+    }
+
+    .doc-btn:hover {
+        background: #2a9a87;
+        text-decoration: none;
+        color: white;
+    }
+
+    .code-block {
+        background: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 12px;
+        overflow-x: auto;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        margin: 10px 0;
+    }
+</style>
+<p>Explore practical examples demonstrating how to use Gridwise WebGPU primitives for scan, sort, and reduce
+    operations. Each example includes code snippets, explanations of key concepts, and links to source code and
+    performance benchmarks.</p>
+
+<h2>Scan Example</h2>
+<p>Compact example that demonstrates exclusive vs inclusive scans using DLDFScan: how to choose scanType, build the
+    input array, run the primitive, and validate outputs. Good for understanding prefix-sum semantics and the effect of
+    different binary ops (add/max/min).</p>
+<p><em>Open the page, pick parameters in the pane (datatype/binop/input length), click Start, then inspect the result
+        and plots.</em></p>
+
+<h3>Scan Types</h3>
+<p><strong>Exclusive:</strong> Output[i] = sum of all elements before position i (output[0] is identity).</p>
+<p><strong>Inclusive:</strong> Output[i] = sum of all elements up to and including position i.</p>
+
+<h3>Binary Operations</h3>
+<p>Add, Min, Max — combines elements using the specified operation. Custom operations supported via binop.mjs.</p>
+
+<h3>Supported Data Types</h3>
+<p>u32, i32, f32 — all data types work with all binary operations.</p>
+
+<h3>Code Structure</h3>
+<div class="code-block">
+    // Exclusive scan with add operation<br>
+    const primitive = new DLDFScan({<br>
+    &nbsp;&nbsp;device,<br>
+    &nbsp;&nbsp;binop: new BinOpAdd({ datatype: "u32" }),<br>
+    &nbsp;&nbsp;type: "exclusive",<br>
+    &nbsp;&nbsp;datatype: "u32"<br>
+    });<br>
+    <br>
+    // Inclusive scan with max operation<br>
+    const primitive = new DLDFScan({<br>
+    &nbsp;&nbsp;device,<br>
+    &nbsp;&nbsp;binop: new BinOpMax({ datatype: "i32" }),<br>
+    &nbsp;&nbsp;type: "inclusive",<br>
+    &nbsp;&nbsp;datatype: "i32"<br>
+    });
+</div>
+
+<p>
+    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_example.mjs" target="_blank"
+        class="doc-btn">Source Code</a>
+    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_sort_perf.html" target="_blank"
+        class="doc-btn">Performance</a>
+</p>
+
+<h2>Key/Value Sort Demo</h2>
+<p>Demonstrates OneSweepSort with two modes: key-only sorting and key-value pair sorting with payload validation. Shows
+    how to configure the primitive for different operations and data types.</p>
+<p><em>Open the page, pick parameters in the pane (datatype/binop/input length), click Start, then inspect the result
+        and plots.</em></p>
+
+<h3>Sort Operations</h3>
+<p><strong>Sort Keys:</strong> Sorts only the keys array in ascending or descending order.</p>
+<p><strong>Sort Pairs:</strong> Sorts keys while maintaining associated payloads, useful for sorting complex data
+    structures.</p>
+
+<h3>Supported Data Types</h3>
+<p>u32, i32, f32 — all data types support both sort modes with configurable sort direction.</p>
+
+<h3>Code Structure</h3>
+<div class="code-block">
+    // Key-only sort<br>
+    const primitive = new OneSweepSort({<br>
+    &nbsp;&nbsp;device,<br>
+    &nbsp;&nbsp;datatype: "u32",<br>
+    &nbsp;&nbsp;direction: "ascending",<br>
+    &nbsp;&nbsp;copyOutputToTemp: true,<br>
+    &nbsp;&nbsp;inputLength: 1024<br>
+    });<br>
+    <br>
+    // Key-value pair sort<br>
+    const primitive = new OneSweepSort({<br>
+    &nbsp;&nbsp;device,<br>
+    &nbsp;&nbsp;datatype: "u32",<br>
+    &nbsp;&nbsp;direction: "ascending",<br>
+    &nbsp;&nbsp;copyOutputToTemp: true,<br>
+    &nbsp;&nbsp;type: "keyvalue",<br>
+    &nbsp;&nbsp;inputLength: 1024<br>
+    });
+</div>
+
+<p>
+    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/sort_pairs_example.mjs" target="_blank"
+        class="doc-btn">Source Code</a>
+    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_sort_perf.html" target="_blank"
+        class="doc-btn">Performance</a>
+</p>
+
+<h2>Reduce Operation</h2>
+<p>A minimal, hands-on example showing how to run the reduce primitive end-to-end: device setup, buffer upload, a single
+    execution, and result readback. Use this to learn the basic API calls and validation pattern. Parameters shown:
+    datatype and binop (add/max/min). Ideal as the first example before any benchmarking.</p>
+<p><em>Open the page, pick parameters in the pane (datatype/binop/input length), click Start, then inspect the result
+        and plots.</em></p>
+
+<h3>What is Reduce?</h3>
+<p>Reduces an entire array to a single value by repeatedly applying a binary operation across all elements.</p>
+
+<h3>Binary Operations</h3>
+<p>Add, Min, Max — aggregates all elements using the specified operation. Custom operations supported via binop.mjs.</p>
+
+<h3>Supported Data Types</h3>
+<p>u32, i32, f32 — all data types work with all binary operations.</p>
+
+<h3>Code Structure</h3>
+<div class="code-block">
+    // Reduce with add operation<br>
+    const primitive = new DLDFScan({<br>
+    &nbsp;&nbsp;device,<br>
+    &nbsp;&nbsp;binop: new BinOpAdd({ datatype: "u32" }),<br>
+    &nbsp;&nbsp;type: "reduce",<br>
+    &nbsp;&nbsp;datatype: "u32"<br>
+    });<br>
+    <br>
+    // Reduce with min operation<br>
+    const primitive = new DLDFScan({<br>
+    &nbsp;&nbsp;device,<br>
+    &nbsp;&nbsp;binop: new BinOpMin({ datatype: "i32" }),<br>
+    &nbsp;&nbsp;type: "reduce",<br>
+    &nbsp;&nbsp;datatype: "i32"<br>
+    });
+</div>
+
+<p>
+    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/reduce_example.mjs" target="_blank"
+        class="doc-btn">Source Code</a>
+    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/reduce_perf.mjs" target="_blank"
+        class="doc-btn">Performance</a>
+</p>
+class="doc-btn">Performance</a>
+</p>
+
+<hr>

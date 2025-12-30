@@ -656,8 +656,9 @@ export class BasePrimitive {
             /** Don't think it's feasible to cache bind groups because we don't have a
              * canonical way to name a buffer */
             const kernelBindGroup = this.device.createBindGroup({
-              label: `bindGroup ${bindGroupIndex} for ${this.label} ${action.entryPoint && action.entryPoint
-                } kernel`,
+              label: `bindGroup ${bindGroupIndex} for ${this.label} ${
+                action.entryPoint && action.entryPoint
+              } kernel`,
               layout: computePipeline.getBindGroupLayout(bindGroupIndex),
               entries,
             });
@@ -796,10 +797,16 @@ dispatchGeometry: ${dispatchGeometry}`);
            */
           const existingBuffer = this.getBuffer(action.label);
           if (existingBuffer && existingBuffer.size === action.size) {
-            /* just use the existing buffer */
+            /* just use the existing buffer, but it might be full of non-zero data */
+            if (action.populateWith) {
+              /* do nothing, because we will fill the buffer with data */
+            } else {
+              /* this is the default -- clear the buffer */
+              encoder.clearBuffer(existingBuffer.buffer.buffer);
+            }
           } else {
             if (existingBuffer?.buffer) {
-              //// existingBuffer.buffer.destroy();
+              /* buffer exists, but different size. could destroy() it here */
             }
             this.device.pushErrorScope("out-of-memory");
             const allocatedBuffer = this.device.createBuffer({
