@@ -569,14 +569,17 @@ fn main(builtinsUniform: BuiltinsUniform,
       new AllocateBuffer({
         label: "scanBump",
         size: this.scanBumpSize,
+        clearBufferOnReuse: false,
       }),
       new AllocateBuffer({
         label: "spine",
         size: this.spineSize,
+        clearBufferOnReuse: false,
       }),
       new AllocateBuffer({
         label: "misc",
         size: this.miscSize,
+        clearBufferOnReuse: false,
       }),
       new Kernel({
         kernel: this.scandldfWGSL,

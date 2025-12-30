@@ -792,8 +792,23 @@ dispatchGeometry: ${dispatchGeometry}`);
            * This might happen if we have an intermediate buffer that's not
            *   normally visible outside the primitive, but we want to get
            *   its values.
+           * This might also happen if we are running the same primitive
+           *   multiple times (for benchmarking purposes).
            * So: if the buffer is already allocated/registered AND it has the
            *   same size, then skip the new allocation.
+           *
+           * Now, if we're allocating a new buffer, we are guaranteed it
+           *   will be cleared upon allocation. But what if we call
+           *   AllocateBuffer and the buffer is already allocated and we
+           *   reuse it? Do we clear it?
+           * (Of course if we specify populateWith, we initialize the buffer
+           *  with its value.)
+           * Design decision is "yes, unless we explicitly indicate no".
+           *   This is controlled by the parameter `clearBufferOnReuse`,
+           *   which thus defaults to true.
+           * If the primitive initializes this buffer within the primitive,
+           *   e.g., if the first access to the buffer is a full-buffer write,
+           *   we can avoid a useless clear with `clearBufferOnReuse: false`.
            */
           const existingBuffer = this.getBuffer(action.label);
           if (existingBuffer && existingBuffer.size === action.size) {
@@ -801,8 +816,14 @@ dispatchGeometry: ${dispatchGeometry}`);
             if (action.populateWith) {
               /* do nothing, because we will fill the buffer with data */
             } else {
-              /* this is the default -- clear the buffer */
-              encoder.clearBuffer(existingBuffer.buffer.buffer);
+              if (action.clearBufferOnReuse ?? true) {
+                /* clear the buffer if clearBufferOnReuse is unspecified or true */
+                console.log(
+                  "Clearing buffer [clearBufferOnReuse]: ",
+                  existingBuffer
+                );
+                encoder.clearBuffer(existingBuffer.buffer.buffer);
+              }
             }
           } else {
             if (existingBuffer?.buffer) {
