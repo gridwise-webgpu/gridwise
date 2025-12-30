@@ -324,30 +324,69 @@ export class BasePrimitive {
       "Cannot call getDispatchGeometry() from abstract class BasePrimitive."
     );
   }
+
   getSimpleDispatchGeometry(args = {}) {
     const workgroupCount = args.workgroupCount ?? this.workgroupCount;
-    // todo this is too simple
+
     if (workgroupCount === undefined) {
       throw new Error(
         "Primitive:getSimpleDispatchGeometry(): Must specify either a workgroupCount in args or this.workgroupCount."
       );
     }
-    let dispatchGeometry = [workgroupCount, 1, 1];
+
+    if (workgroupCount <= 0) {
+      throw new Error(
+        `Primitive:getSimpleDispatchGeometry(): workgroupCount must be > 0 (value is ${workgroupCount})`
+      );
+    }
+
     const maxDim = this.device.limits.maxComputeWorkgroupsPerDimension;
 
-    while (dispatchGeometry[0] > maxDim) {
-      /* too big */
-      dispatchGeometry[0] = Math.ceil(dispatchGeometry[0] / 2);
-      dispatchGeometry[1] *= 2;
+    // Helper: Finds best split for 'count' to fit into 'limit'
+    // Returns [size, remainder] where size <= limit
+    const getSplit = (count, limit) => {
+      // If it fits, just return it
+      if (count <= limit) return [count, 1];
 
-      //If Y exceeds maxDim, split into Z
-      if (dispatchGeometry[1] > maxDim) {
-        dispatchGeometry[1] = Math.ceil(dispatchGeometry[1] / 2);
-        dispatchGeometry[2] *= 2;
+      // Minimum divisor needed to make 'count' fit into 'limit'
+      const minDivisor = Math.ceil(count / limit);
+
+      // Search for a clean divisor (exact fit) starting from minDivisor.
+      // We limit the search range for performance (e.g., check next 5-10 ints).
+      // This allows [maxDim/2, 2] but avoids expensive loops.
+      let divisor = minDivisor;
+      const searchLimit = 10;
+      let foundExact = false;
+
+      for (let i = 0; i < searchLimit; i++) {
+        const testDivisor = minDivisor + i;
+        if (count % testDivisor === 0) {
+          divisor = testDivisor;
+          foundExact = true;
+          break;
+        }
       }
-    }
-    return dispatchGeometry;
+
+      // Calculate the size of the dimension
+      // If foundExact is true, this divides cleanly.
+      // If false, Math.ceil ensures we cover the work (with minimal padding).
+      const size = Math.ceil(count / divisor);
+
+      return [size, divisor];
+    };
+
+    // --- Step 1: Solve for X ---
+    // We need to split total work into X * (YZ_Remainder)
+    const [x, yzRemainder] = getSplit(workgroupCount, maxDim);
+
+    // --- Step 2: Solve for Y ---
+    // We need to split YZ_Remainder into Y * Z
+    // (Usually yzRemainder is very small, e.g., 1, 2, or 3, so this is instant)
+    const [y, z] = getSplit(yzRemainder, maxDim);
+
+    return [x, y, z];
   }
+
   get bytesTransferred() {
     /* call this from a subclass instead */
     throw new Error(
