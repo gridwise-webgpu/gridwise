@@ -157,7 +157,6 @@ async function buildAndRun() {
     /*for values*/
     const payLoadsrc = new (datatypeToTypedArray(params.datatype))(inputLength);
 
-
     /* generate ~random input datasets that are friendly for a
      * particular primitive */
     for (let i = 0; i < inputLength; i++) {
@@ -180,7 +179,6 @@ async function buildAndRun() {
           }
           break;
         case "sort_keys":
-
           /* for sorting, we want all different values */
           switch (params.datatype) {
             case "u32":
@@ -205,11 +203,13 @@ async function buildAndRun() {
               break;
             case "f32":
             case "i32":
-              memsrc[i] = (Math.random() < 0.5 ? 1 : -1) *
+              memsrc[i] =
+                (Math.random() < 0.5 ? 1 : -1) *
                 Math.floor(Math.random() * Math.pow(2, 28));
 
-              payLoadsrc[i] = (Math.random() < 0.5 ? 1 : -1) *
-                Math.floor(Math.random() * Math.pow(2, 28))
+              payLoadsrc[i] =
+                (Math.random() < 0.5 ? 1 : -1) *
+                Math.floor(Math.random() * Math.pow(2, 28));
               break;
           }
           break;
@@ -290,7 +290,7 @@ async function buildAndRun() {
       usage:
         GPUBufferUsage.STORAGE |
         GPUBufferUsage.COPY_SRC |
-        GPUBufferUsage.COPY_DST
+        GPUBufferUsage.COPY_DST,
     });
     device.queue.writeBuffer(payLoadsrcBuffer, 0, payLoadsrc);
 
@@ -300,7 +300,7 @@ async function buildAndRun() {
       usage:
         GPUBufferUsage.STORAGE |
         GPUBufferUsage.COPY_SRC |
-        GPUBufferUsage.COPY_DST
+        GPUBufferUsage.COPY_DST,
     });
 
     const mappablePayloadDestBuffer = device.createBuffer({
@@ -346,7 +346,7 @@ async function buildAndRun() {
           payloadInOut: payLoadsrcBuffer,
           payloadTemp: payloadDestBuffer,
           ...primitiveOptions,
-        })
+        });
         break;
 
       default:
@@ -419,8 +419,6 @@ async function buildAndRun() {
     const commandBuffer = encoder.finish();
     device.queue.submit([commandBuffer]);
 
-
-
     await mappableMemdestBuffer.mapAsync(GPUMapMode.READ);
     const memdest = new (datatypeToTypedArray(params.datatype))(
       mappableMemdestBuffer.getMappedRange().slice()
@@ -435,7 +433,6 @@ async function buildAndRun() {
         mappablePayloadDestBuffer.getMappedRange().slice()
       );
       mappablePayloadDestBuffer.unmap();
-
     }
     console.log("output array", memdest);
     if (params.primitive === "sort_pairs") {
@@ -457,7 +454,6 @@ async function buildAndRun() {
             outputKeys: memdest,
             inputPayload: payLoadsrc,
             outputPayload: payloadDest,
-
           });
           break;
         default:
@@ -479,12 +475,19 @@ async function buildAndRun() {
       returnStr += `Validation not performed (input length: ${inputLength})<br/ >`;
     }
   } /* end loop over input lengths */
-  plotResults(results);
+  plotResults(results, adapter.info.description);
   return returnStr;
 }
 
-function plotResults(results) {
-  console.log(results);
+function plotResults(results, adapterDescription) {
+  const container = document.querySelector("#plot");
+
+  const maxBWs = {
+    "Apple M1 Max": 400,
+  };
+
+  if (!results || results.length === 0) return;
+
   const plots = [
     {
       x: { field: "inputBytes", label: "Input array size (B)" },
@@ -492,6 +495,7 @@ function plotResults(results) {
       stroke: { field: "timing" },
       caption:
         "BANDWIDTH | CPU timing (performance.now), GPU timing (timestamps)",
+      maxBW: maxBWs[adapterDescription],
     },
     {
       x: { field: "inputBytes", label: "Input array size (B)" },
@@ -501,65 +505,143 @@ function plotResults(results) {
         "RUNTIME | CPU timing (performance.now), GPU timing (timestamps)",
     },
   ];
+
   for (let plot of plots) {
     const mark = plot.mark ?? "lineY";
-    const schema = {
-      marks: [
-        Plot[mark](results, {
-          x: plot.x.field,
-          y: plot.y.field,
-          ...("fx" in plot && { fx: plot.fx.field }),
-          ...("fy" in plot && { fy: plot.fy.field }),
+    const xField = plot.x.field;
+    const yField = plot.y.field;
+
+    // --- DOMAIN & LAYOUT LOGIC ---
+    let yDomain = undefined;
+    let ruleValue = null;
+    let ruleLabel = "";
+    let labelPosition = "above"; // Default
+
+    // 1. Calculate Data Extents (needed for Max X and Y)
+    const yValues = results.map((r) => r[yField]);
+    const xValues = results.map((r) => r[xField]);
+
+    // Find the right-most X value to anchor the text horizontally
+    const maxX = xValues.reduce((max, v) => Math.max(max, v || 0), 0);
+
+    if (plot.maxBW) {
+      const dataMin = yValues.reduce(
+        (min, v) => (v > 0 ? Math.min(min, v) : min),
+        Infinity
+      );
+      const dataMax = yValues.reduce((max, v) => Math.max(max, v || 0), 0);
+      const validMin = dataMin === Infinity ? 1 : dataMin;
+      const clampThreshold = dataMax * 10;
+
+      if (plot.maxBW > clampThreshold) {
+        // CASE A: Clamped (Off Scale) -> Line at top
+        yDomain = [validMin, clampThreshold];
+        ruleValue = clampThreshold;
+        ruleLabel = `Max DRAM BW for ${adapterDescription}: ${plot.maxBW} GB/s (Off Scale)`;
+        labelPosition = "below";
+      } else {
+        // CASE B: Normal View
+        yDomain = [validMin, Math.max(dataMax, plot.maxBW)];
+        ruleValue = plot.maxBW;
+        ruleLabel = `Max DRAM BW for ${adapterDescription}: ${plot.maxBW} GB/s`;
+
+        // If line is effectively at the ceiling, put text below
+        labelPosition = plot.maxBW >= dataMax ? "below" : "above";
+      }
+    }
+
+    const marks = [
+      Plot[mark](results, {
+        x: xField,
+        y: yField,
+        ...("fx" in plot && { fx: plot.fx.field }),
+        ...("fy" in plot && { fy: plot.fy.field }),
+        ...("stroke" in plot && { stroke: plot.stroke.field }),
+        tip: true,
+        marker: "circle",
+      }),
+      Plot.text(
+        results,
+        Plot.selectLast({
+          x: xField,
+          y: yField,
           ...("stroke" in plot && {
-            stroke: plot.stroke.field,
+            z: plot.stroke.field,
+            text: plot.stroke.field,
+            fill: plot.stroke.field,
           }),
-          tip: true,
-        }),
-        Plot.text(
-          results,
-          Plot.selectLast({
-            x: plot.x.field,
-            y: plot.y.field,
-            ...("stroke" in plot && {
-              z: plot.stroke.field,
-              text: plot.stroke.field,
-            }),
-            ...("fx" in plot && { fx: plot.fx.field }),
-            ...("fy" in plot && { fy: plot.fy.field }),
-            textAnchor: "start",
-            clip: false,
-            dx: 3,
-          })
-        ),
-        Plot.text([plot.text_tl ?? ""], {
-          lineWidth: 30,
+          textAnchor: "start",
           dx: 5,
-          frameAnchor: "top-left",
-        }),
-        Plot.text(plot.text_br ?? "", {
-          lineWidth: 30,
-          dx: 5,
-          frameAnchor: "bottom-right",
-        }),
-      ],
-      x: { type: "log", label: plot?.x?.label ?? "XLABEL" },
-      y: { type: "log", label: plot?.y?.label ?? "YLABEL" },
-      ...("fx" in plot && {
-        fx: { label: plot.fx.label },
+        })
+      ),
+      Plot.text([plot.text_tl ?? ""], {
+        lineWidth: 30,
+        dx: 5,
+        frameAnchor: "top-left",
       }),
-      ...("fy" in plot && {
-        fy: { label: plot.fy.label },
+      Plot.text(plot.text_br ?? "", {
+        lineWidth: 30,
+        dx: 5,
+        frameAnchor: "bottom-right",
       }),
-      ...(("fx" in plot || "fy" in plot) && { grid: true }),
+    ];
+
+    // --- ADD MAX BW LINE & LABEL ---
+    if (ruleValue !== null) {
+      // 1. The Red Dotted Line
+      marks.push(
+        Plot.ruleY([ruleValue], {
+          stroke: "red",
+          strokeDasharray: "4,4",
+          strokeWidth: 2,
+        })
+      );
+
+      // 2. The Label (Positioned explicitly using data coordinates)
+      // We create a tiny 1-item dataset for this label to avoid accessor confusion
+      const labelData = [
+        {
+          x: maxX, // The rightmost X value
+          y: ruleValue, // The calculated Y value
+          text: ruleLabel,
+        },
+      ];
+
+      marks.push(
+        Plot.text(labelData, {
+          x: "x",
+          y: "y",
+          text: "text",
+          fill: "red",
+          textAnchor: "end", // Align text to end at the rightmost data point
+          fontWeight: "bold",
+          dy: labelPosition === "below" ? 15 : -5,
+          clip: false, // <--- CRITICAL: Allows text to render even if on the exact chart edge
+        })
+      );
+    }
+
+    const schema = {
+      marks: marks,
+      marginRight: 60,
+      x: { type: "log", label: plot?.x?.label ?? "XLABEL", tickFormat: "~s" },
+      y: {
+        type: "log",
+        label: plot?.y?.label ?? "YLABEL",
+        grid: true,
+        ...(yDomain && { domain: yDomain }),
+      },
+      ...("fx" in plot && { fx: { label: plot.fx.label } }),
+      ...("fy" in plot && { fy: { label: plot.fy.label } }),
       color: { type: "ordinal", legend: true },
       width: 1280,
       title: plot?.title,
       subtitle: plot?.subtitle,
       caption: plot?.caption,
     };
+
     const plotted = Plot.plot(schema);
-    const div = document.querySelector("#plot");
-    div.append(plotted);
-    div.append(document.createElement("hr"));
+    container.append(plotted);
+    container.append(document.createElement("hr"));
   }
 }
