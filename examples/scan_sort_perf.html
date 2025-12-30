@@ -53,10 +53,10 @@ await primitive.execute({
   enableCPUTiming: true,
 });</code></pre>
     <p>
-      We can get timing information back from the primitive with a `getResults`
-      call. The GPU time might be an array of timings if the GPU call has
-      multiple kernels within it. In the below example, we simply flatten that
-      array by adding it up into a total time.
+      We can get timing information back from the primitive with a
+      <code>getResults</code> call. The GPU time might be an array of timings if
+      the GPU call has multiple kernels within it. In the below example, we
+      simply flatten that array by adding it up into a total time.
     </p>
     <pre><code class="language-javascript">let { gpuTotalTimeNS, cpuTotalTimeNS } = await primitive.getTimingResult();
 if (gpuTotalTimeNS instanceof Array) {
