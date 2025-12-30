@@ -31,7 +31,7 @@ export const range = (min, max) => {
     result[i] = min + i;
   }
   return result;
-}
+};
 
 export const arrayProd = (arr) => {
   if (typeof arr === "number") {
@@ -151,23 +151,15 @@ export function f32approxeq(reference, target) {
  * back before rounding. The returned array will include points corresponding
  * to the start and stop values, each subjected to the rounding rule.
  *
+ * If numPoints == 1, return start (rounded to the nearest multiple of 4).
+ *
  * @param {number} start The starting integer of the sequence. Must be a positive number.
  * @param {number} stop The ending integer of the sequence. Must be a positive number.
  * @param {number} numPoints The total number of points to generate. Must be at least 2.
  * @returns {number[]} An array of integers representing the log-spaced sequence.
- * @throws {Error} If numPoints is less than 2, or if start/stop are not positive.
+ * @throws {Error} If numPoints is less than 1, or if start/stop are not positive.
  */
 export function logspaceRounded(start, stop, numPoints) {
-  // --- 1. Validate Inputs ---
-  if (numPoints < 2) {
-    throw new Error("The number of points must be at least 2.");
-  }
-  if (start <= 0 || stop <= 0) {
-    throw new Error(
-      "Start and stop values must be positive for a logarithmic scale."
-    );
-  }
-
   /**
    * Helper function to round a number to the nearest multiple of 4.
    * @param {number} num The number to round.
@@ -176,6 +168,19 @@ export function logspaceRounded(start, stop, numPoints) {
   const roundToNearestMultipleOf4 = (num) => {
     return Math.round(num / 4) * 4;
   };
+
+  // --- 1. Validate Inputs ---
+  if (numPoints == 1) {
+    return [roundToNearestMultipleOf4(start)];
+  }
+  if (numPoints < 2) {
+    throw new Error("The number of points must be at least 2.");
+  }
+  if (start <= 0 || stop <= 0) {
+    throw new Error(
+      "Start and stop values must be positive for a logarithmic scale."
+    );
+  }
 
   // --- 2. Perform Logarithmic Interpolation ---
   const result = [];
