@@ -1326,7 +1326,15 @@ export class OneSweepSort extends BaseSort {
         label: "passHist",
         datatype: "u32",
         size: this.passHistSize,
-        clearBufferOnReuse: false,
+        clearBufferOnReuse: true,
+        /**
+         * Clearing passHist to ensure idempotence. Empirically, we need this.
+         * Did not do a deep dive into why, but on the lookback spine, there are
+         * two atomicAdds and an atomicMax, so that's where to start.
+         * Probably possible to surgically write zeroes into those at some point
+         * before they are used, but if there's a lot of zeroes to write, the
+         * clear is probably cheaper anyway.
+         */
       }),
       new Kernel({
         kernel: this.sortOneSweepWGSL,
