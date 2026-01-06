@@ -1,17 +1,72 @@
 <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan Primitive - Interactive Demo | Gridwise</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Standalone WebGPU Scan/Reduce Primitive Test, with Configuration Pane</title>
-  </head>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #ffffff;
+            color: #4b5563;
+            line-height: 1.75;
+        }
 
-  <body>
-    <div id="instructions">
-      <p>Set your parameters in the pane and click "Start" to run and validate a WebGPU scan/reduce.</p>
+        .container {
+            max-width: 100%;
+            padding: 3rem 2rem;
+        }
+
+        header {
+            max-width: 100%;
+            margin-bottom: 3rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #111827;
+            margin-bottom: 1.5rem;
+            line-height: 1.2;
+        }
+
+        .subtitle {
+            font-size: 1.25rem;
+            color: #6b7280;
+            line-height: 1.75;
+        }
+
+        #webgpu-results {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: #f9fafb;
+            border-radius: 0.5rem;
+            border: 1px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Scan Primitive - Interactive Demo</h1>
+            <p class="subtitle">
+                Configure and run WebGPU scan/reduce operations with live parameter control and validation.
+            </p>
+        </header>
+
+        <div id="instructions">
+            <p>Set your parameters in the pane below and click "Start" to run and validate a WebGPU scan/reduce operation.</p>
+        </div>
+
+        <script src="scan_pane_example.mjs" type="module"></script>
+        
+        <div id="webgpu-results"></div>
     </div>
-    <script src="scan_pane_example.mjs" type="module"></script>
-    <div id ="webgpu-results"></div>
-    </script>
-  </body>
+</body>
 </html>

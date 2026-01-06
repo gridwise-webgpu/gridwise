@@ -3,249 +3,504 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Gridwise Scan and Reduce | Gridwise</title>
+<title>Scan and Reduce | Gridwise</title>
 <meta name="generator" content="Jekyll v3.10.0" />
-<meta property="og:title" content="Gridwise Scan and Reduce" />
+<meta property="og:title" content="Scan and Reduce" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="Implementation details of scan (parallel prefix) and reduce operations in Gridwise, including our SPAA 2025 paper findings." />
 <meta property="og:description" content="Implementation details of scan (parallel prefix) and reduce operations in Gridwise, including our SPAA 2025 paper findings." />
-<link rel="canonical" href="https://gridwise-webgpu.github.io/gridwise/scan-and-reduce/" />
-<meta property="og:url" content="https://gridwise-webgpu.github.io/gridwise/scan-and-reduce/" />
+<link rel="canonical" href="http://localhost:4000/gridwise/scan-and-reduce/" />
+<meta property="og:url" content="http://localhost:4000/gridwise/scan-and-reduce/" />
 <meta property="og:site_name" content="Gridwise" />
 <meta property="og:type" content="website" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Gridwise Scan and Reduce" />
+<meta property="twitter:title" content="Scan and Reduce" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebPage","description":"Implementation details of scan (parallel prefix) and reduce operations in Gridwise, including our SPAA 2025 paper findings.","headline":"Gridwise Scan and Reduce","url":"https://gridwise-webgpu.github.io/gridwise/scan-and-reduce/"}</script>
+{"@context":"https://schema.org","@type":"WebPage","description":"Implementation details of scan (parallel prefix) and reduce operations in Gridwise, including our SPAA 2025 paper findings.","headline":"Scan and Reduce","url":"http://localhost:4000/gridwise/scan-and-reduce/"}</script>
 <!-- End Jekyll SEO tag -->
-<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css"></head>
+<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css">
+    <script src="/gridwise/docs/assets/js/main.js" defer></script></head>
 <body><header class="site-header" role="banner">
-  <div class="wrapper"><a class="site-title" rel="author" href="/gridwise/">Gridwise</a><nav class="site-nav">
-      <input type="checkbox" id="nav-trigger" class="nav-trigger" />
-      <label for="nav-trigger">
-        <span class="menu-icon">
-          <svg viewBox="0 0 18 15" width="18px" height="15px">
-            <path
-              d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.484C18,14.304,17.335,14.969,16.516,14.969H1.484 C0.665,14.969,0,14.304,0,13.484l0,0C0,12.665,0.665,12,1.484,12h15.032C17.335,12,18,12.665,18,13.484L18,13.484z" />
-          </svg>
-        </span>
-      </label>
+  <div class="wrapper">
+    <div class="header-left">
+      <a class="site-title" rel="author" href="/gridwise/">
+        <span class="gradient-text">Gridwise Docs</span>
+      </a>
+    </div>
 
-      <div class="trigger"><a class="button" href="/gridwise/examples-guide/">Example Docs</a>
-        <a class="button" href="/gridwise/">Read Docs</a>
-        <a class="button" href="javascript:void(0)" onclick="launchExample()">Try Interactive Example</a>
-      </div>
-    </nav></div>
+    <div class="header-right"><a class="header-link" href="/gridwise/examples-guide/">Examples</a>
+      <a class="header-link" href="javascript:void(0)" onclick="launchExample()">Try Demo</a>
+      <a class="github-button" href="https://github.com/gridwise-webgpu/gridwise" target="_blank" aria-label="GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+      </a>
+    </div>
+  </div>
 </header>
 
 <script>
   function launchExample() {
     window.open('https://gridwise-webgpu.github.io/gridwise/examples/scan_pane_example.html', '_blank');
   }
-</script><main class="page-content" aria-label="Content">
-  <div class="wrapper">
-    <div class="docs-container">
-    <!-- Left Sidebar Navigation -->
-    <aside class="docs-sidebar">
-        <h3>Documentation</h3><ul class="docs-nav"><li>
-                <a href="/gridwise/architecture/" >
-                    Gridwise Architecture
-                </a>
-            </li><li>
-                <a href="/gridwise/buffer/" >
-                    Gridwise&#39;s Buffer Class
-                </a>
-            </li><li>
-                <a href="/gridwise/binop/" >
-                    Gridwise&#39;s Binary Operator Class
-                </a>
-            </li><li>
-                <a href="/gridwise/scan-and-reduce/" class="active" >
-                    Gridwise Scan and Reduce
-                </a>
-            </li><li>
-                <a href="/gridwise/sort/" >
-                    Gridwise Sort
-                </a>
-            </li><li>
-                <a href="/gridwise/builtins-strategy/" >
-                    Gridwise WebGPU @builtins Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/primitive-design/" >
-                    Gridwise WebGPU Primitive Strategy wrt Subgroups
-                </a>
-            </li><li>
-                <a href="/gridwise/subgroup-strategy/" >
-                    Gridwise WebGPU Subgroup Emulation Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/webgpu-object-caching-strategy/" >
-                    Gridwise WebGPU Object Caching Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/timing-strategy/" >
-                    Gridwise WebGPU Timing Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/writing-a-webgpu-wgsl-workgroup-reduce-function/" >
-                    Abstraction Challenges in Writing a WebGPU/WGSL Workgroup Reduce Function
-                </a>
-            </li></ul><!-- Sidebar Footer -->
-        <div class="sidebar-footer">
-            <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
-                <svg class="github-icon" viewBox="0 0 16 16" width="20" height="20">
-                    <path fill="currentColor"
-                        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z">
-                    </path>
+</script><div class="main-container">
+  <!-- Modern Sidebar Navigation -->
+  <aside class="docs-sidebar" id="docsSidebar">
+    <div class="sidebar-content">
+      <div class="sidebar-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <h1>Documentation</h1>
+      </div>
+
+      <div class="search-box">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" id="docsSearch" placeholder="Search docs..." />
+      </div>
+
+      <nav class="docs-nav"><div class="nav-section">
+          <h3 class="nav-section-title">Getting Started</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/getting-started/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
-                <span>GitHub</span>
-            </a>
+                <span>Introduction</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/installation/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Quick Start</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Core Concepts</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/architecture/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Architecture</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/primitive-design/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Primitive Design</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/subgroup-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                <span>Subgroup Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Primitives</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/scan-and-reduce/" class="active">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Scan and Reduce</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                <span>Sort</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/binop/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Binary Operations</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Advanced</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/buffer/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+                <span>Buffer Management</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/timing-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Timing Strategy</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/webgpu-object-caching-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Object Caching</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/builtins-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Builtins Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Examples</h3>
+          <ul><li>
+              <a href="/gridwise/examples/reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Reduce Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/scan/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Scan Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Sort Example</span>
+              </a>
+            </li></ul>
+        </div></nav>
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div class="sidebar-footer">
+      <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
+        <svg class="github-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="docs-content">
+    <div class="content-inner"><div class="docs-hero">
+        <div class="badge">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span>Documentation</span>
         </div>
-    </aside>
+        <h1>Scan and Reduce</h1><p class="lead">Implementation details of scan (parallel prefix) and reduce operations in Gridwise, including our SPAA 2025 paper findings.</p></div><article class="post">
+        <div class="post-content">
+          <div style="max-width: 100%; padding: 0;">
 
-    <!-- Main Content Area -->
-    <main class="docs-content">
-        <article class="post">
-            <header class="post-header">
-                <h1 class="post-title">Gridwise Scan and Reduce</h1>
-            </header>
+<header style="max-width: 100%; margin-bottom: 3rem;">
+  <h1 style="font-size: 2.5rem; font-weight: 800; color: #111827; margin-bottom: 1.5rem; line-height: 1.2;">Scan and Reduce</h1>
+  <p style="font-size: 1.25rem; color: #6b7280; line-height: 1.75;">
+    <a href="https://en.wikipedia.org/wiki/Prefix_sum" style="color: #10b981; text-decoration: underline;">Scan</a> (parallel prefix) is a fundamental parallel compute primitive useful in both other primitives as well as a wide range of application domains. Here we describe how our implementation works and how it is used in Gridwise. We published a <a href="https://dl.acm.org/doi/10.1145/3694906.3743326" style="color: #10b981; text-decoration: underline;">paper on our scan implementation</a> at SPAA 2025.
+  </p>
+</header>
 
-            <div class="post-content">
-                <p><a href="https://en.wikipedia.org/wiki/Prefix_sum">Scan</a> (parallel prefix) is a fundamental parallel compute primitive useful in both other primitives as well as a wide range of application domains. (The <a href="https://en.wikipedia.org/wiki/Prefix_sum#Applications">Wikipedia page</a> describes many possible uses of scan.) Here we describe how our implementation works and how it is used in Gridwise. We published a <a href="https://dl.acm.org/doi/10.1145/3694906.3743326">paper on our scan implementation</a> at SPAA 2025. Here we instead aim for a higher-level, more informal description of our implementation.</p>
+<!-- Section 1: Terminology -->
+<section style="max-width: 100%; margin-bottom: 3rem;">
+  <h2 style="font-size: 1.875rem; font-weight: 700; color: #111827; margin-bottom: 1.5rem;">Terminology</h2>
+  
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    <strong>Scan:</strong> Scan inputs an array of <em>n</em> data elements and outputs an array of the same size. Output element <em>i</em> is the "sum" of the input elements up to element <em>i</em>. More generally, that "sum" operator can be any <a href="https://en.wikipedia.org/wiki/Monoid" style="color: #10b981; text-decoration: underline;">monoid</a> (a binary operation with an identity element). 
+  </p>
 
-<h2 id="terminology">Terminology</h2>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    If the operator is addition, scan is often called prefix-sum, but we can also compute a prefix-multiplication, prefix-max or -min, or many other operators. For simplicity, we will use "sum" and addition in this article. <strong>(Gridwise supports any user-specified monoid.)</strong>
+  </p>
 
-<p>Scan inputs an array of <em>n</em> data elements and outputs an array of the same size. Output element <em>i</em> is the “sum” of the input elements up to element <em>i</em>. More generally, that “sum” operator can be any <a href="https://en.wikipedia.org/wiki/Monoid">monoid</a> (a binary operation with an identity element). If the operator is addition, scan is often called prefix-sum, but we can also compute a prefix-multiplication, prefix-max or -min, or many other operators. For simplicity, we will use “sum” and addition in this article. (Gridwise supports any user-specified monoid.)</p>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1.5rem;">
+    <strong>Reduce:</strong> A reduction of a set of inputs is the "sum" of all of those elements.
+  </p>
 
-<p>We also use the term “reduce”, where a reduction of a set of inputs is the “sum” of all of those elements.</p>
+  <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1.5rem; border-radius: 0.5rem;">
+    <h3 style="font-size: 1.125rem; font-weight: 700; color: #065f46; margin-bottom: 1rem;">Scan Variants</h3>
+    <p style="color: #065f46; line-height: 1.75; margin-bottom: 0.75rem;">
+      <strong>Exclusive Scan:</strong> Each output element is the sum of all previous items in the input, <strong>not including</strong> the current item.<br />
+      <code>exclusive_out[i] = sum(in[0:i-1])</code>
+    </p>
+    <p style="color: #065f46; line-height: 1.75; margin: 0;">
+      <strong>Inclusive Scan:</strong> Each output element is the sum of all previous items in the input, <strong>up to and including</strong> the current item.<br />
+      <code>inclusive_out[i] = sum(in[0:i])</code>
+    </p>
+  </div>
+</section>
 
-<p>Finally, scans have two variants, exclusive and inclusive. Each output element of an <em>exclusive</em> scan is the sum of all previous items in the input, not including the current item. (<code class="language-plaintext highlighter-rouge">exclusive_out[i] = sum(in[0:i-1]).</code>) Each output element of an <em>inclusive</em> scan is the sum of all previous items in the input, up to and including the current item. (<code class="language-plaintext highlighter-rouge">inclusive_out[i] = sum(in[0:i]).</code>)</p>
+<!-- Section 2: GPU Scan Background -->
+<section style="max-width: 100%; padding-top: 2rem; border-top: 1px solid #e5e7eb; margin-bottom: 3rem;">
+  <h2 style="font-size: 1.875rem; font-weight: 700; color: #111827; margin-bottom: 2rem;">GPU Scan Background</h2>
+  
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1.5rem;">
+    On GPUs, scan performance is bound by memory bandwidth. The best GPU scan implementations fully saturate the GPU's memory system. Thus the best GPU scan implementations are those that use algorithms that require the fewest accesses to memory.
+  </p>
 
-<h2 id="gpu-scan-background">GPU Scan Background</h2>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    <strong>Reduce-Then-Scan (Classic):</strong> Divide the input into tiles, compute the reduction of all elements in each tile, compute the prefix sum of those per-tile reductions, then use the values of that per-tile prefix sum as inputs into a blockwise scan of each individual tile. For an <em>n</em>-element scan, this incurs <strong>3n memory accesses</strong> (<em>n</em> for the per-block reduction and 2<em>n</em> to read the input/write the output in the blockwise scan).
+  </p>
 
-<p>On GPUs, scan performance is bound by memory bandwidth. The best GPU scan implementations fully saturate the GPU’s memory system. Thus the best GPU scan implementations are those that use algorithms that require the fewest accesses to memory. The “classic” GPU way to compute scan is to divide the input into tiles, compute the reduction of all elements in each tile, compute the prefix sum of those per-tile reductions, then use the values of that per-tile prefix sum as inputs into a blockwise scan of each individual tile. This strategy is called <em>reduce-then-scan</em>. The details aren’t important; what is important is that for an <em>n</em>-element scan, we incur 3<em>n</em> memory accesses (<em>n</em> for the per-block reduction and 2<em>n</em> to read the input/write the output in the blockwise scan).</p>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    <strong>StreamScan / Chained Scan (2015):</strong> In 2015, Yan et al. introduced <a href="https://dl.acm.org/doi/10.1145/2442516.2442539" style="color: #10b981; text-decoration: underline;">StreamScan</a>, which required only <strong>2n memory accesses</strong> (the theoretical minimum). This approach <em>serializes</em> the scan of the per-tile values across tile processors. The key data structure is the <strong>carry chain</strong>, which stores the inclusive scan of the tile reductions. It only requires reading and writing each element once.
+  </p>
 
-<p>In 2015, Yan et al. introduced an alternate GPU-scan implementation, <a href="https://dl.acm.org/doi/10.1145/2442516.2442539">StreamScan</a>, which required only 2<em>n</em> memory accesses. Like reduce-then-scan, StreamScan computes a reduction for each input tile, but unlike reduce-then-scan, StreamScan then <em>serializes</em> the scan of the per-tile values across tile processors. This approach is called a <em>chained scan</em>. Each tile processor must wait for its predecessor to compute the reduction of all elements up to and including the predecessor’s tile. Then the tile adds its tile reduction to the global reduction and passes it to the next tile’s processor, then uses the partial sum to complete the scan of its tile. The key data structure here is the carry chain, which stores the inclusive scan of the tile reductions. The most important aspect of this implementation is that it only requires reading and writing each element once and thus incurs only 2<em>n</em> memory references, the theoretical minimum.</p>
+  <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+    <p style="color: #065f46; line-height: 1.75; margin: 0;">
+      <strong>Decoupled Lookback (2016):</strong> In 2016, <a href="https://research.nvidia.com/publication/2016-03_single-pass-parallel-prefix-scan-decoupled-look-back" style="color: #065f46; text-decoration: underline; font-weight: 600;">Merrill and Garland</a> addressed performance loss on NVIDIA hardware by enabling stalled tiles to "look back" into the carry chain to fetch the necessary values. This ensured that a single stalled tile did not halt the entire scan computation, allowing <a href="https://docs.nvidia.com/cuda/cub/index.html" style="color: #065f46; text-decoration: underline;">their implementation</a> to run at maximum throughput. <strong>CUB scan is as fast as a memory copy.</strong>
+    </p>
+  </div>
 
-<p>(All of the above is covered in great detail in our <a href="https://dl.acm.org/doi/10.1145/3694906.3743326">SPAA 2025 paper</a>.)</p>
+  <p style="color: #6b7280; font-size: 0.875rem; font-style: italic; margin: 0;">
+    (All of the above is covered in great detail in our <a href="https://dl.acm.org/doi/10.1145/3694906.3743326" style="color: #10b981; text-decoration: underline;">SPAA 2025 paper</a>.)
+  </p>
+</section>
 
-<p>In an ideal world, all tile processors could run in lockstep and have equal access to memory bandwidth. However, tiles contend with each other for access to memory, and tile processors may be working on multiple tiles simultaneously. Tiles thus don’t run in lockstep; some later tiles may finish before earlier tiles, and thus have to wait for those tiles to finish. This waiting causes performance loss. In 2016, <a href="https://research.nvidia.com/publication/2016-03_single-pass-parallel-prefix-scan-decoupled-look-back">Merrill and Garland</a> addressed this performance loss on NVIDIA hardware by enabling stalled tiles to “look back” into the carry chain to fetch the necessary values to compute their carry-chain element. This change ensured that a single stalled tile did not halt the entire scan computation, allowing <a href="https://docs.nvidia.com/cuda/cub/index.html">their implementation</a> to run at maximum throughput. CUB scan is as fast as a memory copy.</p>
+<!-- Section 3: Forward Progress Guarantees -->
+<section style="max-width: 100%; padding-top: 2rem; border-top: 1px solid #e5e7eb; margin-bottom: 3rem;">
+  <h2 style="font-size: 1.875rem; font-weight: 700; color: #111827; margin-bottom: 2rem;">Decoupled Lookback and Forward Progress Guarantees</h2>
+  
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    <strong>The Problem:</strong> NVIDIA GPUs make a <em>forward progress guarantee</em>: once a processor begins to process a tile, it is guaranteed to make progress on that tile. This guarantee is necessary for the correctness of Merrill and Garland's implementation of decoupled lookback.
+  </p>
 
-<h2 id="decoupled-lookback-and-forward-progress-guarantees">Decoupled Lookback and Forward Progress Guarantees</h2>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1.5rem;">
+    Unfortunately, not all GPUs provide this forward progress guarantee. <a href="https://dl.acm.org/doi/10.1145/3485508" style="color: #10b981; text-decoration: underline;">Apple and ARM GPUs do not.</a>
+  </p>
 
-<p>NVIDIA GPUs make a <em>forward progress guarantee</em>: once a processor begins to process a tile, it is guaranteed to make progress on that tile; the GPU scheduler ensures the processor will be allocated compute time to move forward on the processing of its tile. This guarantee is necessary for the correctness of Merrill and Garland’s implementation of decoupled lookback.</p>
+  <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+    <p style="color: #991b1b; line-height: 1.75; margin: 0;">
+      <strong>⚠️ Critical Issue:</strong> Without the forward-progress guarantee, computing tiles may be fully blocked by waiting tiles and never make progress, leading to a completely stalled computation. <strong>On Apple hardware, as we found during the development of our scan primitive, this locks up the entire machine.</strong>
+    </p>
+  </div>
 
-<p>Unfortunately, not all GPUs provide this forward progress guarantee. <a href="https://dl.acm.org/doi/10.1145/3485508">Apple and ARM GPUs do not.</a> At any point in the scan computation, some tiles are computing a result and other tiles are waiting for a previous tile to finish its computation and write it into the carry chain. Without the forward-progress guarantee, the computing tiles may be fully blocked by waiting tiles and never make progress, leading to a completely stalled computation. On Apple hardware, as we found during the development of our scan primitive, this locks up the entire machine.</p>
+  <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1.5rem; border-radius: 0.5rem;">
+    <p style="color: #065f46; line-height: 1.75; margin: 0; font-weight: 600;">
+      Deploying a WebGPU implementation that depends on a forward-progress guarantee is thus not a viable option.
+    </p>
+  </div>
+</section>
 
-<p>Deploying a WebGPU implementation that depends on a forward-progress guarantee is thus not a viable option.</p>
+<!-- Section 4: Gridwise's Implementation -->
+<section style="max-width: 100%; padding-top: 2rem; border-top: 1px solid #e5e7eb; margin-bottom: 3rem;">
+  <h2 style="font-size: 1.875rem; font-weight: 700; color: #111827; margin-bottom: 2rem;">Gridwise's Scan and Reduce Implementations</h2>
+  
+  <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+    <h3 style="font-size: 1.25rem; font-weight: 700; color: #065f46; margin-bottom: 0.75rem;">Gridwise's Scan</h3>
+    <p style="color: #065f46; line-height: 1.75; margin-bottom: 0.75rem;">
+      Gridwise implements a chained scan that <strong>does not require forward-progress guarantees</strong>. It does so in a high-performance way that allows scan to run at full memory bandwidth, even on hardware without forward-progress guarantees.
+    </p>
+    <p style="color: #065f46; line-height: 1.75; margin: 0;">
+      Merrill and Garland's <strong>lookback strategy</strong> allows a stalled tile processor to look back into the carry chain; we add <strong>fallback capability</strong> to allow a stalled tile processor to redundantly compute per-tile reductions, and to do so using the full parallelism of the stalled tile processor. <em>Lookback and fallback were challenging to implement correctly.</em>
+    </p>
+  </div>
 
-<h2 id="gridwises-scan-and-reduce-implementations">Gridwise’s Scan and Reduce Implementations</h2>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1.5rem;">
+    <strong>Gridwise's Reduce:</strong> The carry chain in a chained scan stores the inclusive scan of the reduction of each tile. The last element in that carry chain is the sum of all input tiles and is thus the reduction of the entire input. A reduce can thus be implemented using the existing scan machinery (and run at full memory bandwidth). When configured as a reduction primitive, our scan implementation leaves out any scan-specific computation.
+  </p>
 
-<h3 id="gridwises-scan">Gridwise’s Scan</h3>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 0.5rem;">
+    <strong>Leveraging Subgroups:</strong> WebGPU's optional <a href="https://www.w3.org/TR/webgpu/#subgroups" style="color: #10b981; text-decoration: underline;">subgroups</a> feature enables WebGPU programs to use SIMD instructions within a workgroup. These can deliver significant performance gains. Gridwise has some, but incompletely deployed, <a href="subgroup-strategy.html" style="color: #10b981; text-decoration: underline;">support for emulating SIMD instructions</a>.
+  </p>
 
-<p>Gridwise implements a chained scan that does not require forward-progress guarantees. It does so in a high-performance way that allows scan to run at full memory bandwidth, even on hardware without forward-progress guarantees. Merrill and Garland’s lookback strategy allows a stalled tile processor to look back into the carry chain; we add fallback capability to allow a stalled tile processor to redundantly compute per-tile reductions, and to do so using the full parallelism of the stalled tile processor.</p>
+  <p style="color: #4b5563; line-height: 1.75; font-size: 0.875rem; font-style: italic;">
+    Our initial performance testing indicated that scan was 2.5x slower using subgroup emulation vs. using subgroup hardware.
+  </p>
+</section>
 
-<p>Lookback and fallback were challenging to implement correctly.</p>
+</div>
 
-<h3 id="gridwises-reduce">Gridwise’s Reduce</h3>
+<!-- Section 5: Configuration and Usage -->
+<section style="max-width: 100%; padding-top: 2rem; border-top: 1px solid #e5e7eb; margin-bottom: 3rem;">
+  <h2 style="font-size: 1.875rem; font-weight: 700; color: #111827; margin-bottom: 2rem;">Configuring and Calling Gridwise Scan and Reduce</h2>
+    
+    <!-- Defining the Primitive -->
+    <div style="margin-bottom: 3rem;">
+      <h3 style="font-size: 1.5rem; font-weight: 700; color: #111827; margin-bottom: 1.5rem;">Defining the Primitive</h3>
+      <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1.5rem;">
+        Declare the scan or reduce primitive as an instance of the <code>DLDFScan</code> class. An example scan declaration:
+      </p>
 
-<p>The carry chain in a chained scan stores the inclusive scan of the reduction of each tile. The last element in that carry chain is the sum of all input tiles and is thus the reduction of the entire input. A reduce can thus be implemented using the existing scan machinery (and run at full memory bandwidth). A traditional reduce implementation (computing tile reductions in parallel then reducing the tile reductions into a single value) would likely run just as fast, but would require a different implementation, so we have chosen to use the chained-scan implementation as Gridwise’s reduce. When configured as a reduction primitive, our scan implementation leaves out any scan-specific computation (e.g., we don’t have to compute the final per-tile scan).</p>
+      <div style="background: #1f2937; border-radius: 0.75rem; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); margin-bottom: 2rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: #374151; border-bottom: 1px solid #4b5563;">
+          <div style="display: flex; gap: 0.375rem;">
+            <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+            <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+            <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #10b981;"></div>
+          </div>
+          <span style="font-family: 'Monaco', 'Menlo', monospace; font-size: 0.75rem; color: #9ca3af; margin-left: 1rem;">define-scan.js</span>
+        </div>
+        <pre style="padding: 1.5rem; margin: 0; font-family: 'Monaco', 'Menlo', monospace; font-size: 0.875rem; line-height: 1.7; overflow-x: auto;"><code><span style="color: #a5b4fc">const</span> <span style="color: #e2e8f0">datatype = </span><span style="color: #34d399">"u32"</span>; <span style="color: #6b7280">// or "i32" or "f32"</span>
+<span style="color: #a5b4fc">const</span> <span style="color: #e2e8f0">dldfscanPrimitive = </span><span style="color: #a5b4fc">new</span> <span style="color: #fbbf24">DLDFScan</span>({
+  <span style="color: #94a3b8">device,</span>
+  <span style="color: #e2e8f0">binop: </span><span style="color: #a5b4fc">new</span> <span style="color: #fbbf24">BinOpAdd</span>({ datatype }),
+  <span style="color: #e2e8f0">type: </span><span style="color: #34d399">"exclusive"</span>,
+  <span style="color: #94a3b8">datatype,</span> <span style="color: #6b7280">// use the "datatype" string defined above</span>
+  <span style="color: #e2e8f0">gputimestamps: </span><span style="color: #fbbf24">true</span>,
+});</code></pre>
+      </div>
 
-<h3 id="leveraging-subgroups">Leveraging Subgroups</h3>
+      <h4 style="font-size: 1.125rem; font-weight: 700; color: #111827; margin-bottom: 1rem;">Constructor Arguments</h4>
+      
+      <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1.5rem; margin-bottom: 1.5rem;">
+        <p style="color: #065f46; margin-bottom: 1rem;"><strong>Required parameters:</strong></p>
+        <p style="margin: 0 0 0.75rem 0;"><code style="background: #dcfce7; color: #065f46; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-weight: 600;">device</code> – The GPU device on which this primitive will run.</p>
+        <p style="margin: 0 0 0.75rem 0;"><code style="background: #dcfce7; color: #065f46; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-weight: 600;">datatype</code> – Currently we support the (WGSL) types <code>"u32"</code>, <code>"i32"</code>, and <code>"f32"</code>, specified as strings. It is definitely possible to support more complex datatypes (e.g., structs), but this would take non-trivial engineering work.</p>
+        <p style="margin: 0;"><code style="background: #dcfce7; color: #065f46; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-weight: 600;">binop</code> – The "binary operation" aka a <a href="https://en.wikipedia.org/wiki/Monoid" style="color: #065f46; text-decoration: underline;">monoid</a>, specified as a combination of a datatype and a binary operator that operates on that datatype. The core scan implementation is agnostic as to the binary operation; the <code>binop</code> supplies that operation. The binop class is described in more detail <a href="binop.html" style="color: #065f46; text-decoration: underline;">here</a>.</p>
+      </div>
+      
+      <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1.5rem; margin-bottom: 1.5rem;">
+        <p style="color: #065f46; margin-bottom: 1rem;"><strong>Optional parameters:</strong></p>
+        <p style="margin: 0 0 0.75rem 0;"><code style="background: #dcfce7; color: #065f46; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-weight: 600;">type</code> – Any of <code>"exclusive"</code>, <code>"inclusive"</code>, or <code>"reduce"</code>. Default is <code>"exclusive"</code>.</p>
+        <p style="margin: 0;"><code style="background: #dcfce7; color: #065f46; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-weight: 600;">gputimestamps</code> – Enable GPU timestamps for the primitive's kernel calls.</p>
+      </div>
+    </div>
 
-<p>WebGPU’s optional <a href="https://www.w3.org/TR/webgpu/#subgroups">subgroups</a> feature enables WebGPU programs to use SIMD instructions within a workgroup. These can deliver significant performance gains for several reasons: they leverage custom hardware for the computation itself; they do not have to route data through workgroup memory; they require one hardware instruction to do what would take many hardware instructions in emulation; and they require fewer barriers. Gridwise has some, but incompletely deployed, <a href="subgroup-strategy.html">support for emulating SIMD instructions</a>. Our initial performance testing indicated that scan was 2.5x slower using subgroup emulation vs. using subgroup hardware.</p>
+    <!-- Configuring the Primitive -->
+    <div style="margin-bottom: 3rem;">
+      <h3 style="font-size: 1.5rem; font-weight: 700; color: #111827; margin-bottom: 1.5rem;">Configuring the Primitive</h3>
+      <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+        Once the primitive is <em>defined</em>, it must then be <em>configured</em>. The primitive knows that it requires an input and output buffer, named <code>inputBuffer</code> and <code>outputBuffer</code>. (We use our <a href="buffer.html" style="color: #4f46e5; text-decoration: underline;"><code>Buffer</code> class</a> for this.) We configure the primitive by registering data buffers with the primitive.
+      </p>
+      <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1.5rem;">
+        This can be done either with a <code>primitive.registerBuffer()</code> call or as an argument to the <code>execute</code> call. (The former is preferred if we need to register the buffer(s) once and then call <code>execute</code> many times.)
+      </p>
 
-<p>It is possible that the fastest scan and reduce implementations in the absence of subgroup hardware are not chained ones. We have not investigated this at all. In general, in Gridwise, we expect that subgroup operations are available, and we use them to reduce across subgroups and workgroups, to broadcast information from one thread to others, and to compute local subgroup-sized scans as part of workgroup scans.</p>
+      <div style="background: #1f2937; border-radius: 0.75rem; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
+        <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: #374151; border-bottom: 1px solid #4b5563;">
+          <div style="display: flex; gap: 0.375rem;">
+            <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+            <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+            <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #10b981;"></div>
+          </div>
+          <span style="font-family: 'Monaco', 'Menlo', monospace; font-size: 0.75rem; color: #9ca3af; margin-left: 1rem;">configure-scan.js</span>
+        </div>
+        <pre style="padding: 1.5rem; margin: 0; font-family: 'Monaco', 'Menlo', monospace; font-size: 0.875rem; line-height: 1.7; overflow-x: auto;"><code><span style="color: #a5b4fc">const</span> <span style="color: #e2e8f0">inputLength = </span><span style="color: #fbbf24">2</span> ** <span style="color: #fbbf24">20</span>;
+<span style="color: #e2e8f0">testInputBuffer = </span><span style="color: #a5b4fc">new</span> <span style="color: #fbbf24">Buffer</span>({
+  <span style="color: #94a3b8">device,</span>
+  <span style="color: #e2e8f0">datatype: </span><span style="color: #34d399">"f32"</span>,
+  <span style="color: #94a3b8">inputLength,</span>
+  <span style="color: #e2e8f0">label: </span><span style="color: #34d399">"inputBuffer"</span>,
+  <span style="color: #e2e8f0">createCPUBuffer: </span><span style="color: #fbbf24">true</span>,
+  <span style="color: #e2e8f0">initializeCPUBuffer: </span><span style="color: #fbbf24">true</span> <span style="color: #6b7280">/* fill with default data */</span>,
+  <span style="color: #e2e8f0">createGPUBuffer: </span><span style="color: #fbbf24">true</span>,
+  <span style="color: #e2e8f0">initializeGPUBuffer: </span><span style="color: #fbbf24">true</span> <span style="color: #6b7280">/* with CPU data */</span>,
+  <span style="color: #e2e8f0">createMappableGPUBuffer: </span><span style="color: #fbbf24">false</span>, <span style="color: #6b7280">/* never reading this back */</span>
+});
+dldfscanPrimitive.<span style="color: #38bdf8">registerBuffer</span>(testInputBuffer);</code></pre>
+      </div>
+    </div>
 
-<h2 id="configuring-and-calling-gridwise-scan-and-reduce">Configuring and Calling Gridwise Scan and Reduce</h2>
+    <!-- Calling the Primitive -->
+    <div style="margin-bottom: 3rem;">
+      <h3 style="font-size: 1.5rem; font-weight: 700; color: #111827; margin-bottom: 1.5rem;">Calling Scan or Reduce</h3>
+      <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+        Once the primitive is defined and configured, simply call its <code>execute()</code> method.
+      </p>
+      <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1.5rem;">
+        If you have not yet registered buffers, you can specify them in the argument object as <code>inputBuffer</code> and <code>outputBuffer</code>.
+      </p>
 
-<h3 id="defining-the-primitive">Defining the primitive</h3>
+      <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1.5rem; margin-bottom: 1.5rem;">
+        <h4 style="font-size: 1rem; font-weight: 700; color: #065f46; margin-bottom: 0.75rem;">Optional Timing Arguments</h4>
+        <p style="color: #065f46; margin-bottom: 0.75rem;">
+          These are timing-specific and thus which you are unlikely to use unless you are benchmarking:
+        </p>
+        <ul style="color: #065f46; line-height: 1.6; margin-left: 1.5rem;">
+          <li style="margin-bottom: 0.25rem;"><code>trials</code> with an integer argument. This will run the kernel(s) that number of times. Default: 1.</li>
+          <li style="margin-bottom: 0.25rem;"><code>enableGPUTiming</code> with either true or false. If true, please ensure that the device has a set of required features that include <code>timestamp-query</code>. Default: false.</li>
+          <li><code>enableCPUTiming</code> with either true or false. Default: false.</li>
+        </ul>
+        <p style="font-weight: 600; margin: 0.75rem 0 0 0;">
+          Note that <code>execute()</code> is declared <code>async</code>.
+        </p>
+      </div>
 
-<p>Declare the scan or reduce primitive as an instance of the <code class="language-plaintext highlighter-rouge">DLDFScan</code> class.  An example scan declaration:</p>
+      <div style="background: #1f2937; border-radius: 0.75rem; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
+        <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: #374151; border-bottom: 1px solid #4b5563;">
+          <div style="display: flex; gap: 0.375rem;">
+            <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+            <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+            <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #10b981;"></div>
+          </div>
+          <span style="font-family: 'Monaco', 'Menlo', monospace; font-size: 0.75rem; color: #9ca3af; margin-left: 1rem;">execute-scan.js</span>
+        </div>
+        <pre style="padding: 1.5rem; margin: 0; font-family: 'Monaco', 'Menlo', monospace; font-size: 0.875rem; line-height: 1.7; overflow-x: auto;"><code><span style="color: #a5b4fc">await</span> dldfscanPrimitive.<span style="color: #38bdf8">execute</span>();
 
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">datatype</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">u32</span><span class="dl">"</span><span class="p">;</span> <span class="c1">// or "i32" or "f32"</span>
-<span class="kd">const</span> <span class="nx">dldfscanPrimitive</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">DLDFScan</span><span class="p">({</span>
-  <span class="nx">device</span><span class="p">,</span>
-  <span class="na">binop</span><span class="p">:</span> <span class="k">new</span> <span class="nx">BinOpAdd</span><span class="p">({</span> <span class="nx">datatype</span> <span class="p">}),</span>
-  <span class="na">type</span><span class="p">:</span> <span class="dl">"</span><span class="s2">exclusive</span><span class="dl">"</span><span class="p">,</span>
-  <span class="nx">datatype</span><span class="p">,</span> <span class="c1">// use the "datatype" string defined above</span>
-  <span class="na">gputimestamps</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
-<span class="p">});</span>
-</code></pre></div></div>
+<span style="color: #6b7280">// or, if we want to specify buffers only when execute is called</span>
+<span style="color: #a5b4fc">await</span> dldfscanPrimitive.<span style="color: #38bdf8">execute</span>({
+  <span style="color: #e2e8f0">inputBuffer: </span>mySrcBuffer,
+  <span style="color: #e2e8f0">outputBuffer: </span>myDestBuffer,
+});
 
-<p>The argument is a JS object and its members may include:</p>
+<span style="color: #6b7280">// or (maybe if you're benchmarking)</span>
+<span style="color: #a5b4fc">await</span> dldfscanPrimitive.<span style="color: #38bdf8">execute</span>({
+  <span style="color: #e2e8f0">trials: </span><span style="color: #fbbf24">1</span>,
+  <span style="color: #e2e8f0">enableGPUTiming: </span><span style="color: #fbbf24">false</span>,
+  <span style="color: #e2e8f0">enableCPUTiming: </span><span style="color: #fbbf24">true</span>,
+});</code></pre>
+      </div>
+    </div>
+  &lt;/div&gt;
+</section>
 
-<ul>
-  <li><strong>device</strong> (required): the GPU device on which this primitive will run.</li>
-  <li><strong>datatype</strong> (required): Scans need to specify the datatype that can be scanned. Currently we support the (WGSL) types “u32”, “i32”, and “f32”, specified as strings. It is definitely possible to support more complex datatypes (e.g., structs), but this would take non-trivial engineering work.</li>
-  <li><strong>binop</strong> (required): the “binary operation” aka a <a href="https://en.wikipedia.org/wiki/Monoid">monoid</a>, specified as a combination of a datatype and a binary operator that operates on that datatype. The core scan implementation is agnostic as to the binary operation; the <code class="language-plaintext highlighter-rouge">binop</code> supplies that operation. The binop class is described in more detail <a href="binop.html">here</a>.</li>
-  <li><strong>type</strong>: any of <code class="language-plaintext highlighter-rouge">"exclusive"</code>, <code class="language-plaintext highlighter-rouge">"inclusive"</code>, or <code class="language-plaintext highlighter-rouge">"reduce"</code>. Default is <code class="language-plaintext highlighter-rouge">"exclusive"</code>.</li>
-  <li><strong>datatype</strong> (required): currently, any WGSL scalar primitive type (<code class="language-plaintext highlighter-rouge">"u32"</code>, <code class="language-plaintext highlighter-rouge">"i32"</code>, or <code class="language-plaintext highlighter-rouge">"f32"</code>). Scan and reduce could be extended to other datatypes with some engineering effort.</li>
-  <li><strong>gputimestamps</strong>: enable GPU timestamps for the primitive’s kernel calls.</li>
-</ul>
+<!-- Section 6: Usage Notes -->
+<section style="max-width: 100%; padding-top: 2rem; border-top: 1px solid #e5e7eb; margin-bottom: 3rem;">
+  <h2 style="font-size: 1.875rem; font-weight: 700; color: #111827; margin-bottom: 2rem;">Usage and Performance Notes</h2>
+  
+  <div style="padding: 1.5rem; border: 2px solid #ef4444; border-radius: 0.5rem; background: #fef2f2; margin-bottom: 2rem;">
+    <h3 style="font-size: 1.125rem; font-weight: 700; color: #991b1b; margin-bottom: 0.75rem;">⚠️ Input Length Requirement</h3>
+    <p style="color: #991b1b; line-height: 1.6; margin: 0;">
+      Input lengths <strong>must be</strong> a multiple of 4. Pad the end of your input array with enough identity elements to make this work. (This is because internally, we use <code>vec4</code>s for computation.)
+    </p>
+  </div>
 
-<h3 id="configuring-the-primitive">Configuring the primitive</h3>
+  <p style="margin-bottom: 1rem;"><strong>Performance Testing:</strong> Scan has had extensive performance testing and the defaults are fairly stable across different GPUs. The workgroup size, for instance, is set to 256. This particular iteration of the scan kernel has barely been tested with other workgroup sizes and they are unlikely to work out of the box.</p>
 
-<p>Once the primitive is <em>defined</em>, it must then be <em>configured</em>. The primitive knows that it requires an input and output buffer, named <code class="language-plaintext highlighter-rouge">inputBuffer</code> and <code class="language-plaintext highlighter-rouge">outputBuffer</code>. (We use our <a href="buffer.html"><code class="language-plaintext highlighter-rouge">Buffer</code> class</a> for this.) We configure the primitive by registering data buffers with the primitive. This can be done either with a <code class="language-plaintext highlighter-rouge">primitive.registerBuffer()</code> call or as an argument to the <code class="language-plaintext highlighter-rouge">execute</code> call. (The former is preferred if we need to register the buffer(s) once and then call <code class="language-plaintext highlighter-rouge">execute</code> many times.)</p>
+  <p style="margin-bottom: 2rem;"><strong>Future Work:</strong> If we extended scan to larger datatypes (beyond 32 bits), we expect that workgroup memory consumption would become an issue. We expect we would have to reduce workgroup size accordingly.</p>
+</section>
 
-<p>To register a buffer, simply call <code class="language-plaintext highlighter-rouge">primitive.registerBuffer(buffer)</code>, where <code class="language-plaintext highlighter-rouge">buffer.label</code> is either <code class="language-plaintext highlighter-rouge">inputBuffer</code> or <code class="language-plaintext highlighter-rouge">outputBuffer</code>. The below code creates a <code class="language-plaintext highlighter-rouge">Buffer</code> then registers it.</p>
+<p>&lt;/div&gt;</p>
 
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">inputLength</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="mi">20</span><span class="p">;</span>
-<span class="nx">testInputBuffer</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Buffer</span><span class="p">({</span>
-  <span class="nx">device</span><span class="p">,</span>
-  <span class="na">datatype</span><span class="p">:</span> <span class="dl">"</span><span class="s2">f32</span><span class="dl">"</span><span class="p">,</span>
-  <span class="na">length</span><span class="p">:</span> <span class="nx">inputLength</span><span class="p">,</span>
-  <span class="na">label</span><span class="p">:</span> <span class="dl">"</span><span class="s2">inputBuffer</span><span class="dl">"</span><span class="p">,</span>
-  <span class="na">createCPUBuffer</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
-  <span class="na">initializeCPUBuffer</span><span class="p">:</span> <span class="kc">true</span> <span class="cm">/* fill with default data */</span><span class="p">,</span>
-  <span class="na">createGPUBuffer</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
-  <span class="na">initializeGPUBuffer</span><span class="p">:</span> <span class="kc">true</span> <span class="cm">/* with CPU data */</span><span class="p">,</span>
-  <span class="na">createMappableGPUBuffer</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span> <span class="cm">/* never reading this back */</span>
-<span class="p">});</span>
-<span class="nx">primitdldfscanPrimitiveive</span><span class="p">.</span><span class="nx">registerBuffer</span><span class="p">(</span><span class="nx">testInputBuffer</span><span class="p">);</span>
-</code></pre></div></div>
-
-<h3 id="calling-scan-or-reduce">Calling scan or reduce</h3>
-
-<p>Once the primitive is defined and configured, simply call its <code class="language-plaintext highlighter-rouge">execute()</code> method.</p>
-
-<p>If you have not yet registered buffers, you can specify them in the argument object as <code class="language-plaintext highlighter-rouge">inputBuffer</code> and <code class="language-plaintext highlighter-rouge">outputBuffer</code>.</p>
-
-<p>Other possible arguments (which are timing-specific and thus which you are unlikely to use unless you are benchmarking) are:</p>
-<ul>
-  <li><code class="language-plaintext highlighter-rouge">trials</code> with an integer argument. This will run the kernel(s) that number of times. Default: 1.</li>
-  <li><code class="language-plaintext highlighter-rouge">enableGPUTiming</code> with either true or false. If true, please ensure that the device has a set of required features that include <code class="language-plaintext highlighter-rouge">timestamp-query</code>. Default: false.</li>
-  <li><code class="language-plaintext highlighter-rouge">enableCPUTiming</code> with either true or false. Default: false.</li>
-</ul>
-
-<p>Note that <code class="language-plaintext highlighter-rouge">execute()</code> is declared <code class="language-plaintext highlighter-rouge">async</code>.</p>
-
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">await</span> <span class="nx">dldfscanPrimitive</span><span class="p">.</span><span class="nx">execute</span><span class="p">();</span>
-<span class="c1">// or, if we want to specify buffers only when execute is called</span>
-<span class="k">await</span> <span class="nx">dldfscanPrimitive</span><span class="p">.</span><span class="nx">execute</span><span class="p">({</span>
-  <span class="na">inputBuffer</span><span class="p">:</span> <span class="nx">mySrcBuffer</span><span class="p">,</span>
-  <span class="na">outputBuffer</span><span class="p">:</span> <span class="nx">myDestBuffer</span><span class="p">,</span>
-<span class="p">});</span>
-<span class="c1">// or (maybe if you're benchmarking)</span>
-<span class="k">await</span> <span class="nx">dldfscanPrimitive</span><span class="p">.</span><span class="nx">execute</span><span class="p">({</span>
-  <span class="na">trials</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-  <span class="na">enableGPUTiming</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
-  <span class="na">enableCPUTiming</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
-<span class="p">});</span>
-</code></pre></div></div>
-
-<h2 id="usage-and-performance-notes">Usage and performance notes</h2>
-
-<p>Input lengths <em>must be</em> a multiple of 4. Pad the end of your input array with enough identity elements to make this work. (This is because internally, we use <code class="language-plaintext highlighter-rouge">vec4</code>s for computation.)</p>
-
-<p>Scan has had extensive performance testing and the defaults are fairly stable across different GPUs. The workgroup size, for instance, is set to 256. This particular iteration of the scan kernel has barely been tested with other workgroup sizes and they are unlikely to work out of the box.</p>
-
-<p>If we extended scan to larger datatypes (beyond 32 bits), we expect that workgroup memory consumption would become an issue. We expect we would have to reduce workgroup size accordingly.</p>
-
-            </div>
-        </article>
-        </main>
+        </div>
+      </article>
+    </div>
+  </main>
 </div>
 
 <script>
@@ -284,27 +539,9 @@
     });
   })();
 </script>
-
-  </div>
-</main><footer class="site-footer h-card">
-    <data class="u-url" href="/gridwise/"></data>
-
+<footer class="site-footer">
     <div class="wrapper">
-        <h2 class="footer-heading">Gridwise</h2>
-
-        <div class="footer-col-wrapper">
-            <div class="footer-col footer-col-1">
-                <ul class="contact-list">
-                    <li class="p-name">Gridwise</li><li><a class="u-email" href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></li></ul>
-            </div>
-
-            <div class="footer-col footer-col-3">
-                <p>WebGPU compute primitives in JavaScript</p>
-            </div>
-        </div>
-
-    </div>
-
+        <p>&copy; 2026 Gridwise. WebGPU compute primitives in JavaScript</p><p><a href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></p></div>
 </footer></body>
 
 </html>

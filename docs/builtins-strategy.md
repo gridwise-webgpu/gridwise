@@ -1,6 +1,6 @@
 ---
 layout: page
-title: "Gridwise WebGPU @builtins Strategy"
+title: "WebGPU @builtins Strategy"
 category: gridwise
 permalink: /builtins-strategy/
 excerpt: "Exploring the use of WGSL @builtin functions in Gridwise for optimal WebGPU primitive performance."

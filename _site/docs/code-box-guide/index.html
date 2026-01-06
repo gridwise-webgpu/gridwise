@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Simple Code Box Component (k6.io Style) | Gridwise</title>
+<meta name="generator" content="Jekyll v3.10.0" />
+<meta property="og:title" content="Simple Code Box Component (k6.io Style)" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="WebGPU compute primitives in JavaScript" />
+<meta property="og:description" content="WebGPU compute primitives in JavaScript" />
+<link rel="canonical" href="http://localhost:4000/gridwise/docs/code-box-guide/" />
+<meta property="og:url" content="http://localhost:4000/gridwise/docs/code-box-guide/" />
+<meta property="og:site_name" content="Gridwise" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Simple Code Box Component (k6.io Style)" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","description":"WebGPU compute primitives in JavaScript","headline":"Simple Code Box Component (k6.io Style)","url":"http://localhost:4000/gridwise/docs/code-box-guide/"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css">
+    <script src="/gridwise/docs/assets/js/main.js" defer></script></head>
+<body><header class="site-header" role="banner">
+  <div class="wrapper">
+    <div class="header-left">
+      <a class="site-title" rel="author" href="/gridwise/">
+        <span class="gradient-text">Gridwise Docs</span>
+      </a>
+    </div>
+
+    <div class="header-right"><a class="header-link" href="/gridwise/examples-guide/">Examples</a>
+      <a class="header-link" href="javascript:void(0)" onclick="launchExample()">Try Demo</a>
+      <a class="github-button" href="https://github.com/gridwise-webgpu/gridwise" target="_blank" aria-label="GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+      </a>
+    </div>
+  </div>
+</header>
+
+<script>
+  function launchExample() {
+    window.open('https://gridwise-webgpu.github.io/gridwise/examples/scan_pane_example.html', '_blank');
+  }
+</script><div class="main-container">
+  <!-- Modern Sidebar Navigation -->
+  <aside class="docs-sidebar" id="docsSidebar">
+    <div class="sidebar-content">
+      <div class="sidebar-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <h1>Documentation</h1>
+      </div>
+
+      <div class="search-box">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" id="docsSearch" placeholder="Search docs..." />
+      </div>
+
+      <nav class="docs-nav"><div class="nav-section">
+          <h3 class="nav-section-title">Getting Started</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/getting-started/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                <span>Introduction</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/installation/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Quick Start</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Core Concepts</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/architecture/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Architecture</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/primitive-design/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Primitive Design</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/subgroup-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                <span>Subgroup Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Primitives</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/scan-and-reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Scan and Reduce</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                <span>Sort</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/binop/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Binary Operations</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Advanced</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/buffer/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+                <span>Buffer Management</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/timing-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Timing Strategy</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/webgpu-object-caching-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Object Caching</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/builtins-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Builtins Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Examples</h3>
+          <ul><li>
+              <a href="/gridwise/examples/reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Reduce Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/scan/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Scan Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Sort Example</span>
+              </a>
+            </li></ul>
+        </div></nav>
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div class="sidebar-footer">
+      <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
+        <svg class="github-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="docs-content">
+    <div class="content-inner"><div class="docs-hero">
+        <div class="badge">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span>Documentation</span>
+        </div>
+        <h1>Simple Code Box Component (k6.io Style)</h1></div><article class="post">
+        <div class="post-content">
+          <h1 id="simple-code-box-component-k6io-style">Simple Code Box Component (k6.io Style)</h1>
+
+<p>A clean, sidebar-free code box component inspired by k6.io’s design aesthetic.</p>
+
+<h2 id="features">Features</h2>
+
+<ul>
+  <li>✨ Clean white borders with subtle shadows</li>
+  <li>🎨 Beautiful syntax highlighting (purple keywords, pink strings, blue functions)</li>
+  <li>📱 Responsive and mobile-friendly</li>
+  <li>🎯 No sidebar - just clean code display</li>
+  <li>🔧 Easy to customize colors</li>
+</ul>
+
+<h2 id="installation">Installation</h2>
+
+<ol>
+  <li>The component is located in <code class="language-plaintext highlighter-rouge">docs/_includes/code-box-simple.html</code></li>
+  <li>Include it in your markdown or HTML files using Jekyll’s include syntax</li>
+</ol>
+
+<h2 id="usage">Usage</h2>
+
+<h3 id="basic-usage">Basic Usage</h3>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">&lt;!-- Include the component first (do this once per page) --&gt;</span>
+<span class="c">&lt;!-- Simple Code Box without Sidebar --&gt;</span>
+<span class="nt">&lt;style&gt;</span>
+<span class="nd">:root</span> <span class="p">{</span>
+  <span class="py">--code-border</span><span class="p">:</span> <span class="m">#e5e7eb</span><span class="p">;</span>
+  <span class="py">--code-bg</span><span class="p">:</span> <span class="m">#ffffff</span><span class="p">;</span>
+  <span class="py">--code-title-bg</span><span class="p">:</span> <span class="m">#f9fafb</span><span class="p">;</span>
+  <span class="c">/* Syntax Highlighting Colors (k6-inspired) */</span>
+  <span class="py">--hl-keyword</span><span class="p">:</span> <span class="m">#7d64ff</span><span class="p">;</span>
+  <span class="py">--hl-string</span><span class="p">:</span> <span class="m">#db2777</span><span class="p">;</span>
+  <span class="py">--hl-function</span><span class="p">:</span> <span class="m">#2563eb</span><span class="p">;</span>
+  <span class="py">--hl-comment</span><span class="p">:</span> <span class="m">#9ca3af</span><span class="p">;</span>
+  <span class="py">--hl-property</span><span class="p">:</span> <span class="m">#4b5563</span><span class="p">;</span>
+  <span class="py">--hl-number</span><span class="p">:</span> <span class="m">#059669</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="nc">.code-box-simple</span> <span class="p">{</span>
+  <span class="nl">max-width</span><span class="p">:</span> <span class="m">100%</span><span class="p">;</span>
+  <span class="nl">margin</span><span class="p">:</span> <span class="m">2rem</span> <span class="m">0</span><span class="p">;</span>
+  <span class="nl">background</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--code-bg</span><span class="p">);</span>
+  <span class="nl">border</span><span class="p">:</span> <span class="m">1px</span> <span class="nb">solid</span> <span class="n">var</span><span class="p">(</span><span class="n">--code-border</span><span class="p">);</span>
+  <span class="nl">border-radius</span><span class="p">:</span> <span class="m">0.5rem</span><span class="p">;</span>
+  <span class="nl">overflow</span><span class="p">:</span> <span class="nb">hidden</span><span class="p">;</span>
+  <span class="nl">box-shadow</span><span class="p">:</span> <span class="m">0</span> <span class="m">4px</span> <span class="m">6px</span> <span class="m">-1px</span> <span class="n">rgba</span><span class="p">(</span><span class="m">0</span><span class="p">,</span> <span class="m">0</span><span class="p">,</span> <span class="m">0</span><span class="p">,</span> <span class="m">0.05</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="nc">.code-box-header</span> <span class="p">{</span>
+  <span class="nl">padding</span><span class="p">:</span> <span class="m">1rem</span> <span class="m">1.5rem</span><span class="p">;</span>
+  <span class="nl">background</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--code-title-bg</span><span class="p">);</span>
+  <span class="nl">border-bottom</span><span class="p">:</span> <span class="m">1px</span> <span class="nb">solid</span> <span class="n">var</span><span class="p">(</span><span class="n">--code-border</span><span class="p">);</span>
+  <span class="nl">font-family</span><span class="p">:</span> <span class="nb">sans-serif</span><span class="p">;</span>
+  <span class="nl">font-size</span><span class="p">:</span> <span class="m">0.875rem</span><span class="p">;</span>
+  <span class="nl">font-weight</span><span class="p">:</span> <span class="m">600</span><span class="p">;</span>
+  <span class="nl">color</span><span class="p">:</span> <span class="m">#000</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="nc">.code-box-content</span> <span class="p">{</span>
+  <span class="nl">padding</span><span class="p">:</span> <span class="m">1.5rem</span> <span class="m">2rem</span><span class="p">;</span>
+  <span class="nl">background</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--code-bg</span><span class="p">);</span>
+  <span class="nl">font-family</span><span class="p">:</span> <span class="s2">'Monaco'</span><span class="p">,</span> <span class="s2">'Menlo'</span><span class="p">,</span> <span class="s2">'Courier New'</span><span class="p">,</span> <span class="nb">monospace</span><span class="p">;</span>
+  <span class="nl">font-size</span><span class="p">:</span> <span class="m">0.9rem</span><span class="p">;</span>
+  <span class="nl">line-height</span><span class="p">:</span> <span class="m">1.6</span><span class="p">;</span>
+  <span class="nl">overflow-x</span><span class="p">:</span> <span class="nb">auto</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="nc">.code-box-content</span> <span class="nt">pre</span> <span class="p">{</span>
+  <span class="nl">margin</span><span class="p">:</span> <span class="m">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c">/* Syntax Highlighting */</span>
+<span class="nc">.code-box-content</span> <span class="nc">.keyword</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--hl-keyword</span><span class="p">);</span> <span class="nl">font-weight</span><span class="p">:</span> <span class="m">500</span><span class="p">;</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.string</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--hl-string</span><span class="p">);</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.function</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--hl-function</span><span class="p">);</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.comment</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--hl-comment</span><span class="p">);</span> <span class="nl">font-style</span><span class="p">:</span> <span class="nb">italic</span><span class="p">;</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.property</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--hl-property</span><span class="p">);</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.number</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--hl-number</span><span class="p">);</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.type</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="m">#2563eb</span><span class="p">;</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.builtin</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="m">#db2777</span><span class="p">;</span> <span class="p">}</span>
+<span class="nt">&lt;/style&gt;</span>
+
+<span class="c">&lt;!-- Usage Example:
+&lt;div class="code-box-simple"&gt;
+  &lt;div class="code-box-header"&gt;Your Title Here&lt;/div&gt;
+  &lt;div class="code-box-content"&gt;
+    &lt;pre&gt;&lt;code&gt;&lt;span class="keyword"&gt;export default function&lt;/span&gt;() {
+  &lt;span class="keyword"&gt;let&lt;/span&gt; url = &lt;span class="string"&gt;'wss://example.com'&lt;/span&gt;
+  &lt;span class="keyword"&gt;let&lt;/span&gt; res = ws.&lt;span class="function"&gt;connect&lt;/span&gt;(url)
+}&lt;/code&gt;&lt;/pre&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+--&gt;</span>
+
+
+<span class="c">&lt;!-- Then use the code box anywhere --&gt;</span>
+<span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-simple"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-header"</span><span class="nt">&gt;</span>Your Title Here<span class="nt">&lt;/div&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-content"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;pre&gt;&lt;code&gt;</span>Your code here<span class="nt">&lt;/code&gt;&lt;/pre&gt;</span>
+  <span class="nt">&lt;/div&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</code></pre></div></div>
+
+<h3 id="with-syntax-highlighting">With Syntax Highlighting</h3>
+
+<p>Use these span classes for syntax highlighting:</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">.keyword</code> - for keywords (purple: <code class="language-plaintext highlighter-rouge">let</code>, <code class="language-plaintext highlighter-rouge">const</code>, <code class="language-plaintext highlighter-rouge">function</code>, <code class="language-plaintext highlighter-rouge">return</code>, etc.)</li>
+  <li><code class="language-plaintext highlighter-rouge">.string</code> - for strings (pink: <code class="language-plaintext highlighter-rouge">'hello'</code>, <code class="language-plaintext highlighter-rouge">"world"</code>)</li>
+  <li><code class="language-plaintext highlighter-rouge">.function</code> - for function names (blue: <code class="language-plaintext highlighter-rouge">connect()</code>, <code class="language-plaintext highlighter-rouge">log()</code>)</li>
+  <li><code class="language-plaintext highlighter-rouge">.comment</code> - for comments (gray, italic: <code class="language-plaintext highlighter-rouge">// comment</code>)</li>
+  <li><code class="language-plaintext highlighter-rouge">.property</code> - for properties (dark gray: object properties)</li>
+  <li><code class="language-plaintext highlighter-rouge">.number</code> - for numbers (green: <code class="language-plaintext highlighter-rouge">123</code>, <code class="language-plaintext highlighter-rouge">0.5</code>)</li>
+  <li><code class="language-plaintext highlighter-rouge">.type</code> - for types (blue: <code class="language-plaintext highlighter-rouge">u32</code>, <code class="language-plaintext highlighter-rouge">array</code>)</li>
+  <li><code class="language-plaintext highlighter-rouge">.builtin</code> - for builtins (pink: <code class="language-plaintext highlighter-rouge">workgroup</code>, <code class="language-plaintext highlighter-rouge">@builtin</code>)</li>
+</ul>
+
+<h3 id="example-javascript">Example: JavaScript</h3>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-simple"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-header"</span><span class="nt">&gt;</span>WebSocket Connection<span class="nt">&lt;/div&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-content"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;pre&gt;&lt;code&gt;&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>export default function<span class="nt">&lt;/span&gt;</span>() {
+  <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>let<span class="nt">&lt;/span&gt;</span> url = <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"string"</span><span class="nt">&gt;</span>'ws://echo.websocket.org'<span class="nt">&lt;/span&gt;</span>
+  <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>let<span class="nt">&lt;/span&gt;</span> params = { <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"property"</span><span class="nt">&gt;</span>tags<span class="nt">&lt;/span&gt;</span>: { <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"property"</span><span class="nt">&gt;</span>my_tag<span class="nt">&lt;/span&gt;</span>: <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"string"</span><span class="nt">&gt;</span>'hello'<span class="nt">&lt;/span&gt;</span> } }
+
+  <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>let<span class="nt">&lt;/span&gt;</span> res = ws.<span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"function"</span><span class="nt">&gt;</span>connect<span class="nt">&lt;/span&gt;</span>(url, params, <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>function<span class="nt">&lt;/span&gt;</span>(socket) {
+    socket.<span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"function"</span><span class="nt">&gt;</span>on<span class="nt">&lt;/span&gt;</span>(<span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"string"</span><span class="nt">&gt;</span>'open'<span class="nt">&lt;/span&gt;</span>, <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>function<span class="nt">&lt;/span&gt;</span>() {
+      console.<span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"function"</span><span class="nt">&gt;</span>log<span class="nt">&lt;/span&gt;</span>(<span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"string"</span><span class="nt">&gt;</span>'connected'<span class="nt">&lt;/span&gt;</span>)
+    })
+  })
+}<span class="nt">&lt;/code&gt;&lt;/pre&gt;</span>
+  <span class="nt">&lt;/div&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</code></pre></div></div>
+
+<h3 id="example-wgsl">Example: WGSL</h3>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-simple"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-header"</span><span class="nt">&gt;</span>WGSL Shader Code<span class="nt">&lt;/div&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-content"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;pre&gt;&lt;code&gt;&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>var<span class="nt">&lt;/span&gt;</span><span class="ni">&amp;lt;</span><span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"builtin"</span><span class="nt">&gt;</span>workgroup<span class="nt">&lt;/span&gt;</span><span class="ni">&amp;gt;</span> <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"property"</span><span class="nt">&gt;</span>wg_data<span class="nt">&lt;/span&gt;</span>: <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"type"</span><span class="nt">&gt;</span>array<span class="nt">&lt;/span&gt;</span><span class="ni">&amp;lt;</span><span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"type"</span><span class="nt">&gt;</span>u32<span class="nt">&lt;/span&gt;</span>, <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"number"</span><span class="nt">&gt;</span>256<span class="nt">&lt;/span&gt;</span><span class="ni">&amp;gt;</span>;
+
+<span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>fn<span class="nt">&lt;/span&gt;</span> <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"function"</span><span class="nt">&gt;</span>myFunction<span class="nt">&lt;/span&gt;</span>(<span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"property"</span><span class="nt">&gt;</span>x<span class="nt">&lt;/span&gt;</span>: <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"type"</span><span class="nt">&gt;</span>u32<span class="nt">&lt;/span&gt;</span>) -<span class="ni">&amp;gt;</span> <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"type"</span><span class="nt">&gt;</span>u32<span class="nt">&lt;/span&gt;</span> {
+  <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"comment"</span><span class="nt">&gt;</span>// Perform calculation<span class="nt">&lt;/span&gt;</span>
+  <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>return<span class="nt">&lt;/span&gt;</span> <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"property"</span><span class="nt">&gt;</span>x<span class="nt">&lt;/span&gt;</span> * <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"number"</span><span class="nt">&gt;</span>2<span class="nt">&lt;/span&gt;</span>;
+}<span class="nt">&lt;/code&gt;&lt;/pre&gt;</span>
+  <span class="nt">&lt;/div&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</code></pre></div></div>
+
+<h2 id="customization">Customization</h2>
+
+<h3 id="changing-colors">Changing Colors</h3>
+
+<p>Edit the CSS variables in <code class="language-plaintext highlighter-rouge">code-box-simple.html</code>:</p>
+
+<div class="language-css highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">:root</span> <span class="p">{</span>
+  <span class="py">--code-border</span><span class="p">:</span> <span class="m">#e5e7eb</span><span class="p">;</span>        <span class="c">/* Border color */</span>
+  <span class="py">--code-bg</span><span class="p">:</span> <span class="m">#ffffff</span><span class="p">;</span>            <span class="c">/* Background */</span>
+  <span class="py">--code-title-bg</span><span class="p">:</span> <span class="m">#f9fafb</span><span class="p">;</span>      <span class="c">/* Header background */</span>
+  
+  <span class="c">/* Syntax highlighting colors */</span>
+  <span class="py">--hl-keyword</span><span class="p">:</span> <span class="m">#7d64ff</span><span class="p">;</span>         <span class="c">/* Purple for keywords */</span>
+  <span class="py">--hl-string</span><span class="p">:</span> <span class="m">#db2777</span><span class="p">;</span>          <span class="c">/* Pink for strings */</span>
+  <span class="py">--hl-function</span><span class="p">:</span> <span class="m">#2563eb</span><span class="p">;</span>        <span class="c">/* Blue for functions */</span>
+  <span class="py">--hl-comment</span><span class="p">:</span> <span class="m">#9ca3af</span><span class="p">;</span>         <span class="c">/* Gray for comments */</span>
+  <span class="py">--hl-property</span><span class="p">:</span> <span class="m">#4b5563</span><span class="p">;</span>        <span class="c">/* Dark gray for properties */</span>
+  <span class="py">--hl-number</span><span class="p">:</span> <span class="m">#059669</span><span class="p">;</span>          <span class="c">/* Green for numbers */</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h3 id="removing-the-header">Removing the Header</h3>
+
+<p>If you don’t want a header, just omit the <code class="language-plaintext highlighter-rouge">.code-box-header</code> div:</p>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-simple"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-content"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;pre&gt;&lt;code&gt;</span>Your code here<span class="nt">&lt;/code&gt;&lt;/pre&gt;</span>
+  <span class="nt">&lt;/div&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</code></pre></div></div>
+
+<h3 id="adding-multiple-code-boxes">Adding Multiple Code Boxes</h3>
+
+<p>You only need to include the component once per page, then use multiple code boxes:</p>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">&lt;!-- Simple Code Box without Sidebar --&gt;</span>
+<span class="nt">&lt;style&gt;</span>
+<span class="nd">:root</span> <span class="p">{</span>
+  <span class="py">--code-border</span><span class="p">:</span> <span class="m">#e5e7eb</span><span class="p">;</span>
+  <span class="py">--code-bg</span><span class="p">:</span> <span class="m">#ffffff</span><span class="p">;</span>
+  <span class="py">--code-title-bg</span><span class="p">:</span> <span class="m">#f9fafb</span><span class="p">;</span>
+  <span class="c">/* Syntax Highlighting Colors (k6-inspired) */</span>
+  <span class="py">--hl-keyword</span><span class="p">:</span> <span class="m">#7d64ff</span><span class="p">;</span>
+  <span class="py">--hl-string</span><span class="p">:</span> <span class="m">#db2777</span><span class="p">;</span>
+  <span class="py">--hl-function</span><span class="p">:</span> <span class="m">#2563eb</span><span class="p">;</span>
+  <span class="py">--hl-comment</span><span class="p">:</span> <span class="m">#9ca3af</span><span class="p">;</span>
+  <span class="py">--hl-property</span><span class="p">:</span> <span class="m">#4b5563</span><span class="p">;</span>
+  <span class="py">--hl-number</span><span class="p">:</span> <span class="m">#059669</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="nc">.code-box-simple</span> <span class="p">{</span>
+  <span class="nl">max-width</span><span class="p">:</span> <span class="m">100%</span><span class="p">;</span>
+  <span class="nl">margin</span><span class="p">:</span> <span class="m">2rem</span> <span class="m">0</span><span class="p">;</span>
+  <span class="nl">background</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--code-bg</span><span class="p">);</span>
+  <span class="nl">border</span><span class="p">:</span> <span class="m">1px</span> <span class="nb">solid</span> <span class="n">var</span><span class="p">(</span><span class="n">--code-border</span><span class="p">);</span>
+  <span class="nl">border-radius</span><span class="p">:</span> <span class="m">0.5rem</span><span class="p">;</span>
+  <span class="nl">overflow</span><span class="p">:</span> <span class="nb">hidden</span><span class="p">;</span>
+  <span class="nl">box-shadow</span><span class="p">:</span> <span class="m">0</span> <span class="m">4px</span> <span class="m">6px</span> <span class="m">-1px</span> <span class="n">rgba</span><span class="p">(</span><span class="m">0</span><span class="p">,</span> <span class="m">0</span><span class="p">,</span> <span class="m">0</span><span class="p">,</span> <span class="m">0.05</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="nc">.code-box-header</span> <span class="p">{</span>
+  <span class="nl">padding</span><span class="p">:</span> <span class="m">1rem</span> <span class="m">1.5rem</span><span class="p">;</span>
+  <span class="nl">background</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--code-title-bg</span><span class="p">);</span>
+  <span class="nl">border-bottom</span><span class="p">:</span> <span class="m">1px</span> <span class="nb">solid</span> <span class="n">var</span><span class="p">(</span><span class="n">--code-border</span><span class="p">);</span>
+  <span class="nl">font-family</span><span class="p">:</span> <span class="nb">sans-serif</span><span class="p">;</span>
+  <span class="nl">font-size</span><span class="p">:</span> <span class="m">0.875rem</span><span class="p">;</span>
+  <span class="nl">font-weight</span><span class="p">:</span> <span class="m">600</span><span class="p">;</span>
+  <span class="nl">color</span><span class="p">:</span> <span class="m">#000</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="nc">.code-box-content</span> <span class="p">{</span>
+  <span class="nl">padding</span><span class="p">:</span> <span class="m">1.5rem</span> <span class="m">2rem</span><span class="p">;</span>
+  <span class="nl">background</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--code-bg</span><span class="p">);</span>
+  <span class="nl">font-family</span><span class="p">:</span> <span class="s2">'Monaco'</span><span class="p">,</span> <span class="s2">'Menlo'</span><span class="p">,</span> <span class="s2">'Courier New'</span><span class="p">,</span> <span class="nb">monospace</span><span class="p">;</span>
+  <span class="nl">font-size</span><span class="p">:</span> <span class="m">0.9rem</span><span class="p">;</span>
+  <span class="nl">line-height</span><span class="p">:</span> <span class="m">1.6</span><span class="p">;</span>
+  <span class="nl">overflow-x</span><span class="p">:</span> <span class="nb">auto</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="nc">.code-box-content</span> <span class="nt">pre</span> <span class="p">{</span>
+  <span class="nl">margin</span><span class="p">:</span> <span class="m">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c">/* Syntax Highlighting */</span>
+<span class="nc">.code-box-content</span> <span class="nc">.keyword</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--hl-keyword</span><span class="p">);</span> <span class="nl">font-weight</span><span class="p">:</span> <span class="m">500</span><span class="p">;</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.string</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--hl-string</span><span class="p">);</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.function</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--hl-function</span><span class="p">);</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.comment</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--hl-comment</span><span class="p">);</span> <span class="nl">font-style</span><span class="p">:</span> <span class="nb">italic</span><span class="p">;</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.property</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--hl-property</span><span class="p">);</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.number</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="n">var</span><span class="p">(</span><span class="n">--hl-number</span><span class="p">);</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.type</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="m">#2563eb</span><span class="p">;</span> <span class="p">}</span>
+<span class="nc">.code-box-content</span> <span class="nc">.builtin</span> <span class="p">{</span> <span class="nl">color</span><span class="p">:</span> <span class="m">#db2777</span><span class="p">;</span> <span class="p">}</span>
+<span class="nt">&lt;/style&gt;</span>
+
+<span class="c">&lt;!-- Usage Example:
+&lt;div class="code-box-simple"&gt;
+  &lt;div class="code-box-header"&gt;Your Title Here&lt;/div&gt;
+  &lt;div class="code-box-content"&gt;
+    &lt;pre&gt;&lt;code&gt;&lt;span class="keyword"&gt;export default function&lt;/span&gt;() {
+  &lt;span class="keyword"&gt;let&lt;/span&gt; url = &lt;span class="string"&gt;'wss://example.com'&lt;/span&gt;
+  &lt;span class="keyword"&gt;let&lt;/span&gt; res = ws.&lt;span class="function"&gt;connect&lt;/span&gt;(url)
+}&lt;/code&gt;&lt;/pre&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+--&gt;</span>
+
+
+<span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-simple"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-header"</span><span class="nt">&gt;</span>Example 1<span class="nt">&lt;/div&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-content"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;pre&gt;&lt;code&gt;</span>Code here<span class="nt">&lt;/code&gt;&lt;/pre&gt;</span>
+  <span class="nt">&lt;/div&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+
+<span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-simple"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-header"</span><span class="nt">&gt;</span>Example 2<span class="nt">&lt;/div&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-content"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;pre&gt;&lt;code&gt;</span>More code here<span class="nt">&lt;/code&gt;&lt;/pre&gt;</span>
+  <span class="nt">&lt;/div&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</code></pre></div></div>
+
+<h2 id="tips">Tips</h2>
+
+<ol>
+  <li>
+    <p><strong>Manual Highlighting</strong>: Syntax highlighting requires manually wrapping code in <code class="language-plaintext highlighter-rouge">&lt;span&gt;</code> tags. For large code blocks, consider using a syntax highlighter library.</p>
+  </li>
+  <li>
+    <p><strong>Line Width</strong>: Long lines will scroll horizontally (overflow-x: auto). Keep code lines reasonable or add line breaks.</p>
+  </li>
+  <li>
+    <p><strong>Consistent Indentation</strong>: Use 2 spaces for indentation to match the style.</p>
+  </li>
+  <li>
+    <p><strong>Testing</strong>: Preview your page to ensure the highlighting looks correct.</p>
+  </li>
+</ol>
+
+<h2 id="browser-support">Browser Support</h2>
+
+<p>Works in all modern browsers that support CSS custom properties (CSS variables):</p>
+<ul>
+  <li>Chrome/Edge 49+</li>
+  <li>Firefox 31+</li>
+  <li>Safari 9.1+</li>
+</ul>
+
+<h2 id="questions">Questions?</h2>
+
+<p>See the examples in <code class="language-plaintext highlighter-rouge">docs/_includes/code-box-example.html</code> for more usage patterns.</p>
+
+        </div>
+      </article>
+    </div>
+  </main>
+</div>
+
+<script>
+  // Save and restore sidebar scroll position
+  (function() {
+    const sidebar = document.querySelector('.docs-sidebar');
+    if (!sidebar) return;
+    
+    // Restore scroll position immediately
+    const savedScrollPos = sessionStorage.getItem('sidebarScrollPos');
+    if (savedScrollPos) {
+      sidebar.scrollTop = parseInt(savedScrollPos);
+    }
+    
+    // Save on scroll
+    let scrollTimer;
+    sidebar.addEventListener('scroll', function() {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(function() {
+        sessionStorage.setItem('sidebarScrollPos', sidebar.scrollTop);
+      }, 100);
+    });
+    
+    // Save on link click and restore after navigation
+    sidebar.querySelectorAll('a').forEach(function(link) {
+      link.addEventListener('click', function(e) {
+        sessionStorage.setItem('sidebarScrollPos', sidebar.scrollTop);
+      });
+    });
+    
+    // Restore again after a short delay to handle any reflows
+    window.addEventListener('load', function() {
+      if (savedScrollPos) {
+        sidebar.scrollTop = parseInt(savedScrollPos);
+      }
+    });
+  })();
+</script>
+<footer class="site-footer">
+    <div class="wrapper">
+        <p>&copy; 2026 Gridwise. WebGPU compute primitives in JavaScript</p><p><a href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></p></div>
+</footer></body>
+
+</html>

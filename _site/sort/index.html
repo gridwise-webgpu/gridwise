@@ -3,229 +3,595 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Gridwise Sort | Gridwise</title>
+<title>Sort | Gridwise</title>
 <meta name="generator" content="Jekyll v3.10.0" />
-<meta property="og:title" content="Gridwise Sort" />
+<meta property="og:title" content="Sort" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="GPU radix sort implementation using the OneSweep architecture with chained scan and forward-progress guarantees." />
 <meta property="og:description" content="GPU radix sort implementation using the OneSweep architecture with chained scan and forward-progress guarantees." />
-<link rel="canonical" href="https://gridwise-webgpu.github.io/gridwise/sort/" />
-<meta property="og:url" content="https://gridwise-webgpu.github.io/gridwise/sort/" />
+<link rel="canonical" href="http://localhost:4000/gridwise/sort/" />
+<meta property="og:url" content="http://localhost:4000/gridwise/sort/" />
 <meta property="og:site_name" content="Gridwise" />
 <meta property="og:type" content="website" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Gridwise Sort" />
+<meta property="twitter:title" content="Sort" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebPage","description":"GPU radix sort implementation using the OneSweep architecture with chained scan and forward-progress guarantees.","headline":"Gridwise Sort","url":"https://gridwise-webgpu.github.io/gridwise/sort/"}</script>
+{"@context":"https://schema.org","@type":"WebPage","description":"GPU radix sort implementation using the OneSweep architecture with chained scan and forward-progress guarantees.","headline":"Sort","url":"http://localhost:4000/gridwise/sort/"}</script>
 <!-- End Jekyll SEO tag -->
-<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css"></head>
+<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css">
+    <script src="/gridwise/docs/assets/js/main.js" defer></script></head>
 <body><header class="site-header" role="banner">
-  <div class="wrapper"><a class="site-title" rel="author" href="/gridwise/">Gridwise</a><nav class="site-nav">
-      <input type="checkbox" id="nav-trigger" class="nav-trigger" />
-      <label for="nav-trigger">
-        <span class="menu-icon">
-          <svg viewBox="0 0 18 15" width="18px" height="15px">
-            <path
-              d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.484C18,14.304,17.335,14.969,16.516,14.969H1.484 C0.665,14.969,0,14.304,0,13.484l0,0C0,12.665,0.665,12,1.484,12h15.032C17.335,12,18,12.665,18,13.484L18,13.484z" />
-          </svg>
-        </span>
-      </label>
+  <div class="wrapper">
+    <div class="header-left">
+      <a class="site-title" rel="author" href="/gridwise/">
+        <span class="gradient-text">Gridwise Docs</span>
+      </a>
+    </div>
 
-      <div class="trigger"><a class="button" href="/gridwise/examples-guide/">Example Docs</a>
-        <a class="button" href="/gridwise/">Read Docs</a>
-        <a class="button" href="javascript:void(0)" onclick="launchExample()">Try Interactive Example</a>
-      </div>
-    </nav></div>
+    <div class="header-right"><a class="header-link" href="/gridwise/examples-guide/">Examples</a>
+      <a class="header-link" href="javascript:void(0)" onclick="launchExample()">Try Demo</a>
+      <a class="github-button" href="https://github.com/gridwise-webgpu/gridwise" target="_blank" aria-label="GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+      </a>
+    </div>
+  </div>
 </header>
 
 <script>
   function launchExample() {
     window.open('https://gridwise-webgpu.github.io/gridwise/examples/scan_pane_example.html', '_blank');
   }
-</script><main class="page-content" aria-label="Content">
-  <div class="wrapper">
-    <div class="docs-container">
-    <!-- Left Sidebar Navigation -->
-    <aside class="docs-sidebar">
-        <h3>Documentation</h3><ul class="docs-nav"><li>
-                <a href="/gridwise/architecture/" >
-                    Gridwise Architecture
-                </a>
-            </li><li>
-                <a href="/gridwise/buffer/" >
-                    Gridwise&#39;s Buffer Class
-                </a>
-            </li><li>
-                <a href="/gridwise/binop/" >
-                    Gridwise&#39;s Binary Operator Class
-                </a>
-            </li><li>
-                <a href="/gridwise/scan-and-reduce/" >
-                    Gridwise Scan and Reduce
-                </a>
-            </li><li>
-                <a href="/gridwise/sort/" class="active" >
-                    Gridwise Sort
-                </a>
-            </li><li>
-                <a href="/gridwise/builtins-strategy/" >
-                    Gridwise WebGPU @builtins Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/primitive-design/" >
-                    Gridwise WebGPU Primitive Strategy wrt Subgroups
-                </a>
-            </li><li>
-                <a href="/gridwise/subgroup-strategy/" >
-                    Gridwise WebGPU Subgroup Emulation Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/webgpu-object-caching-strategy/" >
-                    Gridwise WebGPU Object Caching Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/timing-strategy/" >
-                    Gridwise WebGPU Timing Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/writing-a-webgpu-wgsl-workgroup-reduce-function/" >
-                    Abstraction Challenges in Writing a WebGPU/WGSL Workgroup Reduce Function
-                </a>
-            </li></ul><!-- Sidebar Footer -->
-        <div class="sidebar-footer">
-            <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
-                <svg class="github-icon" viewBox="0 0 16 16" width="20" height="20">
-                    <path fill="currentColor"
-                        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z">
-                    </path>
+</script><div class="main-container">
+  <!-- Modern Sidebar Navigation -->
+  <aside class="docs-sidebar" id="docsSidebar">
+    <div class="sidebar-content">
+      <div class="sidebar-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <h1>Documentation</h1>
+      </div>
+
+      <div class="search-box">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" id="docsSearch" placeholder="Search docs..." />
+      </div>
+
+      <nav class="docs-nav"><div class="nav-section">
+          <h3 class="nav-section-title">Getting Started</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/getting-started/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
-                <span>GitHub</span>
-            </a>
+                <span>Introduction</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/installation/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Quick Start</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Core Concepts</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/architecture/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Architecture</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/primitive-design/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Primitive Design</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/subgroup-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                <span>Subgroup Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Primitives</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/scan-and-reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Scan and Reduce</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/sort/" class="active">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                <span>Sort</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/binop/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Binary Operations</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Advanced</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/buffer/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+                <span>Buffer Management</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/timing-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Timing Strategy</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/webgpu-object-caching-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Object Caching</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/builtins-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Builtins Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Examples</h3>
+          <ul><li>
+              <a href="/gridwise/examples/reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Reduce Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/scan/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Scan Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Sort Example</span>
+              </a>
+            </li></ul>
+        </div></nav>
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div class="sidebar-footer">
+      <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
+        <svg class="github-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="docs-content">
+    <div class="content-inner"><div class="docs-hero">
+        <div class="badge">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span>Documentation</span>
         </div>
-    </aside>
+        <h1>Sort</h1><p class="lead">GPU radix sort implementation using the OneSweep architecture with chained scan and forward-progress guarantees.</p></div><article class="post">
+        <div class="post-content">
+          <div style="margin-bottom: 3rem;">
+  <div style="display: inline-flex; align-items: center; gap: 0.75rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 0.5rem 1.25rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.875rem; margin-bottom: 1.5rem;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 6h18M7 12h10M3 18h18" />
+    </svg>
+    Radix Sort
+  </div>
+  <h1 style="font-size: 2.5rem; font-weight: 800; color: #1e293b; margin: 0 0 1rem 0; line-height: 1.2;">OneSweep Sort</h1>
+  <p style="font-size: 1.25rem; color: #64748b; margin: 0; line-height: 1.6;">GPU radix sort implementation using the OneSweep architecture with chained scan and forward-progress guarantees.</p>
+</div>
 
-    <!-- Main Content Area -->
-    <main class="docs-content">
-        <article class="post">
-            <header class="post-header">
-                <h1 class="post-title">Gridwise Sort</h1>
-            </header>
+<div style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-left: 4px solid #10b981; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 2rem;">
+  <p style="margin: 0; color: #064e3b; line-height: 1.6;">
+    The dominant approach to GPU sorting is a <a href="https://en.wikipedia.org/wiki/Radix_sort" style="color: #059669; text-decoration: none; font-weight: 600;">radix sort</a> over input keys. In general, radix sorts deliver high performance on GPUs because they require <em>O(n)</em> work for inputs of <em>n</em> elements, because their constituent memory accesses are generally fairly coalesced and thus deliver good memory performance, and because the underlying compute primitives that compose to make the sort are good matches for GPUs.
+  </p>
+</div>
 
-            <div class="post-content">
-                <p>The dominant approach to GPU sorting is a <a href="https://en.wikipedia.org/wiki/Radix_sort">radix sort</a> over input keys. In general, radix sorts deliver high performance on GPUs because they require <em>O(n)</em> work for inputs of <em>n</em> elements, because their constituent memory accesses are generally fairly coalesced and thus deliver good memory performance, and because the underlying compute primitives that compose to make the sort are good matches for GPUs.</p>
+<div style="background: white; border: 2px solid #d1fae5; border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 2rem;">
+  <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4M12 8h.01" />
+    </svg>
+    <h3 style="margin: 0; color: #1e293b; font-size: 1.125rem; font-weight: 700;">Architecture Choice</h3>
+  </div>
+  <p style="margin: 0; color: #475569; line-height: 1.6;">
+    The specific sort architecture we choose is <a href="https://research.nvidia.com/publication/2022-06_onesweep-faster-least-significant-digit-radix-sort-gpus" style="color: #059669; text-decoration: none; font-weight: 600;">OneSweep</a>, developed by Andrey Adinets and Duane Merrill of NVIDIA. Internally, OneSweep uses a chained scan, as does our implementation. The challenges we outlined in our <a href="scan-and-reduce.html#decoupled-lookback-and-forward-progress-guarantees" style="color: #059669; text-decoration: none;">scan description</a> with respect to forward-progress guarantees are the same. Our sort implementation employs both <strong>lookback</strong> and <strong>fallback</strong> to ensure that it will work on GPUs that lack forward-progress guarantees.
+  </p>
+</div>
 
-<p>The specific sort architecture we choose is <a href="https://research.nvidia.com/publication/2022-06_onesweep-faster-least-significant-digit-radix-sort-gpus">OneSweep</a>, developed by Andrey Adinets and Duane Merrill of NVIDIA. Internally, OneSweep uses a chained scan, as does our implementation. The challenges we outlined in our <a href="scan-and-reduce.html#decoupled-lookback-and-forward-progress-guarantees">scan description</a> with respect to forward-progress guarantees are the same. Our sort implementation employs both lookback and fallback to ensure that it will work on GPUs that lack forward-progress guarantees.</p>
+<h2 style="font-size: 1.875rem; font-weight: 700; color: #1e293b; margin: 3rem 0 1.5rem 0; padding-bottom: 0.75rem; border-bottom: 3px solid #10b981;">Our Sort Implementation</h2>
 
-<h2 id="our-sort-implementation">Our Sort Implementation</h2>
+<div style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-left: 4px solid #10b981; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 2rem;">
+  <p style="margin: 0; color: #064e3b; line-height: 1.6;">
+    <strong>Core Concept:</strong> At its heart, radix sort computes a permutation of its input values and then performs the permutation. Computing the entire permutation would be intractable (the size of the intermediate data structures would be enormous), so typically a radix sort makes several passes over the input, each time computing a permutation for a subset of input bits (this subset is called a <strong>"digit"</strong>).
+  </p>
+</div>
 
-<p>At its heart, radix sort computes a permutation of its input values and then performs the permutation. Computing the entire permutation would be intractable (the size of the intermediate data structures would be enormous), so typically a radix sort makes several passes over the input, each time computing a permutation for a subset of input bits (this subset is called a “digit”). OneSweep begins with the least significant bits, as do we. Our implementation considers 8 bits per pass, meaning each digit can take on 2^8 = 256 possible values. We thus require 4 passes to sort 32-bit keys. On each pass, we classify the key into one of 256 “buckets” based on its digit value. The permutation we want to compute will always place keys with lower digit values before keys with higher digit values.</p>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+  <div style="background: #ffffff; border: 1px solid #d1e7dd; border-radius: 0.5rem; padding: 1.5rem; box-shadow: 0 1px 3px rgba(45, 92, 79, 0.08);">
+    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+      <div style="background: linear-gradient(135deg, #2d5c4f 0%, #1e4338 100%); color: #e8f5f1; width: 2.5rem; height: 2.5rem; border-radius: 0.375rem; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.125rem; box-shadow: 0 2px 4px rgba(45, 92, 79, 0.2);">8</div>
+      <h3 style="margin: 0; color: #1a1f2e; font-size: 1.125rem; font-weight: 600;">Bits Per Pass</h3>
+    </div>
+    <p style="margin: 0; color: #5a6c7d; line-height: 1.6; font-size: 0.9375rem;">
+      Each digit can take on 2<sup>8</sup> = <strong>256</strong> possible values
+    </p>
+  </div>
 
-<p>As with scan, we divide the input into equal-sized “tiles” and assign one workgroup to each tile.</p>
+  <div style="background: #ffffff; border: 1px solid #d1e7dd; border-radius: 0.5rem; padding: 1.5rem; box-shadow: 0 1px 3px rgba(45, 92, 79, 0.08);">
+    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+      <div style="background: linear-gradient(135deg, #3a6d5d 0%, #2d5c4f 100%); color: #e8f5f1; width: 2.5rem; height: 2.5rem; border-radius: 0.375rem; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.125rem; box-shadow: 0 2px 4px rgba(45, 92, 79, 0.2);">4</div>
+      <h3 style="margin: 0; color: #1a1f2e; font-size: 1.125rem; font-weight: 600;">Passes for 32-bit</h3>
+    </div>
+    <p style="margin: 0; color: #5a6c7d; line-height: 1.6; font-size: 0.9375rem;">
+      Starting with least significant bits, classifying into <strong>256 buckets</strong> per pass
+    </p>
+  </div>
 
-<p>Computing this permutation means computing a “destination address” for each key—to where in the output will this key be written? That address is the sum of:</p>
+  <div style="background: #ffffff; border: 1px solid #d1e7dd; border-radius: 0.5rem; padding: 1.5rem; box-shadow: 0 1px 3px rgba(45, 92, 79, 0.08);">
+    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2d5c4f" stroke-width="2">
+        <path d="M4 7h16M4 12h16M4 17h16" />
+      </svg>
+      <h3 style="margin: 0; color: #1a1f2e; font-size: 1.125rem; font-weight: 600;">Tile-Based Processing</h3>
+    </div>
+    <p style="margin: 0; color: #5a6c7d; line-height: 1.6; font-size: 0.9375rem;">
+      Input divided into equal-sized tiles, one workgroup per tile
+    </p>
+  </div>
+</div>
 
-<ol>
-  <li>The number of keys that fall into a bucket before my bucket</li>
-  <li>The number of keys that are in my bucket and are processed in a previous tile</li>
-  <li>The number of keys that are in my bucket and are processed earlier than
-my key within my tile</li>
-</ol>
+<div style="background: #ffffff; border: 1px solid #d1e7dd; border-radius: 0.5rem; padding: 2rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(45, 92, 79, 0.08);">
+  <h3 style="margin: 0 0 1.5rem 0; color: #1a1f2e; font-size: 1.25rem; font-weight: 600;">Computing Destination Addresses</h3>
+  <p style="margin: 0 0 1.5rem 0; color: #3a4a5a; line-height: 1.6;">
+    Computing this permutation means computing a <strong>"destination address"</strong> for each key—to where in the output will this key be written? That address is the sum of:
+  </p>
+  
+  <div style="display: flex; flex-direction: column; gap: 1rem;">
+    <div style="display: flex; align-items: start; gap: 1rem; background: #f5faf8; padding: 1.25rem; border-radius: 0.375rem; border-left: 3px solid #2d5c4f;">
+      <div style="background: linear-gradient(135deg, #2d5c4f 0%, #1e4338 100%); color: #e8f5f1; width: 2rem; height: 2rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; flex-shrink: 0; box-shadow: 0 2px 4px rgba(45, 92, 79, 0.2);">1</div>
+      <div>
+        <p style="margin: 0; color: #1a1f2e; font-weight: 600;">Global Histogram</p>
+        <p style="margin: 0.5rem 0 0 0; color: #5a6c7d; font-size: 0.9375rem; line-height: 1.6;">
+          The number of keys that fall into a bucket before my bucket
+        </p>
+        <p style="margin: 0.5rem 0 0 0; color: #5a6c7d; font-size: 0.875rem; font-style: italic;">
+          Computed via: <code style="background: #e8f5f1; color: #1e4338; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem;">global_hist</code> kernel + <code style="background: #e8f5f1; color: #1e4338; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem;">onesweep_scan</code> (exclusive-sum-scan on histograms)
+        </p>
+      </div>
+    </div>
 
-<p>We compute (1) by constructing a global histogram of all bucket sizes (kernel: <code class="language-plaintext highlighter-rouge">global_hist</code>, which constructs a separate histogram for each digit) and then running exclusive-sum-scan on these histograms (kernel: <code class="language-plaintext highlighter-rouge">onesweep_scan</code>).</p>
+    <div style="display: flex; align-items: start; gap: 1rem; background: #f5faf8; padding: 1.25rem; border-radius: 0.375rem; border-left: 3px solid #3a6d5d;">
+      <div style="background: linear-gradient(135deg, #3a6d5d 0%, #2d5c4f 100%); color: #e8f5f1; width: 2rem; height: 2rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; flex-shrink: 0; box-shadow: 0 2px 4px rgba(45, 92, 79, 0.2);">2</div>
+      <div>
+        <p style="margin: 0; color: #1a1f2e; font-weight: 600;">Chained Scan</p>
+        <p style="margin: 0.5rem 0 0 0; color: #5a6c7d; font-size: 0.9375rem; line-height: 1.6;">
+          The number of keys that are in my bucket and are processed in a previous tile
+        </p>
+        <p style="margin: 0.5rem 0 0 0; color: #5a6c7d; font-size: 0.875rem; font-style: italic;">
+          Computed via: <code style="background: #e8f5f1; color: #1e4338; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem;">onesweep_pass</code> kernel with chained sum scan (lookback + fallback)
+        </p>
+      </div>
+    </div>
 
-<p>We compute (2) by first computing the number of keys per bucket within my histogram and then using a chained sum scan to retrieve the sum of the sizes of the previous workgroup’s buckets (kernel: <code class="language-plaintext highlighter-rouge">onesweep_pass</code>). We add in (1) at the start of this chained scan, so we actually chained-scan (1) + (2). The chained scan requires lookback to look at the results of this scan, and if the hardware does not offer forward-progress guarantees, the chained scan also requires fallback to redundantly compute this value. We compute (3) in <code class="language-plaintext highlighter-rouge">onesweep_pass</code> as well, but it is workgroup-local only; it does not participate in the chained-scan.</p>
+    <div style="display: flex; align-items: start; gap: 1rem; background: #f5faf8; padding: 1.25rem; border-radius: 0.375rem; border-left: 3px solid #2d5c4f;">
+      <div style="background: linear-gradient(135deg, #2d5c4f 0%, #1e4338 100%); color: #e8f5f1; width: 2rem; height: 2rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; flex-shrink: 0; box-shadow: 0 2px 4px rgba(45, 92, 79, 0.2);">3</div>
+      <div>
+        <p style="margin: 0; color: #1a1f2e; font-weight: 600;">Workgroup-Local Count</p>
+        <p style="margin: 0.5rem 0 0 0; color: #5a6c7d; font-size: 0.9375rem; line-height: 1.6;">
+          The number of keys that are in my bucket and are processed earlier than my key within my tile
+        </p>
+        <p style="margin: 0.5rem 0 0 0; color: #5a6c7d; font-size: 0.875rem; font-style: italic;">
+          Computed via: <code style="background: #e8f5f1; color: #1e4338; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem;">onesweep_pass</code> kernel (workgroup-local only, doesn't participate in chained scan)
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
 
-<p>Given this computed address per key, we could directly scatter each key to its location in global memory. However, to improve memory coalescing, we first write keys into workgroup memory and scatter from there. This puts neighboring keys next to each other in workgroup memory and significantly improves the throughput of the global scatter.</p>
+<div style="background: linear-gradient(135deg, #e8f5f1 0%, #d1e7dd 100%); border-left: 4px solid #2d5c4f; padding: 1.5rem; border-radius: 0.375rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(45, 92, 79, 0.1);">
+  <p style="margin: 0 0 0.75rem 0; font-weight: 600; font-size: 1.125rem; color: #1a3a2e;">Memory Coalescing Optimization</p>
+  <p style="margin: 0; line-height: 1.6; color: #1a3a2e;">
+    Given this computed address per key, we could directly scatter each key to its location in global memory. However, to improve memory coalescing, we <strong>first write keys into workgroup memory</strong> and scatter from there. This puts neighboring keys next to each other in workgroup memory and significantly improves the throughput of the global scatter.
+  </p>
+</div>
 
-<p>Note that the chained scan in onesweep is a chained scan over an entire 256-entry histogram. Lookback on such a large data structure is more complicated than lookback on a single data value, as we see in <a href="scan-and-reduce.html">our scan implementation</a>, because we use an entire workgroup to look back. The additional complexity is that <em>any</em> thread in the lookback may fail to find a ready value, and if this is the case, the entire workgroup must drop into fallback. Thus we have to keep track of both per-thread lookback success as well as per-subgroup lookback success, and only determine lookback is successful if all subgroups report success.</p>
+<div style="background: #ffffff; border: 1px solid #d1e7dd; border-radius: 0.5rem; padding: 2rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(45, 92, 79, 0.08);">
+  <h3 style="margin: 0 0 1rem 0; color: #1a1f2e; font-size: 1.25rem; font-weight: 600;">256-Entry Histogram Lookback</h3>
+  <p style="margin: 0 0 1rem 0; color: #3a4a5a; line-height: 1.6;">
+    Note that the chained scan in onesweep is a chained scan over an entire 256-entry histogram. Lookback on such a large data structure is more complicated than lookback on a single data value, as we see in <a href="scan-and-reduce.html" style="color: #2d5c4f; text-decoration: none; font-weight: 600; border-bottom: 1px solid #2d5c4f;">our scan implementation</a>, because we use an entire workgroup to look back.
+  </p>
+  <div style="background: #f5faf8; border: 1px solid #c5ddd2; padding: 1.25rem; border-radius: 0.375rem;">
+    <p style="margin: 0; color: #1a3a2e; line-height: 1.6;">
+      <strong>Additional Complexity:</strong> <em>Any</em> thread in the lookback may fail to find a ready value, and if this is the case, the entire workgroup must drop into fallback. Thus we have to keep track of both <strong>per-thread lookback success</strong> as well as <strong>per-subgroup lookback success</strong>, and only determine lookback is successful if all subgroups report success.
+    </p>
+  </div>
+</div>
 
-<p>Radix sort implementations (including ours) typically use a ping-pong pair of arrays: on each pass, one array is the input and one array is the output, and on each pass, their roles switch. Because we are sorting 32- or 64-bit keys at 8 bits per pass, this means the input will be overwritten by the output and the primitive’s output will be produced in the same buffer as its original input. Overwriting the input is not ideal behavior but is probably preferable to approaches that hide it from the user (by, say, preemptively copying the input into a temporary buffer and copying the temporary input and output at the end of the computation).</p>
+<div style="background: linear-gradient(135deg, #e8f5f1 0%, #d1e7dd 100%); border-left: 4px solid #2d5c4f; padding: 1.5rem; border-radius: 0.375rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(45, 92, 79, 0.1);">
+  <p style="margin: 0 0 0.75rem 0; font-weight: 600; font-size: 1.125rem; color: #1a3a2e;">Ping-Pong Array Behavior</p>
+  <p style="margin: 0; line-height: 1.6; color: #1a3a2e;">
+    Radix sort implementations (including ours) typically use a ping-pong pair of arrays: on each pass, one array is the input and one array is the output, and on each pass, their roles switch. Because we are sorting 32- or 64-bit keys at 8 bits per pass, this means <strong>the input will be overwritten by the output</strong> and the primitive's output will be produced in the same buffer as its original input. Overwriting the input is not ideal behavior but is probably preferable to approaches that hide it from the user (by, say, preemptively copying the input into a temporary buffer and copying the temporary input and output at the end of the computation).
+  </p>
+</div>
 
-<h2 id="configuring-and-calling-gridwise-sort">Configuring and Calling Gridwise Sort</h2>
+<h2 style="font-size: 1.875rem; font-weight: 600; color: #1a1f2e; margin: 3rem 0 1.5rem 0; padding-bottom: 0.75rem; border-bottom: 2px solid #2d5c4f;">Configuring and Calling Gridwise Sort</h2>
 
-<h3 id="defining-the-primitive">Defining the primitive</h3>
+<div style="background: #ffffff; border: 1px solid #d1e7dd; border-radius: 0.5rem; padding: 2rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(45, 92, 79, 0.08);">
+  <h3 style="margin: 0 0 1.5rem 0; color: #1a1f2e; font-size: 1.25rem; font-weight: 600; display: flex; align-items: center; gap: 0.75rem;">
+    <span style="background: linear-gradient(135deg, #e8f5f1 0%, #d1e7dd 100%); color: #2d5c4f; width: 2rem; height: 2rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1rem; border: 2px solid #2d5c4f;">1</span>
+    Defining the Primitive
+  </h3>
+  
+  <p style="margin: 0 0 1.5rem 0; color: #3a4a5a; line-height: 1.6;">
+    Declare the scan or reduce primitive as an instance of the <code style="background: #f5faf8; color: #2d5c4f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600; border: 1px solid #d1e7dd;">OneSweepSort</code> class. An example scan declaration:
+  </p>
 
-<p>Declare the scan or reduce primitive as an instance of the <code class="language-plaintext highlighter-rouge">OneSweepSort</code> class.  An example scan declaration:</p>
+  <div style="background: #1a1f2e; border-radius: 0.5rem; overflow: hidden; margin-bottom: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+    <div style="background: linear-gradient(135deg, #2a3142 0%, #1f2533 100%); padding: 0.75rem 1.25rem; border-bottom: 1px solid #2a3142; display: flex; align-items: center; justify-content: space-between;">
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #2d5c4f;"></div>
+      </div>
+      <span style="color: #9ca3af; font-size: 0.875rem; font-weight: 500;">define-sort.js</span>
+    </div>
+    <div style="padding: 1.5rem; overflow-x: auto;">
+      <pre style="margin: 0; color: #e5e7eb; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.9375rem; line-height: 1.6;"><span style="color: #7dd3c0;">const</span> datatype <span style="color: #7dd3c0;">=</span> <span style="color: #a5f3fc;">"u32"</span><span style="color: #64748b;">; // or "i32" or "f32"</span>
+<span style="color: #7dd3c0;">const</span> oneSweepSortPrimitive <span style="color: #7dd3c0;">=</span> <span style="color: #7dd3c0;">new</span> <span style="color: #5dd4a8;">OneSweepSort</span>({
+  device,
+  datatype, <span style="color: #64748b;">// use the "datatype" string defined above</span>
+  type: <span style="color: #a5f3fc;">"keysonly"</span>,
+  direction: <span style="color: #a5f3fc;">"ascending"</span>,
+});</pre>
+    </div>
+  </div>
 
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">datatype</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">u32</span><span class="dl">"</span><span class="p">;</span> <span class="c1">// or "i32" or "f32"</span>
-<span class="kd">const</span> <span class="nx">oneSweepSortPrimitive</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">OneSweepSort</span><span class="p">({</span>
-  <span class="nx">device</span><span class="p">,</span>
-  <span class="nx">datatype</span><span class="p">,</span> <span class="c1">// use the "datatype" string defined above</span>
-  <span class="na">type</span><span class="p">:</span> <span class="dl">"</span><span class="s2">keysonly</span><span class="dl">"</span><span class="p">,</span>
-  <span class="na">direction</span><span class="p">:</span> <span class="dl">"</span><span class="s2">ascending</span><span class="dl">"</span><span class="p">,</span>
-<span class="p">});</span>
-</code></pre></div></div>
+  <p style="margin: 0 0 1rem 0; color: #3a4a5a; line-height: 1.6; font-weight: 600;">
+    Gridwise OneSweep supports all combinations of:
+  </p>
 
-<p>Gridwise OneSweep supports all combinations of:</p>
+  <div style="display: flex; flex-direction: column; gap: 1rem;">
+    <div style="background: #f5faf8; padding: 1.25rem; border-radius: 0.375rem; border-left: 3px solid #2d5c4f;">
+      <div style="display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <code style="background: #e8f5f1; color: #1e4338; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 600;">datatype</code>
+        <span style="color: #5a6c7d; font-size: 0.875rem;">Required</span>
+      </div>
+      <p style="margin: 0; color: #3a4a5a; line-height: 1.6; font-size: 0.9375rem;">
+        <code style="color: #2d5c4f; font-weight: 600;">u32</code>, <code style="color: #2d5c4f; font-weight: 600;">i32</code>, <code style="color: #2d5c4f; font-weight: 600;">f32</code>, <code style="color: #2d5c4f; font-weight: 600;">u64</code>. Internally, OneSweep converts non-unsigned-int keys into unsigned-int keys that respect the original order, sorts as if the keys were unsigned ints, and then reverses the conversion when writing the keys into the output.
+      </p>
+    </div>
 
-<ul>
-  <li><code class="language-plaintext highlighter-rouge">datatype</code>: <code class="language-plaintext highlighter-rouge">u32</code>, <code class="language-plaintext highlighter-rouge">i32</code>, <code class="language-plaintext highlighter-rouge">f32</code>, <code class="language-plaintext highlighter-rouge">u64</code>. Internally, OneSweep converts non-unsigned-int keys into unsigned-int keys that respect the original order, sorts as if the keys were unsigned ints, and then reverses the conversion when writing the keys into the output.</li>
-  <li><code class="language-plaintext highlighter-rouge">type</code>: <code class="language-plaintext highlighter-rouge">keysonly</code>, <code class="language-plaintext highlighter-rouge">keyvalue</code>. A key-value sort has an array of keys and also an array of values where each value is associated with its corresponding key in the keys array. Default: <code class="language-plaintext highlighter-rouge">keysonly</code>.</li>
-  <li><code class="language-plaintext highlighter-rouge">direction</code>: <code class="language-plaintext highlighter-rouge">ascending</code>, <code class="language-plaintext highlighter-rouge">descending</code>. The default is <code class="language-plaintext highlighter-rouge">ascending</code> (sort low to high), but we support sorting in the other direction as well.</li>
-</ul>
+    <div style="background: #f5faf8; padding: 1.25rem; border-radius: 0.375rem; border-left: 3px solid #3a6d5d;">
+      <div style="display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <code style="background: #e8f5f1; color: #1e4338; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 600;">type</code>
+        <span style="color: #5a6c7d; font-size: 0.875rem;">Optional (default: <code style="color: #2d5c4f;">keysonly</code>)</span>
+      </div>
+      <p style="margin: 0; color: #3a4a5a; line-height: 1.6; font-size: 0.9375rem;">
+        <code style="color: #3a6d5d; font-weight: 600;">keysonly</code>, <code style="color: #3a6d5d; font-weight: 600;">keyvalue</code>. A key-value sort has an array of keys and also an array of values where each value is associated with its corresponding key in the keys array.
+      </p>
+    </div>
 
-<h3 id="configuring-the-primitive">Configuring the primitive</h3>
+    <div style="background: #f5faf8; padding: 1.25rem; border-radius: 0.375rem; border-left: 3px solid #478572;">
+      <div style="display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <code style="background: #e8f5f1; color: #1e4338; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 600;">direction</code>
+        <span style="color: #5a6c7d; font-size: 0.875rem;">Optional (default: <code style="color: #2d5c4f;">ascending</code>)</span>
+      </div>
+      <p style="margin: 0; color: #3a4a5a; line-height: 1.6; font-size: 0.9375rem;">
+        <code style="color: #478572; font-weight: 600;">ascending</code> (sort low to high), <code style="color: #478572; font-weight: 600;">descending</code> (sort high to low).
+      </p>
+    </div>
+  </div>
+</div>
 
-<p>Once the primitive is <em>defined</em>, it must then be <em>configured</em>. The primitive knows that it requires an input/output and temporary buffer, labeled <code class="language-plaintext highlighter-rouge">keysInOut</code> and <code class="language-plaintext highlighter-rouge">keysTemp</code>. (We use our <a href="buffer.html"><code class="language-plaintext highlighter-rouge">Buffer</code> class</a> for this.) If we are doing a key-value sort, we also require <code class="language-plaintext highlighter-rouge">payloadInOut</code> and <code class="language-plaintext highlighter-rouge">payloadTemp</code> buffers, which store the values.) We configure the primitive by registering data buffers with the primitive. This can be done either with a <code class="language-plaintext highlighter-rouge">primitive.registerBuffer()</code> call or as an argument to the <code class="language-plaintext highlighter-rouge">execute</code> call. (The former is preferred if we need to register the buffer(s) once and then call <code class="language-plaintext highlighter-rouge">execute</code> many times.)</p>
+<div style="background: #ffffff; border: 1px solid #d1e7dd; border-radius: 0.5rem; padding: 2rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(45, 92, 79, 0.08);">
+  <h3 style="margin: 0 0 1.5rem 0; color: #1a1f2e; font-size: 1.25rem; font-weight: 600; display: flex; align-items: center; gap: 0.75rem;">
+    <span style="background: linear-gradient(135deg, #e8f5f1 0%, #d1e7dd 100%); color: #2d5c4f; width: 2rem; height: 2rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1rem; border: 2px solid #2d5c4f;">2</span>
+    Configuring the Primitive
+  </h3>
+  
+  <p style="margin: 0 0 1.5rem 0; color: #3a4a5a; line-height: 1.6;">
+    Once the primitive is <em>defined</em>, it must then be <em>configured</em>. The primitive knows that it requires an input/output and temporary buffer, labeled <code style="background: #f5faf8; color: #2d5c4f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600; border: 1px solid #d1e7dd;">keysInOut</code> and <code style="background: #f5faf8; color: #2d5c4f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600; border: 1px solid #d1e7dd;">keysTemp</code>. (We use our <a href="buffer.html" style="color: #2d5c4f; text-decoration: none; font-weight: 600; border-bottom: 1px solid #2d5c4f;"><code>Buffer</code> class</a> for this.) If we are doing a key-value sort, we also require <code style="background: #f5faf8; color: #2d5c4f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600; border: 1px solid #d1e7dd;">payloadInOut</code> and <code style="background: #f5faf8; color: #2d5c4f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600; border: 1px solid #d1e7dd;">payloadTemp</code> buffers, which store the values.) We configure the primitive by registering data buffers with the primitive. This can be done either with a <code style="background: #f5faf8; color: #2d5c4f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600; border: 1px solid #d1e7dd;">primitive.registerBuffer()</code> call or as an argument to the <code style="background: #f5faf8; color: #2d5c4f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600; border: 1px solid #d1e7dd;">execute</code> call. (The former is preferred if we need to register the buffer(s) once and then call <code style="background: #f5faf8; color: #2d5c4f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600; border: 1px solid #d1e7dd;">execute</code> many times.)
+  </p>
 
-<p>To register a buffer, simply call <code class="language-plaintext highlighter-rouge">primitive.registerBuffer(buffer)</code>, where <code class="language-plaintext highlighter-rouge">buffer.label</code> is one of the buffers above. The below code creates a <code class="language-plaintext highlighter-rouge">Buffer</code> then registers it.</p>
+  <p style="margin: 0 0 1.5rem 0; color: #3a4a5a; line-height: 1.6;">
+    To register a buffer, simply call <code style="background: #f5faf8; color: #2d5c4f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600; border: 1px solid #d1e7dd;">primitive.registerBuffer(buffer)</code>, where <code style="background: #f5faf8; color: #2d5c4f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600; border: 1px solid #d1e7dd;">buffer.label</code> is one of the buffers above. The below code creates a <code style="background: #f5faf8; color: #2d5c4f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600; border: 1px solid #d1e7dd;">Buffer</code> then registers it.
+  </p>
 
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">inputLength</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="mi">20</span><span class="p">;</span>
-<span class="nx">testKeysBuffer</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Buffer</span><span class="p">({</span>
-  <span class="nx">device</span><span class="p">,</span>
-  <span class="na">datatype</span><span class="p">:</span> <span class="dl">"</span><span class="s2">f32</span><span class="dl">"</span><span class="p">,</span>
-  <span class="na">length</span><span class="p">:</span> <span class="nx">inputLength</span><span class="p">,</span>
-  <span class="na">label</span><span class="p">:</span> <span class="dl">"</span><span class="s2">keysInOut</span><span class="dl">"</span><span class="p">,</span>
-  <span class="na">createCPUBuffer</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
-  <span class="na">initializeCPUBuffer</span><span class="p">:</span> <span class="kc">true</span> <span class="cm">/* fill with default data */</span><span class="p">,</span>
-  <span class="na">storeCPUBackup</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span> <span class="cm">/* because readback will overwrite the CPU data */</span>
-  <span class="na">createGPUBuffer</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
-  <span class="na">initializeGPUBuffer</span><span class="p">:</span> <span class="kc">true</span> <span class="cm">/* with CPU data */</span><span class="p">,</span>
-  <span class="na">createMappableGPUBuffer</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span> <span class="cm">/* we read this back to test correctness */</span>
-<span class="p">});</span>
-<span class="nx">oneSweepSortPrimitive</span><span class="p">.</span><span class="nx">registerBuffer</span><span class="p">(</span><span class="nx">testKeysBuffer</span><span class="p">);</span>
-</code></pre></div></div>
+  <div style="background: #1a1f2e; border-radius: 0.5rem; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+    <div style="background: linear-gradient(135deg, #2a3142 0%, #1f2533 100%); padding: 0.75rem 1.25rem; border-bottom: 1px solid #2a3142; display: flex; align-items: center; justify-content: space-between;">
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #2d5c4f;"></div>
+      </div>
+      <span style="color: #9ca3af; font-size: 0.875rem; font-weight: 500;">configure-sort.js</span>
+    </div>
+    <div style="padding: 1.5rem; overflow-x: auto;">
+      <pre style="margin: 0; color: #e5e7eb; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.9375rem; line-height: 1.6;"><span style="color: #7dd3c0;">const</span> inputLength <span style="color: #7dd3c0;">=</span> <span style="color: #5dd4a8;">2</span> <span style="color: #7dd3c0;">**</span> <span style="color: #5dd4a8;">20</span>;
+testKeysBuffer <span style="color: #7dd3c0;">=</span> <span style="color: #7dd3c0;">new</span> <span style="color: #5dd4a8;">Buffer</span>({
+  device,
+  datatype: <span style="color: #a5f3fc;">"f32"</span>,
+  length: inputLength,
+  label: <span style="color: #a5f3fc;">"keysInOut"</span>,
+  createCPUBuffer: <span style="color: #5dd4a8;">true</span>,
+  initializeCPUBuffer: <span style="color: #5dd4a8;">true</span> <span style="color: #64748b;">/* fill with default data */</span>,
+  storeCPUBackup: <span style="color: #5dd4a8;">true</span>, <span style="color: #64748b;">/* because readback will overwrite the CPU data */</span>
+  createGPUBuffer: <span style="color: #5dd4a8;">true</span>,
+  initializeGPUBuffer: <span style="color: #5dd4a8;">true</span> <span style="color: #64748b;">/* with CPU data */</span>,
+  createMappableGPUBuffer: <span style="color: #5dd4a8;">true</span>, <span style="color: #64748b;">/* we read this back to test correctness */</span>
+});
+oneSweepSortPrimitive.<span style="color: #5dd4a8;">registerBuffer</span>(testKeysBuffer);</pre>
+    </div>
+  </div>
+</div>
 
-<h3 id="calling-scan-or-reduce">Calling scan or reduce</h3>
+<div style="background: white; border: 2px solid #e2e8f0; border-radius: 0.75rem; padding: 2rem; margin-bottom: 2rem;">
+  <h3 style="margin: 0 0 1.5rem 0; color: #1e293b; font-size: 1.25rem; font-weight: 700; display: flex; align-items: center; gap: 0.75rem;">
+    <span style="background: #ddd6fe; color: #6366f1; width: 2rem; height: 2rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1rem;">3</span>
+    Calling Scan or Reduce
+  </h3>
+  
+  <p style="margin: 0 0 1.5rem 0; color: #475569; line-height: 1.6;">
+    Once the primitive is defined and configured, simply call its <code style="background: #f1f5f9; color: #6366f1; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600;">execute()</code> method.
+  </p>
 
-<p>Once the primitive is defined and configured, simply call its <code class="language-plaintext highlighter-rouge">execute()</code> method.</p>
+  <div style="background: #fef3c7; border: 1px solid #fbbf24; padding: 1.25rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+    <p style="margin: 0 0 0.75rem 0; color: #78350f; line-height: 1.6;">
+      If you have not yet registered buffers, you can specify them in the argument object as <code style="background: #fde68a; color: #78350f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 600;">keysInOut</code>, <code style="background: #fde68a; color: #78350f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 600;">keysTemp</code>, etc.
+    </p>
+    <p style="margin: 0; color: #78350f; line-height: 1.6; font-size: 0.9375rem;">
+      Other possible arguments (which are timing-specific and thus which you are unlikely to use unless you are benchmarking):
+    </p>
+    <ul style="margin: 0.5rem 0 0 0; padding-left: 1.5rem; color: #78350f; line-height: 1.6; font-size: 0.9375rem;">
+      <li><code style="background: #fde68a; color: #78350f; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem;">trials</code> with an integer argument. This will run the kernel(s) that number of times. Default: 1.</li>
+      <li><code style="background: #fde68a; color: #78350f; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem;">enableGPUTiming</code> with either true or false. If true, please ensure that the device has a set of required features that include <code>timestamp-query</code>. Default: false.</li>
+      <li><code style="background: #fde68a; color: #78350f; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem;">enableCPUTiming</code> with either true or false. Default: false.</li>
+    </ul>
+  </div>
 
-<p>If you have not yet registered buffers, you can specify them in the argument object as <code class="language-plaintext highlighter-rouge">keysInOut</code>, <code class="language-plaintext highlighter-rouge">keysTemp</code>, etc.</p>
+  <p style="margin: 0 0 1.5rem 0; color: #475569; line-height: 1.6;">
+    Note that <code style="background: #f1f5f9; color: #6366f1; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600;">execute()</code> is declared <code style="background: #f1f5f9; color: #6366f1; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600;">async</code>.
+  </p>
 
-<p>Other possible arguments (which are timing-specific and thus which you are unlikely to use unless you are benchmarking) are:</p>
-<ul>
-  <li><code class="language-plaintext highlighter-rouge">trials</code> with an integer argument. This will run the kernel(s) that number of times. Default: 1.</li>
-  <li><code class="language-plaintext highlighter-rouge">enableGPUTiming</code> with either true or false. If true, please ensure that the device has a set of required features that include <code class="language-plaintext highlighter-rouge">timestamp-query</code>. Default: false.</li>
-  <li><code class="language-plaintext highlighter-rouge">enableCPUTiming</code> with either true or false. Default: false.</li>
-</ul>
+  <div style="background: #1e293b; border-radius: 0.75rem; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+    <div style="background: linear-gradient(135deg, #374151 0%, #1f2937 100%); padding: 0.75rem 1.25rem; border-bottom: 1px solid #374151; display: flex; align-items: center; justify-content: space-between;">
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #10b981;"></div>
+      </div>
+      <span style="color: #9ca3af; font-size: 0.875rem; font-weight: 500;">execute-sort.js</span>
+    </div>
+    <div style="padding: 1.5rem; overflow-x: auto;">
+      <pre style="margin: 0; color: #e5e7eb; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.9375rem; line-height: 1.6;"><span style="color: #818cf8;">await</span> oneSweepSortPrimitive.<span style="color: #fbbf24;">execute</span>();
+<span style="color: #64748b;">// or, if we want to specify buffers only when execute is called</span>
+<span style="color: #818cf8;">await</span> oneSweepSortPrimitive.<span style="color: #fbbf24;">execute</span>({
+  keysInOut: testKeysBuffer,
+  keysTemp: testKeysTempBuffer,
+});
+<span style="color: #64748b;">// or (maybe if you're benchmarking)</span>
+<span style="color: #818cf8;">await</span> oneSweepSortPrimitive.<span style="color: #fbbf24;">execute</span>({
+  trials: <span style="color: #fbbf24;">1</span>,
+  enableGPUTiming: <span style="color: #fbbf24;">false</span>,
+  enableCPUTiming: <span style="color: #fbbf24;">true</span>,
+});</pre>
+    </div>
+  </div>
+</div>
 
-<p>Note that <code class="language-plaintext highlighter-rouge">execute()</code> is declared <code class="language-plaintext highlighter-rouge">async</code>.</p>
+<h2 style="font-size: 1.875rem; font-weight: 700; color: #1e293b; margin: 3rem 0 1.5rem 0; padding-bottom: 0.75rem; border-bottom: 3px solid #8b5cf6;">Usage and Performance Notes</h2>
 
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">await</span> <span class="nx">oneSweepSortPrimitive</span><span class="p">.</span><span class="nx">execute</span><span class="p">();</span>
-<span class="c1">// or, if we want to specify buffers only when execute is called</span>
-<span class="k">await</span> <span class="nx">oneSweepSortPrimitive</span><span class="p">.</span><span class="nx">execute</span><span class="p">({</span>
-  <span class="na">keysInOut</span><span class="p">:</span> <span class="nx">testKeysBuffer</span><span class="p">,</span>
-  <span class="na">keysTemp</span><span class="p">:</span> <span class="nx">testKeysTempBuffer</span><span class="p">,</span>
-<span class="p">});</span>
-<span class="c1">// or (maybe if you're benchmarking)</span>
-<span class="k">await</span> <span class="nx">oneSweepSortPrimitive</span><span class="p">.</span><span class="nx">execute</span><span class="p">({</span>
-  <span class="na">trials</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-  <span class="na">enableGPUTiming</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
-  <span class="na">enableCPUTiming</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
-<span class="p">});</span>
-</code></pre></div></div>
+<div style="display: flex; flex-direction: column; gap: 1.5rem; margin-bottom: 2rem;">
+  <div style="background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); border-left: 4px solid #ef4444; padding: 1.5rem; border-radius: 0.5rem;">
+    <div style="display: flex; align-items: start; gap: 1rem;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" style="flex-shrink: 0; margin-top: 0.125rem;">
+        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+      <div style="color: #7f1d1d;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; font-size: 1.125rem;">Input Size Limitation</p>
+        <p style="margin: 0; line-height: 1.6;">
+          The number of items to sort must be no greater than <strong>2<sup>30</sup></strong>. (CUB does the same thing.) We use the two most-significant bits as status bits. It would take a large engineering effort to remove this limitation.
+        </p>
+      </div>
+    </div>
+  </div>
 
-<h2 id="usage-and-performance-notes">Usage and performance notes</h2>
+  <div style="background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); border-left: 4px solid #ef4444; padding: 1.5rem; border-radius: 0.5rem;">
+    <div style="display: flex; align-items: start; gap: 1rem;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" style="flex-shrink: 0; margin-top: 0.125rem;">
+        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+      <div style="color: #7f1d1d;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; font-size: 1.125rem;">Input Length Alignment</p>
+        <p style="margin: 0; line-height: 1.6;">
+          Just as with scan, input lengths <em>must be</em> a multiple of 4. Pad the end of your input array with enough largest-key-value elements to make this work. (This is because internally, we use <code style="background: #fde68a; color: #78350f; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 600;">vec4</code>s for computation.)
+        </p>
+      </div>
+    </div>
+  </div>
 
-<p>The number of items to sort must be no greater than 2^30. (CUB does the same thing.) We use the two most-significant bits as status bits. It would take a large engineering effort to remove this limitation.</p>
+  <div style="background: white; border: 2px solid #e2e8f0; border-radius: 0.75rem; padding: 1.5rem;">
+    <div style="display: flex; align-items: start; gap: 1rem;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" style="flex-shrink: 0; margin-top: 0.125rem;">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 16v-4M12 8h.01" />
+      </svg>
+      <div style="color: #064e3b;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; font-size: 1.125rem; color: #1e293b;">Performance Characteristics</p>
+        <p style="margin: 0; line-height: 1.6; color: #475569;">
+          During its development, sort had extensive performance testing and the defaults are fairly stable across different GPUs. We sort <strong>8 bits per pass</strong> and this particular implementation has never been tested with a different number of bits per pass. This could be remedied with engineering effort.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
 
-<p>Just as with scan, input lengths <em>must be</em> a multiple of 4. Pad the end of your input array with enough largest-key-value elements to make this work. (This is because internally, we use <code class="language-plaintext highlighter-rouge">vec4</code>s for computation.)</p>
-
-<p>During its development, sort had extensive performance testing and the defaults are fairly stable across different GPUs. We sort 8 bits per pass and this particular implementation has never been tested with a different number of bits per pass. This could be remedied with engineering effort.</p>
-
-            </div>
-        </article>
-        </main>
+        </div>
+      </article>
+    </div>
+  </main>
 </div>
 
 <script>
@@ -264,27 +630,9 @@ my key within my tile</li>
     });
   })();
 </script>
-
-  </div>
-</main><footer class="site-footer h-card">
-    <data class="u-url" href="/gridwise/"></data>
-
+<footer class="site-footer">
     <div class="wrapper">
-        <h2 class="footer-heading">Gridwise</h2>
-
-        <div class="footer-col-wrapper">
-            <div class="footer-col footer-col-1">
-                <ul class="contact-list">
-                    <li class="p-name">Gridwise</li><li><a class="u-email" href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></li></ul>
-            </div>
-
-            <div class="footer-col footer-col-3">
-                <p>WebGPU compute primitives in JavaScript</p>
-            </div>
-        </div>
-
-    </div>
-
+        <p>&copy; 2026 Gridwise. WebGPU compute primitives in JavaScript</p><p><a href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></p></div>
 </footer></body>
 
 </html>

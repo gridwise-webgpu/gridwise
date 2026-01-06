@@ -3,262 +3,524 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Gridwise WebGPU Object Caching Strategy | Gridwise</title>
+<title>Object Caching Strategy | Gridwise</title>
 <meta name="generator" content="Jekyll v3.10.0" />
-<meta property="og:title" content="Gridwise WebGPU Object Caching Strategy" />
+<meta property="og:title" content="Object Caching Strategy" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="How Gridwise caches WebGPU objects to improve performance by avoiding expensive object recreation." />
 <meta property="og:description" content="How Gridwise caches WebGPU objects to improve performance by avoiding expensive object recreation." />
-<link rel="canonical" href="https://gridwise-webgpu.github.io/gridwise/webgpu-object-caching-strategy/" />
-<meta property="og:url" content="https://gridwise-webgpu.github.io/gridwise/webgpu-object-caching-strategy/" />
+<link rel="canonical" href="http://localhost:4000/gridwise/webgpu-object-caching-strategy/" />
+<meta property="og:url" content="http://localhost:4000/gridwise/webgpu-object-caching-strategy/" />
 <meta property="og:site_name" content="Gridwise" />
 <meta property="og:type" content="website" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Gridwise WebGPU Object Caching Strategy" />
+<meta property="twitter:title" content="Object Caching Strategy" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebPage","description":"How Gridwise caches WebGPU objects to improve performance by avoiding expensive object recreation.","headline":"Gridwise WebGPU Object Caching Strategy","url":"https://gridwise-webgpu.github.io/gridwise/webgpu-object-caching-strategy/"}</script>
+{"@context":"https://schema.org","@type":"WebPage","description":"How Gridwise caches WebGPU objects to improve performance by avoiding expensive object recreation.","headline":"Object Caching Strategy","url":"http://localhost:4000/gridwise/webgpu-object-caching-strategy/"}</script>
 <!-- End Jekyll SEO tag -->
-<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css"></head>
+<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css">
+    <script src="/gridwise/docs/assets/js/main.js" defer></script></head>
 <body><header class="site-header" role="banner">
-  <div class="wrapper"><a class="site-title" rel="author" href="/gridwise/">Gridwise</a><nav class="site-nav">
-      <input type="checkbox" id="nav-trigger" class="nav-trigger" />
-      <label for="nav-trigger">
-        <span class="menu-icon">
-          <svg viewBox="0 0 18 15" width="18px" height="15px">
-            <path
-              d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.484C18,14.304,17.335,14.969,16.516,14.969H1.484 C0.665,14.969,0,14.304,0,13.484l0,0C0,12.665,0.665,12,1.484,12h15.032C17.335,12,18,12.665,18,13.484L18,13.484z" />
-          </svg>
-        </span>
-      </label>
+  <div class="wrapper">
+    <div class="header-left">
+      <a class="site-title" rel="author" href="/gridwise/">
+        <span class="gradient-text">Gridwise Docs</span>
+      </a>
+    </div>
 
-      <div class="trigger"><a class="button" href="/gridwise/examples-guide/">Example Docs</a>
-        <a class="button" href="/gridwise/">Read Docs</a>
-        <a class="button" href="javascript:void(0)" onclick="launchExample()">Try Interactive Example</a>
-      </div>
-    </nav></div>
+    <div class="header-right"><a class="header-link" href="/gridwise/examples-guide/">Examples</a>
+      <a class="header-link" href="javascript:void(0)" onclick="launchExample()">Try Demo</a>
+      <a class="github-button" href="https://github.com/gridwise-webgpu/gridwise" target="_blank" aria-label="GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+      </a>
+    </div>
+  </div>
 </header>
 
 <script>
   function launchExample() {
     window.open('https://gridwise-webgpu.github.io/gridwise/examples/scan_pane_example.html', '_blank');
   }
-</script><main class="page-content" aria-label="Content">
-  <div class="wrapper">
-    <div class="docs-container">
-    <!-- Left Sidebar Navigation -->
-    <aside class="docs-sidebar">
-        <h3>Documentation</h3><ul class="docs-nav"><li>
-                <a href="/gridwise/architecture/" >
-                    Gridwise Architecture
-                </a>
-            </li><li>
-                <a href="/gridwise/buffer/" >
-                    Gridwise&#39;s Buffer Class
-                </a>
-            </li><li>
-                <a href="/gridwise/binop/" >
-                    Gridwise&#39;s Binary Operator Class
-                </a>
-            </li><li>
-                <a href="/gridwise/scan-and-reduce/" >
-                    Gridwise Scan and Reduce
-                </a>
-            </li><li>
-                <a href="/gridwise/sort/" >
-                    Gridwise Sort
-                </a>
-            </li><li>
-                <a href="/gridwise/builtins-strategy/" >
-                    Gridwise WebGPU @builtins Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/primitive-design/" >
-                    Gridwise WebGPU Primitive Strategy wrt Subgroups
-                </a>
-            </li><li>
-                <a href="/gridwise/subgroup-strategy/" >
-                    Gridwise WebGPU Subgroup Emulation Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/webgpu-object-caching-strategy/" class="active" >
-                    Gridwise WebGPU Object Caching Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/timing-strategy/" >
-                    Gridwise WebGPU Timing Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/writing-a-webgpu-wgsl-workgroup-reduce-function/" >
-                    Abstraction Challenges in Writing a WebGPU/WGSL Workgroup Reduce Function
-                </a>
-            </li></ul><!-- Sidebar Footer -->
-        <div class="sidebar-footer">
-            <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
-                <svg class="github-icon" viewBox="0 0 16 16" width="20" height="20">
-                    <path fill="currentColor"
-                        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z">
-                    </path>
+</script><div class="main-container">
+  <!-- Modern Sidebar Navigation -->
+  <aside class="docs-sidebar" id="docsSidebar">
+    <div class="sidebar-content">
+      <div class="sidebar-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <h1>Documentation</h1>
+      </div>
+
+      <div class="search-box">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" id="docsSearch" placeholder="Search docs..." />
+      </div>
+
+      <nav class="docs-nav"><div class="nav-section">
+          <h3 class="nav-section-title">Getting Started</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/getting-started/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
-                <span>GitHub</span>
-            </a>
+                <span>Introduction</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/installation/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Quick Start</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Core Concepts</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/architecture/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Architecture</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/primitive-design/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Primitive Design</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/subgroup-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                <span>Subgroup Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Primitives</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/scan-and-reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Scan and Reduce</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                <span>Sort</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/binop/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Binary Operations</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Advanced</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/buffer/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+                <span>Buffer Management</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/timing-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Timing Strategy</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/webgpu-object-caching-strategy/" class="active">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Object Caching</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/builtins-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Builtins Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Examples</h3>
+          <ul><li>
+              <a href="/gridwise/examples/reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Reduce Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/scan/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Scan Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Sort Example</span>
+              </a>
+            </li></ul>
+        </div></nav>
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div class="sidebar-footer">
+      <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
+        <svg class="github-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="docs-content">
+    <div class="content-inner"><div class="docs-hero">
+        <div class="badge">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span>Documentation</span>
         </div>
-    </aside>
+        <h1>Object Caching Strategy</h1><p class="lead">How Gridwise caches WebGPU objects to improve performance by avoiding expensive object recreation.</p></div><article class="post">
+        <div class="post-content">
+          <div style="margin-bottom: 3rem;">
+  <div style="display: inline-flex; align-items: center; gap: 0.75rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 0.5rem 1.25rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.875rem; margin-bottom: 1.5rem;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+      <line x1="12" y1="22.08" x2="12" y2="12" />
+    </svg>
+    Object Caching
+  </div>
+  <h1 style="font-size: 2.5rem; font-weight: 800; color: #1e293b; margin: 0 0 1rem 0; line-height: 1.2;">WebGPU Object Caching Strategy</h1>
+  <p style="font-size: 1.25rem; color: #64748b; margin: 0; line-height: 1.6;">How Gridwise caches WebGPU objects to improve performance by avoiding expensive object recreation.</p>
+</div>
 
-    <!-- Main Content Area -->
-    <main class="docs-content">
-        <article class="post">
-            <header class="post-header">
-                <h1 class="post-title">Gridwise WebGPU Object Caching Strategy</h1>
-            </header>
+<div style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-left: 4px solid #10b981; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 2rem;">
+  <p style="margin: 0 0 1rem 0; color: #064e3b; line-height: 1.6;">
+    This document outlines the caching strategy used for WebGPU objects within Gridwise. Creating WebGPU objects is not free and is potentially expensive. Caching created objects so that they can be reused potentially helps performance.
+  </p>
+  <p style="margin: 0; color: #064e3b; line-height: 1.6;">
+    The downsides of caching are that caching itself is not free and that the WebGPU back end may do its own caching. In Gridwise, <strong>caching is enabled by default</strong> but can be disabled (by instantiating a primitive with the argument <code style="background: #dcfce7; color: #166534; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600;">webgpucache = "disabled"</code>).
+  </p>
+</div>
 
-            <div class="post-content">
-                <h2 id="gridwise-webgpu-object-caching-strategy">Gridwise WebGPU Object Caching Strategy</h2>
+<h2 style="font-size: 1.875rem; font-weight: 700; color: #1e293b; margin: 3rem 0 1.5rem 0; padding-bottom: 0.75rem; border-bottom: 3px solid #10b981;">Cacheable WebGPU Objects</h2>
 
-<p>This document outlines the caching strategy used for WebGPU objects within Gridwise. Creating WebGPU objects is not free and is potentially expensive. Caching created objects so that they can be reused potentially helps performance. The downsides of caching are that caching itself is not free and that the WebGPU back end may do its own caching. In Gridwise, caching is enabled by default but can be disabled (by instantiating a primitive with the argument <code class="language-plaintext highlighter-rouge">webgpucache = "disabled"</code>).</p>
+<div style="background: white; border: 2px solid #d1fae5; border-radius: 0.75rem; padding: 2rem; margin-bottom: 2rem;">
+  <p style="margin: 0 0 1.5rem 0; color: #475569; line-height: 1.6;">
+    The following WebGPU objects are currently cached by our library:
+  </p>
 
-<h3 id="cacheable-webgpu-objects">Cacheable WebGPU Objects</h3>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+    <div style="background: #f0fdf4; border: 2px solid #bbf7d0; border-radius: 0.5rem; padding: 1rem;">
+      <code style="color: #059669; font-weight: 700; font-size: 1rem;">GPUShaderModule</code>
+    </div>
+    <div style="background: #f0fdf4; border: 2px solid #bbf7d0; border-radius: 0.5rem; padding: 1rem;">
+      <code style="color: #059669; font-weight: 700; font-size: 1rem;">GPUPipelineLayout</code>
+    </div>
+    <div style="background: #f0fdf4; border: 2px solid #bbf7d0; border-radius: 0.5rem; padding: 1rem;">
+      <code style="color: #059669; font-weight: 700; font-size: 1rem;">GPUBindGroupLayout</code>
+    </div>
+    <div style="background: #f0fdf4; border: 2px solid #bbf7d0; border-radius: 0.5rem; padding: 1rem;">
+      <code style="color: #059669; font-weight: 700; font-size: 1rem;">GPUComputePipeline</code>
+    </div>
+  </div>
 
-<p>The following WebGPU objects are currently cached by our library:</p>
+  <div style="background: #ecfdf5; border: 1px solid #a7f3d0; padding: 1.25rem; border-radius: 0.5rem;">
+    <p style="margin: 0; color: #065f46; line-height: 1.6; font-size: 0.9375rem;">
+      Of these, <code style="background: #d1fae5; color: #065f46; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 600;">GPUShaderModule</code> is potentially independent of the <code style="background: #d1fae5; color: #065f46; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 600;">GPUDevice</code>, while the others are dependent on the specific <code style="background: #d1fae5; color: #065f46; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 600;">GPUDevice</code> instance.
+    </p>
+  </div>
+</div>
 
-<ul>
-  <li><code class="language-plaintext highlighter-rouge">GPUShaderModule</code></li>
-  <li><code class="language-plaintext highlighter-rouge">GPUPipelineLayout</code></li>
-  <li><code class="language-plaintext highlighter-rouge">GPUBindGroupLayout</code></li>
-  <li><code class="language-plaintext highlighter-rouge">GPUComputePipeline</code></li>
-</ul>
+<h2 style="font-size: 1.875rem; font-weight: 700; color: #1e293b; margin: 3rem 0 1.5rem 0; padding-bottom: 0.75rem; border-bottom: 3px solid #10b981;">Cache Implementation</h2>
 
-<p>Of these, <code class="language-plaintext highlighter-rouge">GPUShaderModule</code> is potentially independent of the <code class="language-plaintext highlighter-rouge">GPUDevice</code>, while the others are dependent on the specific <code class="language-plaintext highlighter-rouge">GPUDevice</code> instance.</p>
+<div style="background: white; border: 2px solid #d1fae5; border-radius: 0.75rem; padding: 2rem; margin-bottom: 2rem;">
+  <p style="margin: 0 0 1.5rem 0; color: #475569; line-height: 1.6;">
+    Every primitive shares a <code style="background: #f1f5f9; color: #059669; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600;">__deviceToWebGPUObjectCache</code>, which is a <code style="background: #f1f5f9; color: #059669; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600;">WeakMap</code> that maps a <code style="background: #f1f5f9; color: #059669; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600;">GPUDevice</code> to its corresponding cache. Each device's cache contains several individual caches for different object types. These are regular <code style="background: #f1f5f9; color: #059669; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600;">Map</code> objects that map a generated key to the WebGPU object.
+  </p>
 
-<h2 id="cache-implementation">Cache Implementation</h2>
+  <p style="margin: 0 0 1rem 0; color: #475569; line-height: 1.6; font-weight: 600;">
+    The available caches are:
+  </p>
 
-<p>Every primitive shares a <code class="language-plaintext highlighter-rouge">\_\_deviceToWebGPUObjectCache</code>, which is a <code class="language-plaintext highlighter-rouge">WeakMap</code> that maps a <code class="language-plaintext highlighter-rouge">GPUDevice</code> to its corresponding cache. Each device’s cache contains several individual caches for different object types. These are regular <code class="language-plaintext highlighter-rouge">Map</code> objects that map a generated key to the WebGPU object.</p>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+    <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1rem; border-radius: 0.5rem;">
+      <code style="color: #059669; font-weight: 700; font-size: 0.9375rem;">pipelineLayouts</code>
+    </div>
+    <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1rem; border-radius: 0.5rem;">
+      <code style="color: #059669; font-weight: 700; font-size: 0.9375rem;">bindGroupLayouts</code>
+    </div>
+    <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1rem; border-radius: 0.5rem;">
+      <code style="color: #059669; font-weight: 700; font-size: 0.9375rem;">computeModules</code>
+    </div>
+    <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1rem; border-radius: 0.5rem;">
+      <code style="color: #059669; font-weight: 700; font-size: 0.9375rem;">computePipelines</code>
+    </div>
+  </div>
 
-<p>The available caches are:</p>
+  <div style="background: #ecfdf5; border: 1px solid #a7f3d0; padding: 1.25rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+    <p style="margin: 0; color: #065f46; line-height: 1.6; font-size: 0.9375rem;">
+      Each of these caches can be <strong>individually enabled or disabled</strong> when a primitive is created.
+    </p>
+  </div>
 
-<ul>
-  <li><code class="language-plaintext highlighter-rouge">pipelineLayouts</code></li>
-  <li><code class="language-plaintext highlighter-rouge">bindGroupLayouts</code></li>
-  <li><code class="language-plaintext highlighter-rouge">computeModules</code></li>
-  <li><code class="language-plaintext highlighter-rouge">computePipelines</code></li>
-</ul>
+  <p style="margin: 0 0 1rem 0; color: #475569; line-height: 1.6;">
+    Here is a simplified code representation of the cache structure:
+  </p>
 
-<p>Each of these caches can be individually enabled or disabled when a primitive is created.</p>
+  <div style="background: #1e293b; border-radius: 0.75rem; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+    <div style="background: linear-gradient(135deg, #374151 0%, #1f2937 100%); padding: 0.75rem 1.25rem; border-bottom: 1px solid #374151; display: flex; align-items: center; justify-content: space-between;">
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #10b981;"></div>
+      </div>
+      <span style="color: #9ca3af; font-size: 0.875rem; font-weight: 500;">cache-structure.js</span>
+    </div>
+    <div style="padding: 1.5rem; overflow-x: auto;">
+      <pre style="margin: 0; color: #e5e7eb; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.9375rem; line-height: 1.6;"><span style="color: #818cf8;">export class</span> <span style="color: #10b981;">BasePrimitive</span> {
+  <span style="color: #818cf8;">static</span> __deviceToWebGPUObjectCache <span style="color: #818cf8;">=</span> <span style="color: #818cf8;">new</span> <span style="color: #10b981;">WeakMap</span>();
+  <span style="color: #64748b;">// ... inside a method ...</span>
+  BasePrimitive.__deviceToWebGPUObjectCache.<span style="color: #10b981;">set</span>(
+    <span style="color: #818cf8;">this</span>.device,
+    <span style="color: #818cf8;">new</span> <span style="color: #10b981;">WebGPUObjectCache</span>()
+  );
+}
 
-<p>Here is a simplified code representation of the cache structure:</p>
+<span style="color: #818cf8;">class</span> <span style="color: #10b981;">WebGPUObjectCache</span> {
+  <span style="color: #10b981;">constructor</span>() {
+    <span style="color: #818cf8;">this</span>.caches <span style="color: #818cf8;">=</span> [
+      <span style="color: #a5f3fc;">"pipelineLayouts"</span>,
+      <span style="color: #a5f3fc;">"bindGroupLayouts"</span>,
+      <span style="color: #a5f3fc;">"computeModules"</span>,
+      <span style="color: #a5f3fc;">"computePipelines"</span>,
+    ];
 
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">export</span> <span class="kd">class</span> <span class="nx">BasePrimitive</span> <span class="p">{</span>
-  <span class="kd">static</span> <span class="nx">__deviceToWebGPUObjectCache</span> <span class="o">=</span> <span class="k">new</span> <span class="nb">WeakMap</span><span class="p">();</span>
-  <span class="c1">// ... inside a method ...</span>
-  <span class="nx">BasePrimitive</span><span class="p">.</span><span class="nx">__deviceToWebGPUObjectCache</span><span class="p">.</span><span class="kd">set</span><span class="p">(</span>
-    <span class="k">this</span><span class="p">.</span><span class="nx">device</span><span class="p">,</span>
-    <span class="k">new</span> <span class="nx">WebGPUObjectCache</span><span class="p">()</span>
-  <span class="p">);</span>
-<span class="p">}</span>
+    <span style="color: #818cf8;">for</span> (<span style="color: #818cf8;">const</span> cache <span style="color: #818cf8;">of</span> <span style="color: #818cf8;">this</span>.caches) {
+      <span style="color: #818cf8;">this</span>[cache] <span style="color: #818cf8;">=</span> <span style="color: #818cf8;">new</span> <span style="color: #10b981;">CountingMap</span>({ <span style="color: #64748b;">// wrapper over a Map</span>
+        enabled: <span style="color: #818cf8;">this</span>.initiallyEnabled.<span style="color: #10b981;">includes</span>(cache),
+      });
+    }
+  }
+}</pre>
+    </div>
+  </div>
+</div>
 
-<span class="kd">class</span> <span class="nx">WebGPUObjectCache</span> <span class="p">{</span>
-  <span class="kd">constructor</span><span class="p">()</span> <span class="p">{</span>
-    <span class="k">this</span><span class="p">.</span><span class="nx">caches</span> <span class="o">=</span> <span class="p">[</span>
-      <span class="dl">"</span><span class="s2">pipelineLayouts</span><span class="dl">"</span><span class="p">,</span>
-      <span class="dl">"</span><span class="s2">bindGroupLayouts</span><span class="dl">"</span><span class="p">,</span>
-      <span class="dl">"</span><span class="s2">computeModules</span><span class="dl">"</span><span class="p">,</span>
-      <span class="dl">"</span><span class="s2">computePipelines</span><span class="dl">"</span><span class="p">,</span>
-    <span class="p">];</span>
+<div style="background: white; border: 2px solid #d1fae5; border-radius: 0.75rem; padding: 2rem; margin-bottom: 2rem;">
+  <h3 style="margin: 0 0 1.5rem 0; color: #1e293b; font-size: 1.25rem; font-weight: 700; display: flex; align-items: center; gap: 0.75rem;">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="15" y1="9" x2="9" y2="15" />
+    </svg>
+    Bind Group Caching
+  </h3>
+  
+  <div style="background: #ecfdf5; border: 1px solid #a7f3d0; padding: 1.25rem; border-radius: 0.5rem;">
+    <p style="margin: 0; color: #065f46; line-height: 1.6;">
+      <strong>Bind groups are not cached.</strong> This decision was made because bind groups depend on <code style="background: #d1fae5; color: #065f46; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600;">GPUBuffer</code> objects. Reliably creating a cache key from a <code style="background: #d1fae5; color: #065f46; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600;">GPUBuffer</code> is problematic due to its dynamic state.
+    </p>
+  </div>
+</div>
 
-    <span class="k">for</span> <span class="p">(</span><span class="kd">const</span> <span class="nx">cache</span> <span class="k">of</span> <span class="k">this</span><span class="p">.</span><span class="nx">caches</span><span class="p">)</span> <span class="p">{</span>
-      <span class="k">this</span><span class="p">[</span><span class="nx">cache</span><span class="p">]</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">CountingMap</span><span class="p">({</span> <span class="c1">// wrapper over a Map</span>
-        <span class="na">enabled</span><span class="p">:</span> <span class="k">this</span><span class="p">.</span><span class="nx">initiallyEnabled</span><span class="p">.</span><span class="nx">includes</span><span class="p">(</span><span class="nx">cache</span><span class="p">),</span>
-      <span class="p">});</span>
-    <span class="p">}</span>
-  <span class="p">}</span>
-<span class="p">}</span>
-</code></pre></div></div>
+<h2 style="font-size: 1.875rem; font-weight: 700; color: #1e293b; margin: 3rem 0 1.5rem 0; padding-bottom: 0.75rem; border-bottom: 3px solid #10b981;">Cache Key Generation</h2>
 
-<h3 id="bind-group-caching">Bind Group Caching</h3>
+<div style="background: white; border: 2px solid #d1fae5; border-radius: 0.75rem; padding: 2rem; margin-bottom: 2rem;">
+  <div style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-left: 4px solid #10b981; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 2rem;">
+    <p style="margin: 0; color: #064e3b; line-height: 1.6;">
+      To use objects as keys in a Map, we need a consistent and unique representation. Since Maps use Same-Value-Zero equality, two different objects with the same properties will not be treated as the same key. To solve this, we <code style="background: #dcfce7; color: #166534; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.9375rem; font-weight: 600;">JSON.stringify</code> a simplified representation of the object to create a string-based cache key.
+    </p>
+  </div>
 
-<p>Bind groups are not cached. This decision was made because bind groups depend on <code class="language-plaintext highlighter-rouge">GPUBuffer</code> objects. Reliably creating a cache key from a
-<code class="language-plaintext highlighter-rouge">GPUBuffer</code> is problematic due to its dynamic state.</p>
+  <p style="margin: 0 0 1.5rem 0; color: #475569; line-height: 1.6; font-weight: 600;">
+    Here's how keys are generated for different object types:
+  </p>
 
-<h3 id="cache-key-generation">Cache Key Generation</h3>
+  <div style="display: flex; flex-direction: column; gap: 2rem;">
+    <!-- Pipeline Layout -->
+    <div style="background: #f8fafc; border-radius: 0.75rem; padding: 1.5rem; border-left: 4px solid #10b981;">
+      <h4 style="margin: 0 0 1rem 0; color: #1e293b; font-size: 1.125rem; font-weight: 700;">Pipeline Layout</h4>
+      <p style="margin: 0 0 1rem 0; color: #475569; line-height: 1.6; font-size: 0.9375rem;">
+        The cache key for a <code style="background: #e2e8f0; color: #059669; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem;">GPUPipelineLayout</code> is an array of strings representing the buffer types for that layout.
+      </p>
+      <div style="background: #1e293b; border-radius: 0.5rem; overflow: hidden;">
+        <div style="background: #374151; padding: 0.5rem 1rem; border-bottom: 1px solid #4b5563;">
+          <span style="color: #9ca3af; font-size: 0.875rem; font-weight: 500;">Example</span>
+        </div>
+        <div style="padding: 1rem; overflow-x: auto;">
+          <pre style="margin: 0; color: #e5e7eb; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.875rem; line-height: 1.6;">[<span style="color: #a5f3fc;">"read-only-storage"</span>, <span style="color: #a5f3fc;">"storage"</span>, <span style="color: #a5f3fc;">"uniform"</span>, <span style="color: #a5f3fc;">"storage"</span>, <span style="color: #a5f3fc;">"storage"</span>, <span style="color: #a5f3fc;">"storage"</span>];</pre>
+        </div>
+      </div>
+    </div>
 
-<p>To use objects as keys in a Map, we need a consistent and unique representation. Since Maps use Same-Value-Zero equality, two different objects with the same properties will not be treated as the same key. To solve this, we <code class="language-plaintext highlighter-rouge">JSON.stringify</code> a simplified representation of the object to create a string-based cache key.</p>
+    <!-- Bind Group Layout -->
+    <div style="background: #f8fafc; border-radius: 0.75rem; padding: 1.5rem; border-left: 4px solid #10b981;">
+      <h4 style="margin: 0 0 1rem 0; color: #1e293b; font-size: 1.125rem; font-weight: 700;">Bind Group Layout</h4>
+      <p style="margin: 0 0 1rem 0; color: #475569; line-height: 1.6; font-size: 0.9375rem;">
+        The cache key for a <code style="background: #e2e8f0; color: #059669; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem;">GPUBindGroupLayout</code> is the set of entries for that layout.
+      </p>
+      <div style="background: #1e293b; border-radius: 0.5rem; overflow: hidden;">
+        <div style="background: #374151; padding: 0.5rem 1rem; border-bottom: 1px solid #4b5563;">
+          <span style="color: #9ca3af; font-size: 0.875rem; font-weight: 500;">Example</span>
+        </div>
+        <div style="padding: 1rem; overflow-x: auto;">
+          <pre style="margin: 0; color: #e5e7eb; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.875rem; line-height: 1.6;">[
+  { binding: <span style="color: #fbbf24;">0</span>, visibility: <span style="color: #fbbf24;">4</span>, buffer: { type: <span style="color: #a5f3fc;">"read-only-storage"</span> } },
+  {
+    binding: <span style="color: #fbbf24;">1</span>,
+    visibility: <span style="color: #fbbf24;">4</span>,
+    buffer: {
+      <span style="color: #64748b;">/*...*/</span>
+    },
+  },
+  <span style="color: #64748b;">// ... and so on for all entries</span>
+];</pre>
+        </div>
+      </div>
+    </div>
 
-<p>Here’s how keys are generated for different object types:</p>
+    <!-- Compute Module -->
+    <div style="background: #f8fafc; border-radius: 0.75rem; padding: 1.5rem; border-left: 4px solid #10b981;">
+      <h4 style="margin: 0 0 1rem 0; color: #1e293b; font-size: 1.125rem; font-weight: 700;">Compute Module</h4>
+      <p style="margin: 0; color: #475569; line-height: 1.6; font-size: 0.9375rem;">
+        The cache key for a <code style="background: #e2e8f0; color: #059669; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem;">GPUShaderModule</code> (referred to as a compute module in the context of compute shaders) is the <strong>entire kernel string</strong>. While underlying WebGPU engines like Dawn might have their own caching mechanisms, we implement a library-level cache for them as well.
+      </p>
+    </div>
 
-<h4 id="pipeline-layout">Pipeline Layout</h4>
+    <!-- Compute Pipelines -->
+    <div style="background: #f8fafc; border-radius: 0.75rem; padding: 1.5rem; border-left: 4px solid #10b981;">
+      <h4 style="margin: 0 0 1rem 0; color: #1e293b; font-size: 1.125rem; font-weight: 700;">Compute Pipelines</h4>
+      <p style="margin: 0 0 1rem 0; color: #475569; line-height: 1.6; font-size: 0.9375rem;">
+        The cache key for a <code style="background: #e2e8f0; color: #059669; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem;">GPUComputePipeline</code> is derived from its descriptor object. Since the <code style="background: #e2e8f0; color: #059669; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem;">GPUPipelineLayout</code> and <code style="background: #e2e8f0; color: #059669; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem;">GPUShaderModule</code> are cached separately, we can reuse their cache keys to optimize the key generation for the pipeline itself.
+      </p>
+      <div style="background: #ecfdf5; border: 1px solid #a7f3d0; padding: 1rem; border-radius: 0.5rem;">
+        <p style="margin: 0; color: #065f46; line-height: 1.6; font-size: 0.875rem;">
+          A <code style="background: #d1fae5; color: #065f46; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.8125rem; font-weight: 600;">__cacheKey</code> property is stored on cacheable objects, and this key is used during stringification to avoid deep, recursive serialization.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
 
-<p>The cache key for a <code class="language-plaintext highlighter-rouge">GPUPipelineLayout</code> is an array of strings representing the buffer types for that layout.</p>
+<h2 style="font-size: 1.875rem; font-weight: 700; color: #1e293b; margin: 3rem 0 1.5rem 0; padding-bottom: 0.75rem; border-bottom: 3px solid #10b981;">Cache Statistics</h2>
 
-<p>Example:</p>
+<div style="background: white; border: 2px solid #d1fae5; border-radius: 0.75rem; padding: 2rem; margin-bottom: 2rem;">
+  <p style="margin: 0 0 1.5rem 0; color: #475569; line-height: 1.6;">
+    The caches collect <strong>hit and miss statistics</strong> to help understand their effectiveness.
+  </p>
 
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">[</span><span class="dl">"</span><span class="s2">read-only-storage</span><span class="dl">"</span><span class="p">,</span> <span class="dl">"</span><span class="s2">storage</span><span class="dl">"</span><span class="p">,</span> <span class="dl">"</span><span class="s2">uniform</span><span class="dl">"</span><span class="p">,</span> <span class="dl">"</span><span class="s2">storage</span><span class="dl">"</span><span class="p">,</span> <span class="dl">"</span><span class="s2">storage</span><span class="dl">"</span><span class="p">,</span> <span class="dl">"</span><span class="s2">storage</span><span class="dl">"</span><span class="p">];</span>
-</code></pre></div></div>
+  <p style="margin: 0 0 1rem 0; color: #475569; line-height: 1.6; font-size: 0.9375rem;">
+    Example output from statistics collection:
+  </p>
 
-<h4 id="bind-group-layout">Bind Group Layout</h4>
+  <div style="background: #1e293b; border-radius: 0.75rem; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+    <div style="background: linear-gradient(135deg, #374151 0%, #1f2937 100%); padding: 0.75rem 1.25rem; border-bottom: 1px solid #374151; display: flex; align-items: center; justify-content: space-between;">
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #10b981;"></div>
+      </div>
+      <span style="color: #9ca3af; font-size: 0.875rem; font-weight: 500;">cache-stats.txt</span>
+    </div>
+    <div style="padding: 1.5rem; overflow-x: auto;">
+      <pre style="margin: 0; color: #e5e7eb; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.9375rem; line-height: 1.6;"><span style="color: #10b981;">Cache hits/misses:</span>
+<span style="color: #e5e7eb;">Pipeline layouts:</span>     <span style="color: #a5f3fc;">7</span><span style="color: #64748b;">/</span><span style="color: #fbbf24;">1</span>
+<span style="color: #e5e7eb;">Bind group layouts:</span>   <span style="color: #a5f3fc;">0</span><span style="color: #64748b;">/</span><span style="color: #fbbf24;">1</span>
+<span style="color: #e5e7eb;">Compute modules:</span>      <span style="color: #a5f3fc;">4</span><span style="color: #64748b;">/</span><span style="color: #fbbf24;">4</span>
+<span style="color: #e5e7eb;">Compute pipelines:</span>    <span style="color: #a5f3fc;">4</span><span style="color: #64748b;">/</span><span style="color: #fbbf24;">4</span></pre>
+    </div>
+  </div>
+</div>
 
-<p>The cache key for a <code class="language-plaintext highlighter-rouge">GPUBindGroupLayout</code> is the set of entries for that layout.</p>
+<h2 style="font-size: 1.875rem; font-weight: 700; color: #1e293b; margin: 3rem 0 1.5rem 0; padding-bottom: 0.75rem; border-bottom: 3px solid #10b981;">Measuring Performance with CPU Timing</h2>
 
-<p>Example:</p>
+<div style="background: white; border: 2px solid #d1fae5; border-radius: 0.75rem; padding: 2rem; margin-bottom: 2rem;">
+  <p style="margin: 0 0 1.5rem 0; color: #475569; line-height: 1.6;">
+    To measure the performance impact of caching, enable CPU timing. This will wait for the GPU to finish its work and then record the CPU time taken.
+  </p>
 
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">[</span>
-  <span class="p">{</span> <span class="na">binding</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="na">visibility</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span> <span class="na">buffer</span><span class="p">:</span> <span class="p">{</span> <span class="na">type</span><span class="p">:</span> <span class="dl">"</span><span class="s2">read-only-storage</span><span class="dl">"</span> <span class="p">}</span> <span class="p">},</span>
-  <span class="p">{</span>
-    <span class="na">binding</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-    <span class="na">visibility</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
-    <span class="na">buffer</span><span class="p">:</span> <span class="p">{</span>
-      <span class="cm">/*...*/</span>
-    <span class="p">},</span>
-  <span class="p">},</span>
-  <span class="c1">// ... and so on for all entries</span>
-<span class="p">];</span>
-</code></pre></div></div>
+  <div style="background: #fef3c7; border: 1px solid #fbbf24; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+    <p style="margin: 0; color: #78350f; line-height: 1.6; font-size: 0.875rem; font-style: italic;">
+      <strong>TODO:</strong> move this into the timing article
+    </p>
+  </div>
 
-<h4 id="compute-module">Compute Module</h4>
+  <div style="background: #1e293b; border-radius: 0.75rem; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+    <div style="background: linear-gradient(135deg, #374151 0%, #1f2937 100%); padding: 0.75rem 1.25rem; border-bottom: 1px solid #374151; display: flex; align-items: center; justify-content: space-between;">
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #10b981;"></div>
+      </div>
+      <span style="color: #9ca3af; font-size: 0.875rem; font-weight: 500;">cpu-timing-example.js</span>
+    </div>
+    <div style="padding: 1.5rem; overflow-x: auto;">
+      <pre style="margin: 0; color: #e5e7eb; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.9375rem; line-height: 1.6;"><span style="color: #818cf8;">const</span> commandBuffer <span style="color: #818cf8;">=</span> encoder.<span style="color: #10b981;">finish</span>();
 
-<p>The cache key for a <code class="language-plaintext highlighter-rouge">GPUShaderModule</code> (referred to as a compute module in the context of compute shaders) is the entire kernel string. While underlying WebGPU engines like Dawn might have their own caching mechanisms, we implement a library-level cache for them as well.</p>
+<span style="color: #818cf8;">if</span> (args?.<span style="color: #10b981;">enableCPUTiming</span>) {
+  <span style="color: #818cf8;">await</span> <span style="color: #818cf8;">this</span>.device.queue.<span style="color: #10b981;">onSubmittedWorkDone</span>();
+  <span style="color: #818cf8;">this</span>.cpuStartTime <span style="color: #818cf8;">=</span> performance.<span style="color: #10b981;">now</span>();
+}
 
-<h4 id="compute-pipelines">Compute Pipelines</h4>
+<span style="color: #818cf8;">this</span>.device.queue.<span style="color: #10b981;">submit</span>([commandBuffer]);
 
-<p>The cache key for a <code class="language-plaintext highlighter-rouge">GPUComputePipeline</code> is derived from its descriptor object. Since the <code class="language-plaintext highlighter-rouge">GPUPipelineLayout</code> and <code class="language-plaintext highlighter-rouge">GPUShaderModule</code> are cached separately, we can reuse their cache keys to optimize the key generation for the pipeline itself.</p>
+<span style="color: #818cf8;">if</span> (args?.<span style="color: #10b981;">enableCPUTiming</span>) {
+  <span style="color: #818cf8;">await</span> <span style="color: #818cf8;">this</span>.device.queue.<span style="color: #10b981;">onSubmittedWorkDone</span>();
+  <span style="color: #818cf8;">this</span>.cpuEndTime <span style="color: #818cf8;">=</span> performance.<span style="color: #10b981;">now</span>();
+}</pre>
+    </div>
+  </div>
+</div>
 
-<p>A <code class="language-plaintext highlighter-rouge">__cacheKey</code> property is stored on cacheable objects, and this key is used during stringification to avoid deep, recursive serialization.</p>
-
-<h3 id="cache-statistics">Cache Statistics</h3>
-
-<p>The caches collect hit and miss statistics to help understand their effectiveness.</p>
-
-<p>Example output from statistics collection:</p>
-
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Cache hits/misses:
-Pipeline layouts: 7/1
-Bind group layouts: 0/1
-Compute modules: 4/4
-Compute pipelines: 4/4
-</code></pre></div></div>
-
-<h3 id="measuring-performance-with-cpu-timing">Measuring Performance with CPU Timing</h3>
-
-<p>To measure the performance impact of caching, enable CPU timing. This will wait for the GPU to finish its work and then record the CPU time taken.</p>
-
-<p>(TODO: move this into the timing article)</p>
-
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">commandBuffer</span> <span class="o">=</span> <span class="nx">encoder</span><span class="p">.</span><span class="nx">finish</span><span class="p">();</span>
-
-<span class="k">if</span> <span class="p">(</span><span class="nx">args</span><span class="p">?.</span><span class="nx">enableCPUTiming</span><span class="p">)</span> <span class="p">{</span>
-  <span class="k">await</span> <span class="k">this</span><span class="p">.</span><span class="nx">device</span><span class="p">.</span><span class="nx">queue</span><span class="p">.</span><span class="nx">onSubmittedWorkDone</span><span class="p">();</span>
-  <span class="k">this</span><span class="p">.</span><span class="nx">cpuStartTime</span> <span class="o">=</span> <span class="nx">performance</span><span class="p">.</span><span class="nx">now</span><span class="p">();</span>
-<span class="p">}</span>
-
-<span class="k">this</span><span class="p">.</span><span class="nx">device</span><span class="p">.</span><span class="nx">queue</span><span class="p">.</span><span class="nx">submit</span><span class="p">([</span><span class="nx">commandBuffer</span><span class="p">]);</span>
-
-<span class="k">if</span> <span class="p">(</span><span class="nx">args</span><span class="p">?.</span><span class="nx">enableCPUTiming</span><span class="p">)</span> <span class="p">{</span>
-  <span class="k">await</span> <span class="k">this</span><span class="p">.</span><span class="nx">device</span><span class="p">.</span><span class="nx">queue</span><span class="p">.</span><span class="nx">onSubmittedWorkDone</span><span class="p">();</span>
-  <span class="k">this</span><span class="p">.</span><span class="nx">cpuEndTime</span> <span class="o">=</span> <span class="nx">performance</span><span class="p">.</span><span class="nx">now</span><span class="p">();</span>
-<span class="p">}</span>
-</code></pre></div></div>
-
-            </div>
-        </article>
-        </main>
+        </div>
+      </article>
+    </div>
+  </main>
 </div>
 
 <script>
@@ -297,27 +559,9 @@ Compute pipelines: 4/4
     });
   })();
 </script>
-
-  </div>
-</main><footer class="site-footer h-card">
-    <data class="u-url" href="/gridwise/"></data>
-
+<footer class="site-footer">
     <div class="wrapper">
-        <h2 class="footer-heading">Gridwise</h2>
-
-        <div class="footer-col-wrapper">
-            <div class="footer-col footer-col-1">
-                <ul class="contact-list">
-                    <li class="p-name">Gridwise</li><li><a class="u-email" href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></li></ul>
-            </div>
-
-            <div class="footer-col footer-col-3">
-                <p>WebGPU compute primitives in JavaScript</p>
-            </div>
-        </div>
-
-    </div>
-
+        <p>&copy; 2026 Gridwise. WebGPU compute primitives in JavaScript</p><p><a href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></p></div>
 </footer></body>
 
 </html>

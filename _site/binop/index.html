@@ -3,195 +3,446 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Gridwise’s Binary Operator Class | Gridwise</title>
+<title>Binary Operator Class | Gridwise</title>
 <meta name="generator" content="Jekyll v3.10.0" />
-<meta property="og:title" content="Gridwise’s Binary Operator Class" />
+<meta property="og:title" content="Binary Operator Class" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="Understanding the BinOp class that represents monoids with binary operations, datatypes, and identity elements for use in primitives." />
 <meta property="og:description" content="Understanding the BinOp class that represents monoids with binary operations, datatypes, and identity elements for use in primitives." />
-<link rel="canonical" href="https://gridwise-webgpu.github.io/gridwise/binop/" />
-<meta property="og:url" content="https://gridwise-webgpu.github.io/gridwise/binop/" />
+<link rel="canonical" href="http://localhost:4000/gridwise/binop/" />
+<meta property="og:url" content="http://localhost:4000/gridwise/binop/" />
 <meta property="og:site_name" content="Gridwise" />
 <meta property="og:type" content="website" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Gridwise’s Binary Operator Class" />
+<meta property="twitter:title" content="Binary Operator Class" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebPage","description":"Understanding the BinOp class that represents monoids with binary operations, datatypes, and identity elements for use in primitives.","headline":"Gridwise’s Binary Operator Class","url":"https://gridwise-webgpu.github.io/gridwise/binop/"}</script>
+{"@context":"https://schema.org","@type":"WebPage","description":"Understanding the BinOp class that represents monoids with binary operations, datatypes, and identity elements for use in primitives.","headline":"Binary Operator Class","url":"http://localhost:4000/gridwise/binop/"}</script>
 <!-- End Jekyll SEO tag -->
-<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css"></head>
+<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css">
+    <script src="/gridwise/docs/assets/js/main.js" defer></script></head>
 <body><header class="site-header" role="banner">
-  <div class="wrapper"><a class="site-title" rel="author" href="/gridwise/">Gridwise</a><nav class="site-nav">
-      <input type="checkbox" id="nav-trigger" class="nav-trigger" />
-      <label for="nav-trigger">
-        <span class="menu-icon">
-          <svg viewBox="0 0 18 15" width="18px" height="15px">
-            <path
-              d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.484C18,14.304,17.335,14.969,16.516,14.969H1.484 C0.665,14.969,0,14.304,0,13.484l0,0C0,12.665,0.665,12,1.484,12h15.032C17.335,12,18,12.665,18,13.484L18,13.484z" />
-          </svg>
-        </span>
-      </label>
+  <div class="wrapper">
+    <div class="header-left">
+      <a class="site-title" rel="author" href="/gridwise/">
+        <span class="gradient-text">Gridwise Docs</span>
+      </a>
+    </div>
 
-      <div class="trigger"><a class="button" href="/gridwise/examples-guide/">Example Docs</a>
-        <a class="button" href="/gridwise/">Read Docs</a>
-        <a class="button" href="javascript:void(0)" onclick="launchExample()">Try Interactive Example</a>
-      </div>
-    </nav></div>
+    <div class="header-right"><a class="header-link" href="/gridwise/examples-guide/">Examples</a>
+      <a class="header-link" href="javascript:void(0)" onclick="launchExample()">Try Demo</a>
+      <a class="github-button" href="https://github.com/gridwise-webgpu/gridwise" target="_blank" aria-label="GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+      </a>
+    </div>
+  </div>
 </header>
 
 <script>
   function launchExample() {
     window.open('https://gridwise-webgpu.github.io/gridwise/examples/scan_pane_example.html', '_blank');
   }
-</script><main class="page-content" aria-label="Content">
-  <div class="wrapper">
-    <div class="docs-container">
-    <!-- Left Sidebar Navigation -->
-    <aside class="docs-sidebar">
-        <h3>Documentation</h3><ul class="docs-nav"><li>
-                <a href="/gridwise/architecture/" >
-                    Gridwise Architecture
-                </a>
-            </li><li>
-                <a href="/gridwise/buffer/" >
-                    Gridwise&#39;s Buffer Class
-                </a>
-            </li><li>
-                <a href="/gridwise/binop/" class="active" >
-                    Gridwise&#39;s Binary Operator Class
-                </a>
-            </li><li>
-                <a href="/gridwise/scan-and-reduce/" >
-                    Gridwise Scan and Reduce
-                </a>
-            </li><li>
-                <a href="/gridwise/sort/" >
-                    Gridwise Sort
-                </a>
-            </li><li>
-                <a href="/gridwise/builtins-strategy/" >
-                    Gridwise WebGPU @builtins Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/primitive-design/" >
-                    Gridwise WebGPU Primitive Strategy wrt Subgroups
-                </a>
-            </li><li>
-                <a href="/gridwise/subgroup-strategy/" >
-                    Gridwise WebGPU Subgroup Emulation Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/webgpu-object-caching-strategy/" >
-                    Gridwise WebGPU Object Caching Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/timing-strategy/" >
-                    Gridwise WebGPU Timing Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/writing-a-webgpu-wgsl-workgroup-reduce-function/" >
-                    Abstraction Challenges in Writing a WebGPU/WGSL Workgroup Reduce Function
-                </a>
-            </li></ul><!-- Sidebar Footer -->
-        <div class="sidebar-footer">
-            <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
-                <svg class="github-icon" viewBox="0 0 16 16" width="20" height="20">
-                    <path fill="currentColor"
-                        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z">
-                    </path>
+</script><div class="main-container">
+  <!-- Modern Sidebar Navigation -->
+  <aside class="docs-sidebar" id="docsSidebar">
+    <div class="sidebar-content">
+      <div class="sidebar-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <h1>Documentation</h1>
+      </div>
+
+      <div class="search-box">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" id="docsSearch" placeholder="Search docs..." />
+      </div>
+
+      <nav class="docs-nav"><div class="nav-section">
+          <h3 class="nav-section-title">Getting Started</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/getting-started/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
-                <span>GitHub</span>
-            </a>
+                <span>Introduction</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/installation/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Quick Start</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Core Concepts</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/architecture/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Architecture</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/primitive-design/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Primitive Design</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/subgroup-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                <span>Subgroup Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Primitives</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/scan-and-reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Scan and Reduce</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                <span>Sort</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/binop/" class="active">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Binary Operations</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Advanced</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/buffer/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+                <span>Buffer Management</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/timing-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Timing Strategy</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/webgpu-object-caching-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Object Caching</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/builtins-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Builtins Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Examples</h3>
+          <ul><li>
+              <a href="/gridwise/examples/reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Reduce Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/scan/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Scan Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Sort Example</span>
+              </a>
+            </li></ul>
+        </div></nav>
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div class="sidebar-footer">
+      <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
+        <svg class="github-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="docs-content">
+    <div class="content-inner"><div class="docs-hero">
+        <div class="badge">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span>Documentation</span>
         </div>
-    </aside>
+        <h1>Binary Operator Class</h1><p class="lead">Understanding the BinOp class that represents monoids with binary operations, datatypes, and identity elements for use in primitives.</p></div><article class="post">
+        <div class="post-content">
+          <div style="max-width: 100%; padding: 0;">
 
-    <!-- Main Content Area -->
-    <main class="docs-content">
-        <article class="post">
-            <header class="post-header">
-                <h1 class="post-title">Gridwise&#39;s Binary Operator Class</h1>
-            </header>
+<!-- Header Section -->
+<header style="max-width: 800px; margin-bottom: 3rem;">
+  <div style="display: flex; align-items: center; gap: 0.5rem; color: #4f46e5; font-weight: 600; font-size: 0.875rem; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.05em;">
+    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+    </svg>
+    <span>Core Concepts</span>
+  </div>
+  <h1 style="font-size: 2.5rem; font-weight: 800; color: #111827; margin-bottom: 1.5rem; line-height: 1.2;">Binary Operator Class</h1>
+  <p style="font-size: 1.25rem; color: #6b7280; line-height: 1.75;">
+    Gridwise's binary operator class represents a <a href="https://en.wikipedia.org/wiki/Monoid" style="color: #4f46e5; text-decoration: underline;">monoid</a>, which has as its constituent parts a binary operation, a datatype for the data on which the operator is applied, and an identity element. In Gridwise, we package these elements into an instance of a JS class, <code>BinOp</code>.
+  </p>
+</header>
 
-            <div class="post-content">
-                <p>Gridwise’s binary operator class is called <code class="language-plaintext highlighter-rouge">binop</code>. This class represents a <a href="https://en.wikipedia.org/wiki/Monoid">monoid</a>, which has as its constituent parts a binary operation, a datatype for the data on which the operator is applied, and an identity element. (If we call the identity element <code class="language-plaintext highlighter-rouge">I</code> and the operator <code class="language-plaintext highlighter-rouge">op</code>, then <code class="language-plaintext highlighter-rouge">x = I op x</code>. For instance, addition’s identity is zero, and multiplication’s is one.) In Gridwise, we package these elements into an instance of a JS class, <code class="language-plaintext highlighter-rouge">BinOp</code>. This class then defines a number of objects that are used in WGSL code generation and CPU correctness checking.</p>
-
-<p><code class="language-plaintext highlighter-rouge">BinOp</code> is implemented in the source file binop.md. We specialize <code class="language-plaintext highlighter-rouge">BinOp</code> to particular operations (e.g., <code class="language-plaintext highlighter-rouge">Add</code>) and then further specialize it with a datatype. Many Gridwise primitives require a <code class="language-plaintext highlighter-rouge">BinOp</code> argument and the common use will be something like:</p>
-
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">myPrimitive</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">gridwisePrimitive</span><span class="p">({</span>
-  <span class="nx">device</span><span class="p">,</span>
-  <span class="na">binop</span><span class="p">:</span> <span class="nx">BinOpAddU32</span><span class="p">,</span>   <span class="c1">// predefined in binop.js</span>
-  <span class="p">...</span>
-</code></pre></div></div>
-
-<p>or</p>
-
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">datatype</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">f32</span><span class="dl">"</span><span class="p">;</span>
-<span class="kd">const</span> <span class="nx">myPrimitive</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">gridwisePrimitive</span><span class="p">({</span>
-  <span class="nx">device</span><span class="p">,</span>
-  <span class="na">binop</span><span class="p">:</span> <span class="k">new</span> <span class="nx">BinOpAdd</span><span class="p">({</span> <span class="nx">datatype</span> <span class="p">}),</span>  <span class="c1">// instantiate on the fly, e.g.,</span>
-                                      <span class="c1">// if datatype is generated at runtime</span>
-  <span class="p">...</span>
-</code></pre></div></div>
-
-<h2 id="what-does-a-binop-provide--what-must-a-binop-define">What does a BinOp provide / what must a BinOp define?</h2>
-
-<p>We want to write primitives that work for any monoid. Other languages have more structured ways to write such code, but WGSL development in JavaScript commonly uses string-pasting to construct runtime-generated kernels. A <code class="language-plaintext highlighter-rouge">BinOp</code> provides all the text and member functions that are specific to the particular monoid we are using. These are:</p>
-
-<ul>
-  <li>An identity element <code class="language-plaintext highlighter-rouge">identity</code>. For addition, this is 0 (independent of datatype). For multiplication, it is 1; for minimum, the largest representable value for that datatype; for maximum, the smallest representable value. Example: <code class="language-plaintext highlighter-rouge">this.identity = 0;</code></li>
-  <li>A CPU-side function <code class="language-plaintext highlighter-rouge">op</code>. This JavaScript function takes two arguments <code class="language-plaintext highlighter-rouge">a</code> and <code class="language-plaintext highlighter-rouge">b</code> and returns <code class="language-plaintext highlighter-rouge">a op b</code>. Because JavaScript’s internal datatypes are limited, this sometimes requires judicious use of JavaScript typed arrays. (We are happy to take suggestions on how we can do this more efficiently.) Example: <code class="language-plaintext highlighter-rouge">this.op = (a, b) =&gt; a + b;</code></li>
-  <li>A GPU-side function declaration <code class="language-plaintext highlighter-rouge">wgslop</code>. This must define a WGSL function named <code class="language-plaintext highlighter-rouge">binop</code>. Like <code class="language-plaintext highlighter-rouge">op</code>, this function takes two arguments <code class="language-plaintext highlighter-rouge">a</code> and <code class="language-plaintext highlighter-rouge">b</code> and returns <code class="language-plaintext highlighter-rouge">a op b</code>. It can use string interpolation as appropriate and will probably have to use a datatype. Example: <code class="language-plaintext highlighter-rouge">this.wgslfn = fn binop(a : ${this.datatype}, b : ${this.datatype}) -&gt; ${this.datatype} {return a+b;};</code></li>
-  <li>Four optional WGSL function names. These are “optional” in the sense that they are not a core part of <code class="language-plaintext highlighter-rouge">BinOp</code>, so most primitives will probably work if they are not specified. These are:
-    <ul>
-      <li>An atomic function <code class="language-plaintext highlighter-rouge">wgslatomic</code>. This should be a string that is a function name. This names the WGSL atomic function that is the atomic variant of <code class="language-plaintext highlighter-rouge">wgslop</code>. Any of <a href="https://www.w3.org/TR/WGSL/#atomic-rmw">these functions</a> are appropriate, but note that (at the time of writing) WGSL atomics are only available for <code class="language-plaintext highlighter-rouge">i32</code> and <code class="language-plaintext highlighter-rouge">u32</code> datatypes. Example: <code class="language-plaintext highlighter-rouge">this.wgslatomic = "atomicAdd";</code></li>
-      <li>Three subgroup functions. Note these functions apply to only a subset of operations and datatypes. Supporting anything outside of this subset requires <a href="subgroup-strategy.html">emulation</a>.
-        <ul>
-          <li><code class="language-plaintext highlighter-rouge">subgroupReduceOp</code>, which reduces the values in a subgroup using this operation. At the time of writing, supported WGSL functions of this type are <code class="language-plaintext highlighter-rouge">subgroup{Add,And,Max,Min,Mul,Or,Xor}</code>. Example: <code class="language-plaintext highlighter-rouge">this.subgroupReduceOp = "subgroupAdd";</code></li>
-          <li><code class="language-plaintext highlighter-rouge">subgroupInclusiveScanOp</code>, which computes an inclusive scan of the values in a subgroup using this operation. At the time of writing, supported WGSL functions of this type are <code class="language-plaintext highlighter-rouge">subgroupInclusive{Add,Mul}</code>. Example: <code class="language-plaintext highlighter-rouge">this.subgroupInclusiveScanOp = "subgroupInclusiveAdd";</code></li>
-          <li><code class="language-plaintext highlighter-rouge">subgroupExclusiveScanOp</code>, which computes an exclusive scan of the values in a subgroup using this operation. At the time of writing, supported WGSL functions of this type are <code class="language-plaintext highlighter-rouge">subgroupExclusive{Add,Mul}</code>. Example: <code class="language-plaintext highlighter-rouge">this.subgroupExclusiveScanOp = "subgroupExclusiveAdd";</code></li>
-        </ul>
-      </li>
+<!-- Section 1: Understanding BinOp (Split View) -->
+<section style="display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; margin-bottom: 4rem; align-items: start;">
+  <div>
+    <h2 style="font-size: 1.5rem; font-weight: 700; color: #111827; margin-bottom: 1rem;">Understanding BinOp</h2>
+    <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+      The <code>BinOp</code> class represents a monoid with:
+    </p>
+    <ul style="color: #4b5563; line-height: 1.75; margin-left: 1.5rem; margin-bottom: 1rem;">
+      <li style="margin-bottom: 0.5rem;"><strong>Binary operation</strong> — the operator itself</li>
+      <li style="margin-bottom: 0.5rem;"><strong>Datatype</strong> — the type of data the operator works on</li>
+      <li style="margin-bottom: 0.5rem;"><strong>Identity element</strong> — where <code>x = I op x</code></li>
     </ul>
-  </li>
-</ul>
+    <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+      For instance, addition's identity is zero (since <code>x + 0 = x</code>), and multiplication's identity is one (since <code>x × 1 = x</code>).
+    </p>
+    <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+      <code>BinOp</code> is implemented in the source file <code>binop.mjs</code>. We specialize <code>BinOp</code> to particular operations (e.g., <code>Add</code>) and then further specialize it with a datatype. This class defines objects used in WGSL code generation and CPU correctness checking.
+    </p>
+  </div>
 
-<p>Below is an example implementation, <code class="language-plaintext highlighter-rouge">BinOpAdd</code>, which takes an argument of <code class="language-plaintext highlighter-rouge">{ datatype = "..." }</code> that is used to specialize it.</p>
+  <div style="position: sticky; top: 6rem;">
+    <div style="background: #1f2937; border-radius: 0.75rem; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+      <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: #374151; border-bottom: 1px solid #4b5563;">
+        <div style="display: flex; gap: 0.375rem;">
+          <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+          <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+          <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #10b981;"></div>
+        </div>
+        <span style="font-family: 'Monaco', 'Menlo', monospace; font-size: 0.75rem; color: #9ca3af; margin-left: 1rem;">using-binop.js</span>
+      </div>
+      <pre style="padding: 1.5rem; margin: 0; font-family: 'Monaco', 'Menlo', monospace; font-size: 0.875rem; line-height: 1.7; overflow-x: auto;"><code><span style="color: #6b7280">// Predefined binop</span>
+<span style="color: #a5b4fc">const</span> <span style="color: #e2e8f0">myPrimitive = </span><span style="color: #a5b4fc">new</span> <span style="color: #fbbf24">gridwisePrimitive</span>({
+  <span style="color: #94a3b8">device,</span>
+  <span style="color: #e2e8f0">binop: </span><span style="color: #e2e8f0">BinOpAddU32</span>,
+  <span style="color: #6b7280">...</span>
+});</code></pre>
+    </div>
+    <div style="background: #1f2937; border-radius: 0.75rem; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
+      <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: #374151; border-bottom: 1px solid #4b5563;">
+        <div style="display: flex; gap: 0.375rem;">
+          <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+          <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+          <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #10b981;"></div>
+        </div>
+        <span style="font-family: 'Monaco', 'Menlo', monospace; font-size: 0.75rem; color: #9ca3af; margin-left: 1rem;">dynamic-binop.js</span>
+      </div>
+      <pre style="padding: 1.5rem; margin: 0; font-family: 'Monaco', 'Menlo', monospace; font-size: 0.875rem; line-height: 1.7; overflow-x: auto;"><code><span style="color: #6b7280">// Instantiate on the fly</span>
+<span style="color: #a5b4fc">const</span> <span style="color: #e2e8f0">datatype = </span><span style="color: #34d399">"f32"</span>;
+<span style="color: #a5b4fc">const</span> <span style="color: #e2e8f0">myPrimitive = </span><span style="color: #a5b4fc">new</span> <span style="color: #fbbf24">gridwisePrimitive</span>({
+  <span style="color: #94a3b8">device,</span>
+  <span style="color: #e2e8f0">binop: </span><span style="color: #a5b4fc">new</span> <span style="color: #fbbf24">BinOpAdd</span>({ datatype }),
+  <span style="color: #6b7280">...</span>
+});</code></pre>
+    </div>
+  </div>
+</section>
 
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">export</span> <span class="kd">class</span> <span class="nx">BinOpAdd</span> <span class="kd">extends</span> <span class="nx">BinOp</span> <span class="p">{</span>
-  <span class="kd">constructor</span><span class="p">(</span><span class="nx">args</span><span class="p">)</span> <span class="p">{</span>
-    <span class="k">super</span><span class="p">(</span><span class="nx">args</span><span class="p">);</span>
-    <span class="k">this</span><span class="p">.</span><span class="nx">identity</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-    <span class="k">if</span> <span class="p">(</span><span class="nx">args</span><span class="p">.</span><span class="nx">datatype</span> <span class="o">==</span> <span class="dl">"</span><span class="s2">f32</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
-      <span class="kd">const</span> <span class="nx">f32array</span> <span class="o">=</span> <span class="k">new</span> <span class="nb">Float32Array</span><span class="p">(</span><span class="mi">3</span><span class="p">);</span>
-      <span class="k">this</span><span class="p">.</span><span class="nx">op</span> <span class="o">=</span> <span class="p">(</span><span class="nx">a</span><span class="p">,</span> <span class="nx">b</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
-        <span class="nx">f32array</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="nx">a</span><span class="p">;</span>
-        <span class="nx">f32array</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="nx">b</span><span class="p">;</span>
-        <span class="nx">f32array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nx">f32array</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nx">f32array</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
-        <span class="k">return</span> <span class="nx">f32array</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
-      <span class="p">};</span>
-    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
-      <span class="k">this</span><span class="p">.</span><span class="nx">op</span> <span class="o">=</span> <span class="p">(</span><span class="nx">a</span><span class="p">,</span> <span class="nx">b</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="nx">a</span> <span class="o">+</span> <span class="nx">b</span><span class="p">;</span>
-    <span class="p">}</span>
-    <span class="k">switch</span> <span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">datatype</span><span class="p">)</span> <span class="p">{</span>
-      <span class="k">case</span> <span class="dl">"</span><span class="s2">f32</span><span class="dl">"</span><span class="p">:</span>
-        <span class="k">break</span><span class="p">;</span>
-      <span class="k">case</span> <span class="dl">"</span><span class="s2">i32</span><span class="dl">"</span><span class="p">:</span>
-        <span class="k">break</span><span class="p">;</span>
-      <span class="k">case</span> <span class="dl">"</span><span class="s2">u32</span><span class="dl">"</span><span class="p">:</span> <span class="c1">// fall-through OK</span>
-      <span class="k">default</span><span class="p">:</span>
-        <span class="k">this</span><span class="p">.</span><span class="nx">wgslatomic</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">atomicAdd</span><span class="dl">"</span><span class="p">;</span> <span class="c1">// u32 only</span>
-        <span class="k">break</span><span class="p">;</span>
-    <span class="p">}</span>
-    <span class="k">this</span><span class="p">.</span><span class="nx">wgslfn</span> <span class="o">=</span> <span class="s2">`fn binop(a : </span><span class="p">${</span><span class="k">this</span><span class="p">.</span><span class="nx">datatype</span><span class="p">}</span><span class="s2">, b : </span><span class="p">${</span><span class="k">this</span><span class="p">.</span><span class="nx">datatype</span><span class="p">}</span><span class="s2">) -&gt; </span><span class="p">${</span><span class="k">this</span><span class="p">.</span><span class="nx">datatype</span><span class="p">}</span><span class="s2"> {return a+b;}`</span><span class="p">;</span>
-    <span class="k">this</span><span class="p">.</span><span class="nx">subgroupReduceOp</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">subgroupAdd</span><span class="dl">"</span><span class="p">;</span>
-    <span class="k">this</span><span class="p">.</span><span class="nx">subgroupInclusiveScanOp</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">subgroupInclusiveAdd</span><span class="dl">"</span><span class="p">;</span>
-    <span class="k">this</span><span class="p">.</span><span class="nx">subgroupExclusiveScanOp</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">subgroupExclusiveAdd</span><span class="dl">"</span><span class="p">;</span>
-  <span class="p">}</span>
-<span class="p">}</span>
-</code></pre></div></div>
+<!-- Section 2: BinOp Requirements -->
+<section style="padding-top: 2rem; border-top: 1px solid #e5e7eb;">
+  <div style="max-width: 800px;">
+    <h2 style="font-size: 1.875rem; font-weight: 700; color: #111827; margin-bottom: 2rem;">What does a BinOp provide?</h2>
+    <p style="color: #4b5563; line-height: 1.75; margin-bottom: 2rem;">
+      We want to write primitives that work for any monoid. Other languages have more structured ways to write such code, but WGSL development in JavaScript commonly uses string-pasting to construct runtime-generated kernels. A <code>BinOp</code> provides all the text and member functions that are specific to the particular monoid we are using.
+    </p>
+    
+    <div style="display: grid; gap: 1.5rem;">
+      <!-- Required Properties -->
+      <div style="padding: 1.5rem; border: 1px solid #e5e7eb; border-radius: 0.75rem; background: #f9fafb;">
+        <h3 style="font-size: 1.25rem; font-weight: 700; color: #111827; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+          <span style="display: inline-block; width: 1.5rem; height: 1.5rem; border-radius: 50%; background: #4f46e5; color: white; text-align: center; line-height: 1.5rem; font-size: 0.75rem;">✓</span>
+          Required Properties
+        </h3>
+        
+        <div style="display: grid; gap: 1rem;">
+          <div>
+            <h4 style="font-size: 1rem; font-weight: 600; color: #111827; margin-bottom: 0.5rem;"><code>identity</code></h4>
+            <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">An identity element. For addition, this is 0 (independent of datatype). For multiplication, it is 1; for minimum, the largest representable value for that datatype; for maximum, the smallest representable value.</p>
+            <code style="background: #e5e7eb; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem;">this.identity = 0;</code>
+          </div>
+          
+          <div>
+            <h4 style="font-size: 1rem; font-weight: 600; color: #111827; margin-bottom: 0.5rem;"><code>op</code></h4>
+            <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">A CPU-side function. This JavaScript function takes two arguments <code>a</code> and <code>b</code> and returns <code>a op b</code>. Because JavaScript's internal datatypes are limited, this sometimes requires judicious use of JavaScript typed arrays.</p>
+            <code style="background: #e5e7eb; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem;">this.op = (a, b) =&gt; a + b;</code>
+          </div>
+          
+          <div>
+            <h4 style="font-size: 1rem; font-weight: 600; color: #111827; margin-bottom: 0.5rem;"><code>wgslfn</code></h4>
+            <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">A GPU-side function declaration. This must define a WGSL function named <code>binop</code>. Like <code>op</code>, this function takes two arguments <code>a</code> and <code>b</code> and returns <code>a op b</code>. It can use string interpolation as appropriate and will probably have to use a datatype.</p>
+            <code style="background: #e5e7eb; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem; display: block;">this.wgslfn = `fn binop(a : ${this.datatype}, b : ${this.datatype}) -&gt; ${this.datatype} {return a+b;}`;</code>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Optional Properties -->
+      <div style="padding: 1.5rem; border: 1px solid #e5e7eb; border-radius: 0.75rem; background: #fffbeb;">
+        <h3 style="font-size: 1.25rem; font-weight: 700; color: #111827; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+          <span style="display: inline-block; width: 1.5rem; height: 1.5rem; border-radius: 50%; background: #f59e0b; color: white; text-align: center; line-height: 1.5rem; font-size: 0.75rem;">?</span>
+          Optional WGSL Function Names
+        </h3>
+        <p style="font-size: 0.875rem; color: #78350f; margin-bottom: 1rem;">These are "optional" in the sense that they are not a core part of <code>BinOp</code>, so most primitives will probably work if they are not specified.</p>
+        
+        <div style="display: grid; gap: 1rem;">
+          <div>
+            <h4 style="font-size: 1rem; font-weight: 600; color: #111827; margin-bottom: 0.5rem;"><code>wgslatomic</code></h4>
+            <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">A string that is a function name. This names the WGSL atomic function that is the atomic variant of <code>wgslfn</code>. Any of <a href="https://www.w3.org/TR/WGSL/#atomic-rmw" style="color: #4f46e5; text-decoration: underline;">these functions</a> are appropriate, but note that (at the time of writing) WGSL atomics are only available for <code>i32</code> and <code>u32</code> datatypes.</p>
+            <code style="background: #e5e7eb; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem;">this.wgslatomic = "atomicAdd";</code>
+          </div>
+          
+          <div>
+            <h4 style="font-size: 1rem; font-weight: 600; color: #111827; margin-bottom: 0.5rem;">Subgroup Functions</h4>
+            <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.75rem;">Note these functions apply to only a subset of operations and datatypes. Supporting anything outside of this subset requires <a href="subgroup-strategy.html" style="color: #4f46e5; text-decoration: underline;">emulation</a>.</p>
+            
+            <ul style="font-size: 0.875rem; color: #6b7280; list-style: none; padding: 0; display: grid; gap: 0.75rem;">
+              <li style="padding: 0.75rem; background: white; border-radius: 0.5rem; border: 1px solid #e5e7eb;">
+                <strong style="color: #111827;"><code>subgroupReduceOp</code></strong> — Reduces the values in a subgroup using this operation. Supported WGSL functions: <code>subgroup{Add,And,Max,Min,Mul,Or,Xor}</code>
+              </li>
+              <li style="padding: 0.75rem; background: white; border-radius: 0.5rem; border: 1px solid #e5e7eb;">
+                <strong style="color: #111827;"><code>subgroupInclusiveScanOp</code></strong> — Computes an inclusive scan of the values in a subgroup using this operation. Supported WGSL functions: <code>subgroupInclusive{Add,Mul}</code>
+              </li>
+              <li style="padding: 0.75rem; background: white; border-radius: 0.5rem; border: 1px solid #e5e7eb;">
+                <strong style="color: #111827;"><code>subgroupExclusiveScanOp</code></strong> — Computes an exclusive scan of the values in a subgroup using this operation. Supported WGSL functions: <code>subgroupExclusive{Add,Mul}</code>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
-            </div>
-        </article>
-        </main>
+<!-- Section 3: Example Implementation -->
+<section style="padding-top: 3rem; margin-top: 3rem; border-top: 1px solid #e5e7eb;">
+  <div style="max-width: 800px;">
+    <h2 style="font-size: 1.875rem; font-weight: 700; color: #111827; margin-bottom: 1.5rem;">Example Implementation</h2>
+    <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1.5rem;">
+      Below is an example implementation, <code>BinOpAdd</code>, which takes an argument of <code>{ datatype = "..." }</code> that is used to specialize it.
+    </p>
+  </div>
+
+  <div style="background: #1f2937; border-radius: 0.75rem; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
+    <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: #374151; border-bottom: 1px solid #4b5563;">
+      <div style="display: flex; gap: 0.375rem;">
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #10b981;"></div>
+      </div>
+      <span style="font-family: 'Monaco', 'Menlo', monospace; font-size: 0.75rem; color: #9ca3af; margin-left: 1rem;">binop.mjs</span>
+    </div>
+    <pre style="padding: 1.5rem; margin: 0; font-family: 'Monaco', 'Menlo', monospace; font-size: 0.875rem; line-height: 1.7; overflow-x: auto;"><code><span style="color: #a5b4fc">export class</span> <span style="color: #fbbf24">BinOpAdd</span> <span style="color: #a5b4fc">extends</span> <span style="color: #fbbf24">BinOp</span> {
+  <span style="color: #34d399">constructor</span>(<span style="color: #e2e8f0">args</span>) {
+    <span style="color: #a5b4fc">super</span>(args);
+    <span style="color: #a5b4fc">this</span>.<span style="color: #e2e8f0">identity</span> = <span style="color: #fbbf24">0</span>;
+    <span style="color: #a5b4fc">if</span> (args.<span style="color: #e2e8f0">datatype</span> == <span style="color: #34d399">"f32"</span>) {
+      <span style="color: #a5b4fc">const</span> <span style="color: #e2e8f0">f32array</span> = <span style="color: #a5b4fc">new</span> <span style="color: #fbbf24">Float32Array</span>(<span style="color: #fbbf24">3</span>);
+      <span style="color: #a5b4fc">this</span>.<span style="color: #e2e8f0">op</span> = (<span style="color: #e2e8f0">a</span>, <span style="color: #e2e8f0">b</span>) =&gt; {
+        f32array[<span style="color: #fbbf24">1</span>] = a;
+        f32array[<span style="color: #fbbf24">2</span>] = b;
+        f32array[<span style="color: #fbbf24">0</span>] = f32array[<span style="color: #fbbf24">1</span>] + f32array[<span style="color: #fbbf24">2</span>];
+        <span style="color: #a5b4fc">return</span> f32array[<span style="color: #fbbf24">0</span>];
+      };
+    } <span style="color: #a5b4fc">else</span> {
+      <span style="color: #a5b4fc">this</span>.<span style="color: #e2e8f0">op</span> = (<span style="color: #e2e8f0">a</span>, <span style="color: #e2e8f0">b</span>) =&gt; a + b;
+    }
+    <span style="color: #a5b4fc">switch</span> (<span style="color: #a5b4fc">this</span>.<span style="color: #e2e8f0">datatype</span>) {
+      <span style="color: #a5b4fc">case</span> <span style="color: #34d399">"f32"</span>:
+        <span style="color: #a5b4fc">break</span>;
+      <span style="color: #a5b4fc">case</span> <span style="color: #34d399">"i32"</span>:
+        <span style="color: #a5b4fc">break</span>;
+      <span style="color: #a5b4fc">case</span> <span style="color: #34d399">"u32"</span>: <span style="color: #6b7280">// fall-through OK</span>
+      <span style="color: #a5b4fc">default</span>:
+        <span style="color: #a5b4fc">this</span>.<span style="color: #e2e8f0">wgslatomic</span> = <span style="color: #34d399">"atomicAdd"</span>; <span style="color: #6b7280">// u32 only</span>
+        <span style="color: #a5b4fc">break</span>;
+    }
+    <span style="color: #a5b4fc">this</span>.<span style="color: #e2e8f0">wgslfn</span> = <span style="color: #34d399">`fn binop(a : ${<span style="color: #a5b4fc">this</span>.<span style="color: #e2e8f0">datatype</span>}, b : ${<span style="color: #a5b4fc">this</span>.<span style="color: #e2e8f0">datatype</span>}) -&gt; ${<span style="color: #a5b4fc">this</span>.<span style="color: #e2e8f0">datatype</span>} {return a+b;}`</span>;
+    <span style="color: #a5b4fc">this</span>.<span style="color: #e2e8f0">subgroupReduceOp</span> = <span style="color: #34d399">"subgroupAdd"</span>;
+    <span style="color: #a5b4fc">this</span>.<span style="color: #e2e8f0">subgroupInclusiveScanOp</span> = <span style="color: #34d399">"subgroupInclusiveAdd"</span>;
+    <span style="color: #a5b4fc">this</span>.<span style="color: #e2e8f0">subgroupExclusiveScanOp</span> = <span style="color: #34d399">"subgroupExclusiveAdd"</span>;
+  }
+}</code></pre>
+  </div>
+</section>
+
+</div>
+
+<style>
+@media (max-width: 768px) {
+  section[style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  div[style*="position: sticky"] {
+    position: relative !important;
+  }
+}
+</style>
+
+
+        </div>
+      </article>
+    </div>
+  </main>
 </div>
 
 <script>
@@ -230,27 +481,9 @@
     });
   })();
 </script>
-
-  </div>
-</main><footer class="site-footer h-card">
-    <data class="u-url" href="/gridwise/"></data>
-
+<footer class="site-footer">
     <div class="wrapper">
-        <h2 class="footer-heading">Gridwise</h2>
-
-        <div class="footer-col-wrapper">
-            <div class="footer-col footer-col-1">
-                <ul class="contact-list">
-                    <li class="p-name">Gridwise</li><li><a class="u-email" href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></li></ul>
-            </div>
-
-            <div class="footer-col footer-col-3">
-                <p>WebGPU compute primitives in JavaScript</p>
-            </div>
-        </div>
-
-    </div>
-
+        <p>&copy; 2026 Gridwise. WebGPU compute primitives in JavaScript</p><p><a href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></p></div>
 </footer></body>
 
 </html>

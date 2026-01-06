@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Quick Reference: Simple Code Box | Gridwise</title>
+<meta name="generator" content="Jekyll v3.10.0" />
+<meta property="og:title" content="Quick Reference: Simple Code Box" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="WebGPU compute primitives in JavaScript" />
+<meta property="og:description" content="WebGPU compute primitives in JavaScript" />
+<link rel="canonical" href="http://localhost:4000/gridwise/docs/code-box-quick-reference/" />
+<meta property="og:url" content="http://localhost:4000/gridwise/docs/code-box-quick-reference/" />
+<meta property="og:site_name" content="Gridwise" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Quick Reference: Simple Code Box" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","description":"WebGPU compute primitives in JavaScript","headline":"Quick Reference: Simple Code Box","url":"http://localhost:4000/gridwise/docs/code-box-quick-reference/"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css">
+    <script src="/gridwise/docs/assets/js/main.js" defer></script></head>
+<body><header class="site-header" role="banner">
+  <div class="wrapper">
+    <div class="header-left">
+      <a class="site-title" rel="author" href="/gridwise/">
+        <span class="gradient-text">Gridwise Docs</span>
+      </a>
+    </div>
+
+    <div class="header-right"><a class="header-link" href="/gridwise/examples-guide/">Examples</a>
+      <a class="header-link" href="javascript:void(0)" onclick="launchExample()">Try Demo</a>
+      <a class="github-button" href="https://github.com/gridwise-webgpu/gridwise" target="_blank" aria-label="GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+      </a>
+    </div>
+  </div>
+</header>
+
+<script>
+  function launchExample() {
+    window.open('https://gridwise-webgpu.github.io/gridwise/examples/scan_pane_example.html', '_blank');
+  }
+</script><div class="main-container">
+  <!-- Modern Sidebar Navigation -->
+  <aside class="docs-sidebar" id="docsSidebar">
+    <div class="sidebar-content">
+      <div class="sidebar-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <h1>Documentation</h1>
+      </div>
+
+      <div class="search-box">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" id="docsSearch" placeholder="Search docs..." />
+      </div>
+
+      <nav class="docs-nav"><div class="nav-section">
+          <h3 class="nav-section-title">Getting Started</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/getting-started/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                <span>Introduction</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/installation/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Quick Start</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Core Concepts</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/architecture/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Architecture</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/primitive-design/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Primitive Design</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/subgroup-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                <span>Subgroup Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Primitives</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/scan-and-reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Scan and Reduce</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                <span>Sort</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/binop/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Binary Operations</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Advanced</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/buffer/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+                <span>Buffer Management</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/timing-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Timing Strategy</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/webgpu-object-caching-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Object Caching</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/builtins-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Builtins Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Examples</h3>
+          <ul><li>
+              <a href="/gridwise/examples/reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Reduce Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/scan/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Scan Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Sort Example</span>
+              </a>
+            </li></ul>
+        </div></nav>
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div class="sidebar-footer">
+      <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
+        <svg class="github-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="docs-content">
+    <div class="content-inner"><div class="docs-hero">
+        <div class="badge">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span>Documentation</span>
+        </div>
+        <h1>Quick Reference: Simple Code Box</h1></div><article class="post">
+        <div class="post-content">
+          <h1 id="quick-reference-simple-code-box">Quick Reference: Simple Code Box</h1>
+
+<h2 id="copy-paste-templates">Copy-Paste Templates</h2>
+
+<h3 id="template-1-basic-code-box">Template 1: Basic Code Box</h3>
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-simple"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-header"</span><span class="nt">&gt;</span>Title Here<span class="nt">&lt;/div&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-content"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;pre&gt;&lt;code&gt;</span>Your code here<span class="nt">&lt;/code&gt;&lt;/pre&gt;</span>
+  <span class="nt">&lt;/div&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</code></pre></div></div>
+
+<h3 id="template-2-javascripttypescript">Template 2: JavaScript/TypeScript</h3>
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-simple"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-header"</span><span class="nt">&gt;</span>JavaScript Example<span class="nt">&lt;/div&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-content"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;pre&gt;&lt;code&gt;&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>const<span class="nt">&lt;/span&gt;</span> myVar = <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"string"</span><span class="nt">&gt;</span>'value'<span class="nt">&lt;/span&gt;</span>
+<span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>function<span class="nt">&lt;/span&gt;</span> <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"function"</span><span class="nt">&gt;</span>myFunction<span class="nt">&lt;/span&gt;</span>(<span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"property"</span><span class="nt">&gt;</span>param<span class="nt">&lt;/span&gt;</span>) {
+  <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"comment"</span><span class="nt">&gt;</span>// Your code<span class="nt">&lt;/span&gt;</span>
+  <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>return<span class="nt">&lt;/span&gt;</span> <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"property"</span><span class="nt">&gt;</span>param<span class="nt">&lt;/span&gt;</span> * <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"number"</span><span class="nt">&gt;</span>2<span class="nt">&lt;/span&gt;</span>
+}<span class="nt">&lt;/code&gt;&lt;/pre&gt;</span>
+  <span class="nt">&lt;/div&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</code></pre></div></div>
+
+<h3 id="template-3-wgsl">Template 3: WGSL</h3>
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-simple"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-header"</span><span class="nt">&gt;</span>WGSL Shader<span class="nt">&lt;/div&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-content"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;pre&gt;&lt;code&gt;&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>var<span class="nt">&lt;/span&gt;</span><span class="ni">&amp;lt;</span><span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"builtin"</span><span class="nt">&gt;</span>workgroup<span class="nt">&lt;/span&gt;</span><span class="ni">&amp;gt;</span> <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"property"</span><span class="nt">&gt;</span>data<span class="nt">&lt;/span&gt;</span>: <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"type"</span><span class="nt">&gt;</span>array<span class="nt">&lt;/span&gt;</span><span class="ni">&amp;lt;</span><span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"type"</span><span class="nt">&gt;</span>u32<span class="nt">&lt;/span&gt;</span>, <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"number"</span><span class="nt">&gt;</span>256<span class="nt">&lt;/span&gt;</span><span class="ni">&amp;gt;</span>;
+
+<span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>fn<span class="nt">&lt;/span&gt;</span> <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"function"</span><span class="nt">&gt;</span>myFunction<span class="nt">&lt;/span&gt;</span>(<span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"property"</span><span class="nt">&gt;</span>x<span class="nt">&lt;/span&gt;</span>: <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"type"</span><span class="nt">&gt;</span>u32<span class="nt">&lt;/span&gt;</span>) -<span class="ni">&amp;gt;</span> <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"type"</span><span class="nt">&gt;</span>u32<span class="nt">&lt;/span&gt;</span> {
+  <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>return<span class="nt">&lt;/span&gt;</span> <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"property"</span><span class="nt">&gt;</span>x<span class="nt">&lt;/span&gt;</span> * <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"number"</span><span class="nt">&gt;</span>2<span class="nt">&lt;/span&gt;</span>;
+}<span class="nt">&lt;/code&gt;&lt;/pre&gt;</span>
+  <span class="nt">&lt;/div&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</code></pre></div></div>
+
+<h3 id="template-4-no-header">Template 4: No Header</h3>
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-simple"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-content"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;pre&gt;&lt;code&gt;</span>Code without header<span class="nt">&lt;/code&gt;&lt;/pre&gt;</span>
+  <span class="nt">&lt;/div&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</code></pre></div></div>
+
+<h2 id="syntax-highlighting-classes">Syntax Highlighting Classes</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Class</th>
+      <th>Color</th>
+      <th>Use For</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">.keyword</code></td>
+      <td>Purple (#7d64ff)</td>
+      <td><code class="language-plaintext highlighter-rouge">let</code>, <code class="language-plaintext highlighter-rouge">const</code>, <code class="language-plaintext highlighter-rouge">function</code>, <code class="language-plaintext highlighter-rouge">return</code>, <code class="language-plaintext highlighter-rouge">var</code>, <code class="language-plaintext highlighter-rouge">fn</code></td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">.string</code></td>
+      <td>Pink (#db2777)</td>
+      <td><code class="language-plaintext highlighter-rouge">'text'</code>, <code class="language-plaintext highlighter-rouge">"text"</code></td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">.function</code></td>
+      <td>Blue (#2563eb)</td>
+      <td>Function names, method calls</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">.comment</code></td>
+      <td>Gray (#9ca3af)</td>
+      <td><code class="language-plaintext highlighter-rouge">// comments</code>, <code class="language-plaintext highlighter-rouge">/* comments */</code></td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">.property</code></td>
+      <td>Dark gray (#4b5563)</td>
+      <td>Object properties, variables</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">.number</code></td>
+      <td>Green (#059669)</td>
+      <td><code class="language-plaintext highlighter-rouge">123</code>, <code class="language-plaintext highlighter-rouge">0.5</code>, numeric literals</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">.type</code></td>
+      <td>Blue (#2563eb)</td>
+      <td><code class="language-plaintext highlighter-rouge">u32</code>, <code class="language-plaintext highlighter-rouge">array</code>, type names</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">.builtin</code></td>
+      <td>Pink (#db2777)</td>
+      <td><code class="language-plaintext highlighter-rouge">workgroup</code>, <code class="language-plaintext highlighter-rouge">@builtin</code>, special keywords</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="usage-in-your-files">Usage in Your Files</h2>
+
+<h3 id="in-jekyll-markdown-md-files">In Jekyll Markdown (.md files):</h3>
+<div class="language-markdown highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">&lt;!-- Simple Code Box without Sidebar --&gt;</span>
+<span class="nt">&lt;style&gt;</span>
+:root {
+  --code-border: #e5e7eb;
+  --code-bg: #ffffff;
+  --code-title-bg: #f9fafb;
+  /<span class="ge">* Syntax Highlighting Colors (k6-inspired) *</span>/
+  --hl-keyword: #7d64ff;
+  --hl-string: #db2777;
+  --hl-function: #2563eb;
+  --hl-comment: #9ca3af;
+  --hl-property: #4b5563;
+  --hl-number: #059669;
+}
+
+.code-box-simple {
+  max-width: 100%;
+  margin: 2rem 0;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.code-box-header {
+  padding: 1rem 1.5rem;
+  background: var(--code-title-bg);
+  border-bottom: 1px solid var(--code-border);
+  font-family: sans-serif;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #000;
+}
+
+.code-box-content {
+  padding: 1.5rem 2rem;
+  background: var(--code-bg);
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.code-box-content pre {
+  margin: 0;
+}
+
+/<span class="ge">* Syntax Highlighting *</span>/
+.code-box-content .keyword { color: var(--hl-keyword); font-weight: 500; }
+.code-box-content .string { color: var(--hl-string); }
+.code-box-content .function { color: var(--hl-function); }
+.code-box-content .comment { color: var(--hl-comment); font-style: italic; }
+.code-box-content .property { color: var(--hl-property); }
+.code-box-content .number { color: var(--hl-number); }
+.code-box-content .type { color: #2563eb; }
+.code-box-content .builtin { color: #db2777; }
+<span class="nt">&lt;/style&gt;</span>
+
+&lt;!-- Usage Example:
+<span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-simple"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-header"</span><span class="nt">&gt;</span>Your Title Here<span class="nt">&lt;/div&gt;</span>
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-content"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;pre&gt;&lt;code&gt;&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>export default function<span class="nt">&lt;/span&gt;</span>() {
+  <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>let<span class="nt">&lt;/span&gt;</span> url = <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"string"</span><span class="nt">&gt;</span>'wss://example.com'<span class="nt">&lt;/span&gt;</span>
+  <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"keyword"</span><span class="nt">&gt;</span>let<span class="nt">&lt;/span&gt;</span> res = ws.<span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"function"</span><span class="nt">&gt;</span>connect<span class="nt">&lt;/span&gt;</span>(url)
+}<span class="nt">&lt;/code&gt;&lt;/pre&gt;</span>
+  <span class="nt">&lt;/div&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+--&gt;<span class="sb">
+
+
+</span><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"code-box-simple"</span><span class="nt">&gt;</span>
+  ...
+<span class="nt">&lt;/div&gt;</span>
+</code></pre></div></div>
+
+<h3 id="in-html-files">In HTML files:</h3>
+<p>Just paste the styles from <code class="language-plaintext highlighter-rouge">code-box-simple.html</code> into your <code class="language-plaintext highlighter-rouge">&lt;head&gt;</code> or <code class="language-plaintext highlighter-rouge">&lt;style&gt;</code> tag.</p>
+
+<h2 id="color-customization">Color Customization</h2>
+
+<p>Change these CSS variables:</p>
+<div class="language-css highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">:root</span> <span class="p">{</span>
+  <span class="py">--hl-keyword</span><span class="p">:</span> <span class="m">#7d64ff</span><span class="p">;</span>   <span class="c">/* Purple */</span>
+  <span class="py">--hl-string</span><span class="p">:</span> <span class="m">#db2777</span><span class="p">;</span>    <span class="c">/* Pink */</span>
+  <span class="py">--hl-function</span><span class="p">:</span> <span class="m">#2563eb</span><span class="p">;</span>  <span class="c">/* Blue */</span>
+  <span class="py">--hl-comment</span><span class="p">:</span> <span class="m">#9ca3af</span><span class="p">;</span>   <span class="c">/* Gray */</span>
+  <span class="py">--hl-number</span><span class="p">:</span> <span class="m">#059669</span><span class="p">;</span>    <span class="c">/* Green */</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h2 id="tips">Tips</h2>
+
+<ol>
+  <li><strong>Manual highlighting</strong>: Wrap each token in appropriate <code class="language-plaintext highlighter-rouge">&lt;span class="..."&gt;</code> tags</li>
+  <li><strong>Keep it simple</strong>: Don’t over-highlight; plain text is fine for many elements</li>
+  <li><strong>Indentation</strong>: Use 2 spaces for cleaner code blocks</li>
+  <li><strong>Line length</strong>: Keep lines under 80 characters when possible for readability</li>
+</ol>
+
+<h2 id="file-locations">File Locations</h2>
+
+<ul>
+  <li>Component: <code class="language-plaintext highlighter-rouge">docs/_includes/code-box-simple.html</code></li>
+  <li>Examples: <code class="language-plaintext highlighter-rouge">docs/_includes/code-box-example.html</code></li>
+  <li>Guide: <code class="language-plaintext highlighter-rouge">docs/code-box-guide.md</code></li>
+  <li>Demo: <code class="language-plaintext highlighter-rouge">code-box-demo.html</code> (open in browser)</li>
+  <li>Quick Ref: <code class="language-plaintext highlighter-rouge">docs/code-box-quick-reference.md</code> (this file)</li>
+</ul>
+
+        </div>
+      </article>
+    </div>
+  </main>
+</div>
+
+<script>
+  // Save and restore sidebar scroll position
+  (function() {
+    const sidebar = document.querySelector('.docs-sidebar');
+    if (!sidebar) return;
+    
+    // Restore scroll position immediately
+    const savedScrollPos = sessionStorage.getItem('sidebarScrollPos');
+    if (savedScrollPos) {
+      sidebar.scrollTop = parseInt(savedScrollPos);
+    }
+    
+    // Save on scroll
+    let scrollTimer;
+    sidebar.addEventListener('scroll', function() {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(function() {
+        sessionStorage.setItem('sidebarScrollPos', sidebar.scrollTop);
+      }, 100);
+    });
+    
+    // Save on link click and restore after navigation
+    sidebar.querySelectorAll('a').forEach(function(link) {
+      link.addEventListener('click', function(e) {
+        sessionStorage.setItem('sidebarScrollPos', sidebar.scrollTop);
+      });
+    });
+    
+    // Restore again after a short delay to handle any reflows
+    window.addEventListener('load', function() {
+      if (savedScrollPos) {
+        sidebar.scrollTop = parseInt(savedScrollPos);
+      }
+    });
+  })();
+</script>
+<footer class="site-footer">
+    <div class="wrapper">
+        <p>&copy; 2026 Gridwise. WebGPU compute primitives in JavaScript</p><p><a href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></p></div>
+</footer></body>
+
+</html>

@@ -681,6 +681,8 @@ export class OneSweepSort extends BaseSort {
 
       /* get unique ID for my workgroup (stored in partid) */
       if (builtinsNonuniform.lidx == 0u) {
+        /** we reset sortBump back to zero in a few lines to make this
+         * kernel idempotent (so we can dispatch it multiple times for timing) */
         wg_broadcast_tile_id = atomicAdd(&sortBump[sortParameters.shift >> 3u], 1u);
         atomicStore(&wg_sgCompletionCount, 0);
         wg_incomplete = 0;
@@ -707,6 +709,10 @@ export class OneSweepSort extends BaseSort {
         }
 
         if (partid == builtinsUniform.nwg.x - 1) {
+          if (builtinsNonuniform.lidx == 0u) {
+            /* last workgroup resets sortBump */
+            atomicStore(&sortBump[sortParameters.shift >> 3u], 0u);
+          }
           for (var k = 0u; k < KEYS_PER_THREAD; k += 1u) {
             /* If we're off the end of the array, pick the largest
              * possible key value. It will end up at the end of the
@@ -1295,24 +1301,32 @@ export class OneSweepSort extends BaseSort {
         label: "sortParameters",
         size: this.sortParameters.byteLength,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        clearBufferOnReuse: false /* we will write into this next */,
       }),
       new WriteGPUBuffer({
+        /** should be able to include this WriteGPUBuffer into the
+         * above AllocateBuffer with `populateWith: this.sortParameters`,
+         * but leaving it like this to show the use of WriteGPUBuffer
+         */
         label: "sortParameters",
         cpuSource: this.sortParameters,
       }),
       new AllocateBuffer({
         label: "sortBump",
         size: this.sortBumpSize,
+        clearBufferOnReuse: false,
       }),
       new AllocateBuffer({
         label: "hist",
         datatype: "u32",
         size: this.histSize,
+        clearBufferOnReuse: true /* must be cleared! accumulates using atomic add */,
       }),
       new AllocateBuffer({
         label: "passHist",
         datatype: "u32",
         size: this.passHistSize,
+        clearBufferOnReuse: false,
       }),
       new Kernel({
         kernel: this.sortOneSweepWGSL,
@@ -1444,21 +1458,22 @@ export class OneSweepSort extends BaseSort {
       }
 
       /*compare keys at 2 indices */
-      const compareFn = direction === "descending"
-        ? (idxA, idxB) => {
-          const a = keys[idxA];
-          const b = keys[idxB];
-          if (a < b) return 1;
-          if (a > b) return -1;
-          return 0;
-        }
-        : (idxA, idxB) => {
-          const a = keys[idxA];
-          const b = keys[idxB];
-          if (a < b) return -1;
-          if (a > b) return 1;
-          return 0;
-        };
+      const compareFn =
+        direction === "descending"
+          ? (idxA, idxB) => {
+              const a = keys[idxA];
+              const b = keys[idxB];
+              if (a < b) return 1;
+              if (a > b) return -1;
+              return 0;
+            }
+          : (idxA, idxB) => {
+              const a = keys[idxA];
+              const b = keys[idxB];
+              if (a < b) return -1;
+              if (a > b) return 1;
+              return 0;
+            };
       indices.sort(compareFn);
 
       const sortedKeys = new keys.constructor(keys.length);

@@ -9,73 +9,206 @@
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="WebGPU compute primitives in JavaScript" />
 <meta property="og:description" content="WebGPU compute primitives in JavaScript" />
-<link rel="canonical" href="https://gridwise-webgpu.github.io/gridwise/examples-guide/" />
-<meta property="og:url" content="https://gridwise-webgpu.github.io/gridwise/examples-guide/" />
+<link rel="canonical" href="http://localhost:4000/gridwise/examples-guide/" />
+<meta property="og:url" content="http://localhost:4000/gridwise/examples-guide/" />
 <meta property="og:site_name" content="Gridwise" />
 <meta property="og:type" content="website" />
 <meta name="twitter:card" content="summary" />
 <meta property="twitter:title" content="Examples" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebPage","description":"WebGPU compute primitives in JavaScript","headline":"Examples","url":"https://gridwise-webgpu.github.io/gridwise/examples-guide/"}</script>
+{"@context":"https://schema.org","@type":"WebPage","description":"WebGPU compute primitives in JavaScript","headline":"Examples","url":"http://localhost:4000/gridwise/examples-guide/"}</script>
 <!-- End Jekyll SEO tag -->
-<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css"></head>
+<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css">
+    <script src="/gridwise/docs/assets/js/main.js" defer></script></head>
 <body><header class="site-header" role="banner">
-  <div class="wrapper"><a class="site-title" rel="author" href="/gridwise/">Gridwise</a><nav class="site-nav">
-      <input type="checkbox" id="nav-trigger" class="nav-trigger" />
-      <label for="nav-trigger">
-        <span class="menu-icon">
-          <svg viewBox="0 0 18 15" width="18px" height="15px">
-            <path
-              d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.484C18,14.304,17.335,14.969,16.516,14.969H1.484 C0.665,14.969,0,14.304,0,13.484l0,0C0,12.665,0.665,12,1.484,12h15.032C17.335,12,18,12.665,18,13.484L18,13.484z" />
-          </svg>
-        </span>
-      </label>
+  <div class="wrapper">
+    <div class="header-left">
+      <a class="site-title" rel="author" href="/gridwise/">
+        <span class="gradient-text">Gridwise Docs</span>
+      </a>
+    </div>
 
-      <div class="trigger"><a class="button" href="/gridwise/examples-guide/">Example Docs</a>
-        <a class="button" href="/gridwise/">Read Docs</a>
-        <a class="button" href="javascript:void(0)" onclick="launchExample()">Try Interactive Example</a>
-      </div>
-    </nav></div>
+    <div class="header-right"><a class="header-link" href="/gridwise/examples-guide/">Examples</a>
+      <a class="header-link" href="javascript:void(0)" onclick="launchExample()">Try Demo</a>
+      <a class="github-button" href="https://github.com/gridwise-webgpu/gridwise" target="_blank" aria-label="GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+      </a>
+    </div>
+  </div>
 </header>
 
 <script>
   function launchExample() {
     window.open('https://gridwise-webgpu.github.io/gridwise/examples/scan_pane_example.html', '_blank');
   }
-</script><main class="page-content" aria-label="Content">
-  <div class="wrapper">
-    <div class="docs-container">
-  <!-- Left Sidebar Navigation -->
-  <aside class="docs-sidebar">
-    <h3>Documentation</h3><ul class="docs-nav"><li>
-        <a href="/gridwise/architecture/" >Gridwise Architecture</a>
-      </li><li>
-        <a href="/gridwise/buffer/" >Gridwise&#39;s Buffer Class</a>
-      </li><li>
-        <a href="/gridwise/binop/" >Gridwise&#39;s Binary Operator Class</a>
-      </li><li>
-        <a href="/gridwise/scan-and-reduce/" >Gridwise Scan and Reduce</a>
-      </li><li>
-        <a href="/gridwise/sort/" >Gridwise Sort</a>
-      </li><li>
-        <a href="/gridwise/builtins-strategy/" >Gridwise WebGPU @builtins Strategy</a>
-      </li><li>
-        <a href="/gridwise/primitive-design/" >Gridwise WebGPU Primitive Strategy wrt Subgroups</a>
-      </li><li>
-        <a href="/gridwise/subgroup-strategy/" >Gridwise WebGPU Subgroup Emulation Strategy</a>
-      </li><li>
-        <a href="/gridwise/webgpu-object-caching-strategy/" >Gridwise WebGPU Object Caching Strategy</a>
-      </li><li>
-        <a href="/gridwise/timing-strategy/" >Gridwise WebGPU Timing Strategy</a>
-      </li><li>
-        <a href="/gridwise/writing-a-webgpu-wgsl-workgroup-reduce-function/" >Abstraction Challenges in Writing a WebGPU/WGSL Workgroup Reduce Function</a>
-      </li></ul><!-- Sidebar Footer -->
+</script><div class="main-container">
+  <!-- Modern Sidebar Navigation -->
+  <aside class="docs-sidebar" id="docsSidebar">
+    <div class="sidebar-content">
+      <div class="sidebar-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <h1>Documentation</h1>
+      </div>
+
+      <div class="search-box">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" id="docsSearch" placeholder="Search docs..." />
+      </div>
+
+      <nav class="docs-nav"><div class="nav-section">
+          <h3 class="nav-section-title">Getting Started</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/getting-started/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                <span>Introduction</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/installation/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Quick Start</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Core Concepts</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/architecture/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Architecture</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/primitive-design/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Primitive Design</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/subgroup-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                <span>Subgroup Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Primitives</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/scan-and-reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Scan and Reduce</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                <span>Sort</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/binop/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Binary Operations</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Advanced</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/buffer/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+                <span>Buffer Management</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/timing-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Timing Strategy</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/webgpu-object-caching-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Object Caching</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/builtins-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Builtins Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Examples</h3>
+          <ul><li>
+              <a href="/gridwise/examples/reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Reduce Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/scan/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Scan Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Sort Example</span>
+              </a>
+            </li></ul>
+        </div></nav>
+    </div>
+
+    <!-- Sidebar Footer -->
     <div class="sidebar-footer">
       <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
-        <svg class="github-icon" viewBox="0 0 16 16" width="20" height="20">
-          <path fill="currentColor"
-            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z">
-          </path>
+        <svg class="github-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
         </svg>
         <span>GitHub</span>
       </a>
@@ -84,7 +217,15 @@
 
   <!-- Main Content Area -->
   <main class="docs-content">
-    <div class="home"><h1 class="page-heading">Examples</h1><style>
+    <div class="content-inner"><div class="docs-hero">
+        <div class="badge">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span>Documentation</span>
+        </div>
+        <h1>Examples</h1></div><div class="home">
+        <style>
     .doc-btn {
         display: inline-block;
         padding: 8px 14px;
@@ -105,39 +246,179 @@
     }
 
     .code-block {
-        background: #f5f5f5;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        padding: 12px;
+        background: #ffffff;
+        border: 2px solid #e1e4e8;
+        border-radius: 6px;
+        padding: 16px;
         overflow-x: auto;
-        font-family: 'Courier New', monospace;
-        font-size: 13px;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 14px;
         margin: 10px 0;
+        color: #24292e;
+        line-height: 1.6;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        position: relative;
+    }
+
+    .copy-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: #f6f8fa;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        padding: 5px 10px;
+        cursor: pointer;
+        font-size: 12px;
+        color: #24292f;
+        transition: all 0.2s;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+
+    .copy-btn:hover {
+        background: #f3f4f6;
+        border-color: #b1b7be;
+    }
+
+    .copy-btn:active {
+        background: #e8eaed;
+    }
+
+    .copy-btn.copied {
+        color: #2da44e;
+        border-color: #2da44e;
+    }
+
+    .perf-graph-container {
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        box-shadow: none;
+    }
+
+    .perf-graph-container h4 {
+        color: #333;
+        margin-bottom: 15px;
+        font-size: 16px;
+    }
+
+    .perf-canvas {
+        width: 100%;
+        height: 300px;
+        border-radius: 4px;
+        background: #fafafa;
+        cursor: crosshair;
+    }
+
+    .perf-status {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #666;
+        text-align: center;
+    }
+
+    .perf-status.running {
+        color: #39bda7;
+        font-weight: 500;
+    }
+
+    .graph-legend {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        margin-bottom: 10px;
+        font-size: 13px;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .legend-line {
+        width: 30px;
+        height: 2px;
+        display: inline-block;
+    }
+
+    .gpu-line { background: #10b981; }
+    .cpu-line { background: #000000; }
+
+    .example-section {
+        margin-bottom: 40px;
+        background: #ffffff;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 30px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .example-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        align-items: start;
+        margin-top: 20px;
+    }
+
+    .code-column {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 20px;
+    }
+
+    .code-column h3 {
+        font-size: 18px;
+        margin-bottom: 15px;
+        margin-top: 0;
+        color: #2c3e50;
+    }
+
+    .code-column h4 {
+        font-size: 15px;
+        margin-top: 15px;
+        margin-bottom: 10px;
+        color: #34495e;
+    }
+
+    .graph-column {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 20px;
+    }
+
+    .graph-column h3 {
+        font-size: 18px;
+        margin-bottom: 15px;
+        margin-top: 0;
+        color: #2c3e50;
+    }
+
+    @media (max-width: 968px) {
+        .example-grid {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 <p>Explore practical examples demonstrating how to use Gridwise WebGPU primitives for scan, sort, and reduce
     operations. Each example includes code snippets, explanations of key concepts, and links to source code and
     performance benchmarks.</p>
 
+<div class="example-section">
 <h2>Scan Example</h2>
 <p>Compact example that demonstrates exclusive vs inclusive scans using DLDFScan: how to choose scanType, build the
     input array, run the primitive, and validate outputs. Good for understanding prefix-sum semantics and the effect of
     different binary ops (add/max/min).</p>
-<p><em>Open the page, pick parameters in the pane (datatype/binop/input length), click Start, then inspect the result
-        and plots.</em></p>
 
-<h3>Scan Types</h3>
-<p><strong>Exclusive:</strong> Output[i] = sum of all elements before position i (output[0] is identity).</p>
-<p><strong>Inclusive:</strong> Output[i] = sum of all elements up to and including position i.</p>
-
-<h3>Binary Operations</h3>
-<p>Add, Min, Max — combines elements using the specified operation. Custom operations supported via binop.mjs.</p>
-
-<h3>Supported Data Types</h3>
-<p>u32, i32, f32 — all data types work with all binary operations.</p>
-
-<h3>Code Structure</h3>
-<div class="code-block">
+<div class="example-grid">
+    <div class="code-column">
+        <h3>Code</h3>
+        <div class="code-block">
+            <button class="copy-btn" onclick="copyCode(this, 'scan')">📋 Copy</button>
     // Exclusive scan with add operation<br>
     const primitive = new DLDFScan({<br>
     &nbsp;&nbsp;device,<br>
@@ -153,31 +434,39 @@
     &nbsp;&nbsp;type: "inclusive",<br>
     &nbsp;&nbsp;datatype: "i32"<br>
     });
+        </div>
+    </div>
+
+    <div class="graph-column">
+        <h3>Performance Graph</h3>
+        <div class="perf-graph-container">
+            <div class="graph-legend">
+                <div class="legend-item">
+                    <span class="legend-line gpu-line"></span>
+                    <span>GPU Bandwidth</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-line cpu-line"></span>
+                    <span>CPU Time</span>
+                </div>
+            </div>
+            <canvas id="scanCanvas" class="perf-canvas"></canvas>
+            <div id="scanStatus" class="perf-status">Initializing...</div>
+        </div>
+    </div>
+</div>
 </div>
 
-<p>
-    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_example.mjs" target="_blank"
-        class="doc-btn">Source Code</a>
-    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_sort_perf.html" target="_blank"
-        class="doc-btn">Performance</a>
-</p>
-
-<h2>Key/Value Sort Demo</h2>
+<div class="example-section">
+<h2>Sort</h2>
 <p>Demonstrates OneSweepSort with two modes: key-only sorting and key-value pair sorting with payload validation. Shows
     how to configure the primitive for different operations and data types.</p>
-<p><em>Open the page, pick parameters in the pane (datatype/binop/input length), click Start, then inspect the result
-        and plots.</em></p>
 
-<h3>Sort Operations</h3>
-<p><strong>Sort Keys:</strong> Sorts only the keys array in ascending or descending order.</p>
-<p><strong>Sort Pairs:</strong> Sorts keys while maintaining associated payloads, useful for sorting complex data
-    structures.</p>
-
-<h3>Supported Data Types</h3>
-<p>u32, i32, f32 — all data types support both sort modes with configurable sort direction.</p>
-
-<h3>Code Structure</h3>
-<div class="code-block">
+<div class="example-grid">
+    <div class="code-column">
+        <h3>Code</h3>
+        <div class="code-block">
+            <button class="copy-btn" onclick="copyCode(this, 'sort')">📋 Copy</button>
     // Key-only sort<br>
     const primitive = new OneSweepSort({<br>
     &nbsp;&nbsp;device,<br>
@@ -196,33 +485,40 @@
     &nbsp;&nbsp;type: "keyvalue",<br>
     &nbsp;&nbsp;inputLength: 1024<br>
     });
+        </div>
+    </div>
+
+    <div class="graph-column">
+        <h3>Performance Graph</h3>
+        <div class="perf-graph-container">
+            <div class="graph-legend">
+                <div class="legend-item">
+                    <span class="legend-line gpu-line"></span>
+                    <span>GPU Bandwidth</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-line cpu-line"></span>
+                    <span>CPU Time</span>
+                </div>
+            </div>
+            <canvas id="sortCanvas" class="perf-canvas"></canvas>
+            <div id="sortStatus" class="perf-status">Initializing...</div>
+        </div>
+    </div>
+</div>
 </div>
 
-<p>
-    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/sort_pairs_example.mjs" target="_blank"
-        class="doc-btn">Source Code</a>
-    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_sort_perf.html" target="_blank"
-        class="doc-btn">Performance</a>
-</p>
-
+<div class="example-section">
 <h2>Reduce Operation</h2>
 <p>A minimal, hands-on example showing how to run the reduce primitive end-to-end: device setup, buffer upload, a single
     execution, and result readback. Use this to learn the basic API calls and validation pattern. Parameters shown:
     datatype and binop (add/max/min). Ideal as the first example before any benchmarking.</p>
-<p><em>Open the page, pick parameters in the pane (datatype/binop/input length), click Start, then inspect the result
-        and plots.</em></p>
 
-<h3>What is Reduce?</h3>
-<p>Reduces an entire array to a single value by repeatedly applying a binary operation across all elements.</p>
-
-<h3>Binary Operations</h3>
-<p>Add, Min, Max — aggregates all elements using the specified operation. Custom operations supported via binop.mjs.</p>
-
-<h3>Supported Data Types</h3>
-<p>u32, i32, f32 — all data types work with all binary operations.</p>
-
-<h3>Code Structure</h3>
-<div class="code-block">
+<div class="example-grid">
+    <div class="code-column">
+        <h3>Code</h3>
+        <div class="code-block">
+            <button class="copy-btn" onclick="copyCode(this, 'reduce')">📋 Copy</button>
     // Reduce with add operation<br>
     const primitive = new DLDFScan({<br>
     &nbsp;&nbsp;device,<br>
@@ -238,79 +534,502 @@
     &nbsp;&nbsp;type: "reduce",<br>
     &nbsp;&nbsp;datatype: "i32"<br>
     });
+        </div>
+    </div>
+
+    <div class="graph-column">
+        <h3>Performance Graph</h3>
+        <div class="perf-graph-container">
+            <div class="graph-legend">
+                <div class="legend-item">
+                    <span class="legend-line gpu-line"></span>
+                    <span>GPU Bandwidth</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-line cpu-line"></span>
+                    <span>CPU Time</span>
+                </div>
+            </div>
+            <canvas id="reduceCanvas" class="perf-canvas"></canvas>
+            <div id="reduceStatus" class="perf-status">Initializing...</div>
+        </div>
+    </div>
+</div>
 </div>
 
-<p>
-    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/reduce_example.mjs" target="_blank"
-        class="doc-btn">Source Code</a>
-    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/reduce_perf.mjs" target="_blank"
-        class="doc-btn">Performance</a>
-</p>
-class="doc-btn">Performance</a>
-</p>
-
 <hr>
+
+<script>
+// Copy code function
+const codeSnippets = {
+    scan: `// Exclusive scan with add operation
+const primitive = new DLDFScan({
+  device,
+  binop: new BinOpAdd({ datatype: "u32" }),
+  type: "exclusive",
+  datatype: "u32"
+});
+
+// Inclusive scan with max operation
+const primitive = new DLDFScan({
+  device,
+  binop: new BinOpMax({ datatype: "i32" }),
+  type: "inclusive",
+  datatype: "i32"
+});`,
+    sort: `// Key-only sort
+const primitive = new OneSweepSort({
+  device,
+  datatype: "u32",
+  direction: "ascending",
+  copyOutputToTemp: true,
+  inputLength: 1024
+});
+
+// Key-value pair sort
+const primitive = new OneSweepSort({
+  device,
+  datatype: "u32",
+  direction: "ascending",
+  copyOutputToTemp: true,
+  type: "keyvalue",
+  inputLength: 1024
+});`,
+    reduce: `// Reduce with add operation
+const primitive = new DLDFScan({
+  device,
+  binop: new BinOpAdd({ datatype: "u32" }),
+  type: "reduce",
+  datatype: "u32"
+});
+
+// Reduce with min operation
+const primitive = new DLDFScan({
+  device,
+  binop: new BinOpMin({ datatype: "i32" }),
+  type: "reduce",
+  datatype: "i32"
+});`
+};
+
+function copyCode(button, type) {
+    const code = codeSnippets[type];
+    navigator.clipboard.writeText(code).then(() => {
+        const originalText = button.innerHTML;
+        button.innerHTML = '✓ Copied!';
+        button.classList.add('copied');
+        
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.classList.remove('copied');
+        }, 2000);
+    });
+}
+</script>
+
+<script type="module">
+import { BinOpAdd, makeBinOp } from "../binop.mjs";
+import { datatypeToTypedArray } from "../util.mjs";
+import { DLDFScan } from "../scandldf.mjs";
+import { OneSweepSort } from "../onesweep.mjs";
+
+// Initialize WebGPU
+const adapter = await navigator.gpu?.requestAdapter();
+if (!adapter) {
+    document.querySelectorAll('.perf-status').forEach(el => {
+        el.textContent = 'No GPU detected';
+        el.style.color = '#ff4444';
+    });
+    document.querySelectorAll('.perf-canvas').forEach(canvas => {
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+        ctx.fillStyle = '#f0f0f0';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ff4444';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('No GPU detected', canvas.width / 2, canvas.height / 2 - 10);
+        ctx.fillStyle = '#666';
+        ctx.font = '13px Arial';
+        ctx.fillText('WebGPU is not supported on this device', canvas.width / 2, canvas.height / 2 + 15);
+    });
+    throw new Error('WebGPU not supported');
+}
+
+const hasSubgroups = adapter.features.has("subgroups");
+const device = await adapter?.requestDevice({
+    requiredLimits: { maxComputeWorkgroupStorageSize: 32768 },
+    requiredFeatures: [...(hasSubgroups ? ["subgroups"] : [])],
+});
+
+// Graph drawing utility
+class PerfGraph {
+    constructor(canvasId, title) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.title = title;
+        this.gpuData = [];
+        this.cpuData = [];
+        this.maxPoints = 15;
+        this.hoveredPoint = null;
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        
+        // Mouse interaction
+        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        this.canvas.addEventListener('mouseleave', () => this.handleMouseLeave());
+    }
+
+    resize() {
+        const rect = this.canvas.getBoundingClientRect();
+        this.canvas.width = rect.width * window.devicePixelRatio;
+        this.canvas.height = rect.height * window.devicePixelRatio;
+        this.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        this.width = rect.width;
+        this.height = rect.height;
+        this.draw();
+    }
+
+    addPoint(inputSize, gpuBandwidth, cpuTimeMS) {
+        this.gpuData.push({ inputSize, value: gpuBandwidth });
+        this.cpuData.push({ inputSize, value: cpuTimeMS });
+        if (this.gpuData.length > this.maxPoints) {
+            this.gpuData.shift();
+            this.cpuData.shift();
+        }
+        this.draw();
+    }
+
+    handleMouseMove(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const padding = 60;
+        const graphWidth = this.width - padding * 2;
+        
+        let closestDist = Infinity;
+        let closestPoint = null;
+        
+        this.gpuData.forEach((d, i) => {
+            const pointX = padding + (graphWidth / Math.max(this.gpuData.length - 1, 1)) * i;
+            const dist = Math.abs(x - pointX);
+            
+            if (dist < closestDist && dist < 30) {
+                closestDist = dist;
+                closestPoint = { 
+                    index: i,
+                    inputSize: d.inputSize, 
+                    gpuBandwidth: d.value,
+                    cpuTime: this.cpuData[i]?.value || 0
+                };
+            }
+        });
+        
+        if (closestPoint !== this.hoveredPoint) {
+            this.hoveredPoint = closestPoint;
+            this.draw();
+        }
+    }
+
+    handleMouseLeave() {
+        if (this.hoveredPoint) {
+            this.hoveredPoint = null;
+            this.draw();
+        }
+    }
+
+    draw() {
+        const ctx = this.ctx;
+        const padding = 60;
+        const graphWidth = this.width - padding * 2;
+        const graphHeight = this.height - padding * 2;
+
+        // Clear
+        ctx.clearRect(0, 0, this.width, this.height);
+
+        if (this.gpuData.length === 0) {
+            ctx.fillStyle = '#999';
+            ctx.font = '13px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Running benchmark...', this.width / 2, this.height / 2);
+            return;
+        }
+
+        // Fixed Y-axis range: 0 to 3 GB/s
+        const minY = 0;
+        const maxY = 3;
+
+        // Draw grid lines
+        ctx.strokeStyle = '#e8e8e8';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 6; i++) {
+            const y = padding + (graphHeight / 6) * i;
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(this.width - padding, y);
+            ctx.stroke();
+        }
+
+        // Y-axis labels (0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0 GB/s)
+        ctx.fillStyle = '#666';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'right';
+        for (let i = 0; i <= 6; i++) {
+            const value = maxY - (i * 0.5);
+            const y = padding + (graphHeight / 6) * i;
+            ctx.fillText(value.toFixed(1), padding - 10, y + 4);
+        }
+
+        // X-axis labels (input size)
+        ctx.textAlign = 'center';
+        this.gpuData.forEach((d, i) => {
+            if (i % 2 === 0 || i === this.gpuData.length - 1) {
+                const x = padding + (graphWidth / Math.max(this.gpuData.length - 1, 1)) * i;
+                const sizeLabel = d.inputSize >= 1048576 
+                    ? (d.inputSize / 1048576).toFixed(1) + 'M'
+                    : (d.inputSize / 1024).toFixed(0) + 'K';
+                ctx.fillText(sizeLabel, x, this.height - padding + 20);
+            }
+        });
+
+        // Draw GPU line (thin green)
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+
+        this.gpuData.forEach((d, i) => {
+            const x = padding + (graphWidth / Math.max(this.gpuData.length - 1, 1)) * i;
+            const y = this.height - padding - ((d.value - minY) / (maxY - minY)) * graphHeight;
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        });
+        ctx.stroke();
+
+        // Draw GPU points
+        this.gpuData.forEach((d, i) => {
+            const x = padding + (graphWidth / Math.max(this.gpuData.length - 1, 1)) * i;
+            const y = this.height - padding - ((d.value - minY) / (maxY - minY)) * graphHeight;
+            
+            ctx.fillStyle = '#10b981';
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Draw CPU line (thin black) - scaled to fit 0-3 range proportionally
+        const maxCpu = Math.max(...this.cpuData.map(d => d.value), 1);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+
+        this.cpuData.forEach((d, i) => {
+            const x = padding + (graphWidth / Math.max(this.cpuData.length - 1, 1)) * i;
+            // Scale CPU time to fit within 0-2.5 range for visibility
+            const scaledValue = (d.value / maxCpu) * 2.5;
+            const y = this.height - padding - ((scaledValue - minY) / (maxY - minY)) * graphHeight;
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        });
+        ctx.stroke();
+
+        // Draw CPU points
+        this.cpuData.forEach((d, i) => {
+            const x = padding + (graphWidth / Math.max(this.cpuData.length - 1, 1)) * i;
+            const scaledValue = (d.value / maxCpu) * 2.5;
+            const y = this.height - padding - ((scaledValue - minY) / (maxY - minY)) * graphHeight;
+            
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Draw axes
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, this.height - padding);
+        ctx.lineTo(this.width - padding, this.height - padding);
+        ctx.stroke();
+
+        // Axis labels
+        ctx.fillStyle = '#333';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Input Size', this.width / 2, this.height - 5);
+        
+        ctx.save();
+        ctx.translate(15, this.height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Bandwidth (GB/s)', 0, 0);
+        ctx.restore();
+
+        // Draw tooltip if hovering
+        if (this.hoveredPoint) {
+            this.drawTooltip(this.hoveredPoint);
+        }
+    }
+
+    drawTooltip(point) {
+        const ctx = this.ctx;
+        const padding = 60;
+        const graphWidth = this.width - padding * 2;
+        const x = padding + (graphWidth / Math.max(this.gpuData.length - 1, 1)) * point.index;
+        
+        const tooltipWidth = 160;
+        const tooltipHeight = 70;
+        let tooltipX = x + 15;
+        let tooltipY = 20;
+        
+        if (tooltipX + tooltipWidth > this.width - 20) {
+            tooltipX = x - tooltipWidth - 15;
+        }
+        
+        // Draw tooltip background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.fillRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight);
+        
+        // Draw tooltip text
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'left';
+        
+        const sizeLabel = point.inputSize >= 1048576 
+            ? `${(point.inputSize / 1048576).toFixed(1)}M` 
+            : `${(point.inputSize / 1024).toFixed(0)}K`;
+        
+        ctx.fillText(`Size: ${sizeLabel}`, tooltipX + 10, tooltipY + 20);
+        ctx.fillText(`GPU: ${point.gpuBandwidth.toFixed(2)} GB/s`, tooltipX + 10, tooltipY + 40);
+        ctx.fillText(`CPU: ${point.cpuTime.toFixed(2)} ms`, tooltipX + 10, tooltipY + 60);
+    }
+}
+
+// Benchmark runner
+async function runBenchmark(primitive, inputSizes, graph, statusId, config) {
+    const statusEl = document.getElementById(statusId);
+    
+    for (let i = 0; i < inputSizes.length; i++) {
+        const inputLength = inputSizes[i];
+        statusEl.textContent = `Running ${i + 1}/${inputSizes.length}: ${(inputLength / 1048576).toFixed(1)}M elements...`;
+        statusEl.className = 'perf-status running';
+
+        const memsrc = new (datatypeToTypedArray(config.datatype))(inputLength);
+        memsrc.fill(1);
+
+        let primitiveInstance;
+        if (config.type === 'sort') {
+            primitiveInstance = new OneSweepSort({
+                device,
+                datatype: config.datatype,
+                direction: 'ascending',
+                copyOutputToTemp: true,
+            });
+        } else {
+            primitiveInstance = new DLDFScan({
+                device,
+                binop: makeBinOp({ op: config.binop, datatype: config.datatype }),
+                type: config.type,
+                datatype: config.datatype,
+            });
+        }
+
+        const memdestBytes = config.type === 'reduce' ? 4 : memsrc.byteLength;
+        const memsrcBuffer = device.createBuffer({
+            size: memsrc.byteLength,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+        });
+        const memdestBuffer = device.createBuffer({
+            size: memdestBytes,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+        });
+
+        device.queue.writeBuffer(memsrcBuffer, 0, memsrc);
+
+        // Timing
+        const cpuStart = performance.now();
+        if (config.type === 'sort') {
+            await primitiveInstance.execute({
+                keysInOut: memsrcBuffer,
+                keysTemp: memdestBuffer,
+            });
+        } else {
+            await primitiveInstance.execute({
+                inputBuffer: memsrcBuffer,
+                outputBuffer: memdestBuffer,
+            });
+        }
+        await device.queue.onSubmittedWorkDone();
+        const cpuEnd = performance.now();
+
+        const cpuTimeMS = cpuEnd - cpuStart;
+        const totalBytes = memsrc.byteLength + memdestBytes;
+        const bandwidth = (totalBytes / 1e9) / (cpuTimeMS / 1000);
+
+        graph.addPoint(inputLength, bandwidth, cpuTimeMS);
+
+        memsrcBuffer.destroy();
+        memdestBuffer.destroy();
+
+        await new Promise(r => setTimeout(r, 100));
+    }
+
+    statusEl.textContent = `✓ Benchmark complete`;
+    statusEl.className = 'perf-status';
+}
+
+// Run benchmarks
+const inputSizes = [
+    2**16, 2**17, 2**18, 2**19, 2**20, 
+    2**21, 2**22, 2**23, 2**24
+];
+
+const scanGraph = new PerfGraph('scanCanvas', 'Scan Performance');
+const sortGraph = new PerfGraph('sortCanvas', 'Sort Performance');
+const reduceGraph = new PerfGraph('reduceCanvas', 'Reduce Performance');
+
+// Run all benchmarks in sequence
+(async () => {
+    await runBenchmark('scan', inputSizes, scanGraph, 'scanStatus', {
+        type: 'exclusive',
+        datatype: 'u32',
+        binop: 'add',
+    });
+
+    await runBenchmark('sort', inputSizes, sortGraph, 'sortStatus', {
+        type: 'sort',
+        datatype: 'u32',
+    });
+
+    await runBenchmark('reduce', inputSizes, reduceGraph, 'reduceStatus', {
+        type: 'reduce',
+        datatype: 'u32',
+        binop: 'add',
+    });
+})();
+</script>
+      </div>
     </div>
   </main>
 </div>
-
-<script>
-  // Save and restore sidebar scroll position
-  (function() {
-    const sidebar = document.querySelector('.docs-sidebar');
-    if (!sidebar) return;
-    
-    // Restore scroll position immediately
-    const savedScrollPos = sessionStorage.getItem('sidebarScrollPos');
-    if (savedScrollPos) {
-      sidebar.scrollTop = parseInt(savedScrollPos);
-    }
-    
-    // Save on scroll
-    let scrollTimer;
-    sidebar.addEventListener('scroll', function() {
-      clearTimeout(scrollTimer);
-      scrollTimer = setTimeout(function() {
-        sessionStorage.setItem('sidebarScrollPos', sidebar.scrollTop);
-      }, 100);
-    });
-    
-    // Save on link click and restore after navigation
-    sidebar.querySelectorAll('a').forEach(function(link) {
-      link.addEventListener('click', function(e) {
-        sessionStorage.setItem('sidebarScrollPos', sidebar.scrollTop);
-      });
-    });
-    
-    // Restore again after a short delay to handle any reflows
-    window.addEventListener('load', function() {
-      if (savedScrollPos) {
-        sidebar.scrollTop = parseInt(savedScrollPos);
-      }
-    });
-  })();
-</script>
-
-  </div>
-</main><footer class="site-footer h-card">
-    <data class="u-url" href="/gridwise/"></data>
-
+<footer class="site-footer">
     <div class="wrapper">
-        <h2 class="footer-heading">Gridwise</h2>
-
-        <div class="footer-col-wrapper">
-            <div class="footer-col footer-col-1">
-                <ul class="contact-list">
-                    <li class="p-name">Gridwise</li><li><a class="u-email" href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></li></ul>
-            </div>
-
-            <div class="footer-col footer-col-3">
-                <p>WebGPU compute primitives in JavaScript</p>
-            </div>
-        </div>
-
-    </div>
-
+        <p>&copy; 2026 Gridwise. WebGPU compute primitives in JavaScript</p><p><a href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></p></div>
 </footer></body>
 
 </html>

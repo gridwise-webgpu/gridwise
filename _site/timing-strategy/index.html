@@ -3,153 +3,347 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Gridwise WebGPU Timing Strategy | Gridwise</title>
+<title>Timing Strategy | Gridwise</title>
 <meta name="generator" content="Jekyll v3.10.0" />
-<meta property="og:title" content="Gridwise WebGPU Timing Strategy" />
+<meta property="og:title" content="Timing Strategy" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="CPU and GPU timing methodologies for measuring and optimizing WebGPU primitive performance in Gridwise." />
 <meta property="og:description" content="CPU and GPU timing methodologies for measuring and optimizing WebGPU primitive performance in Gridwise." />
-<link rel="canonical" href="https://gridwise-webgpu.github.io/gridwise/timing-strategy/" />
-<meta property="og:url" content="https://gridwise-webgpu.github.io/gridwise/timing-strategy/" />
+<link rel="canonical" href="http://localhost:4000/gridwise/timing-strategy/" />
+<meta property="og:url" content="http://localhost:4000/gridwise/timing-strategy/" />
 <meta property="og:site_name" content="Gridwise" />
 <meta property="og:type" content="website" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Gridwise WebGPU Timing Strategy" />
+<meta property="twitter:title" content="Timing Strategy" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebPage","description":"CPU and GPU timing methodologies for measuring and optimizing WebGPU primitive performance in Gridwise.","headline":"Gridwise WebGPU Timing Strategy","url":"https://gridwise-webgpu.github.io/gridwise/timing-strategy/"}</script>
+{"@context":"https://schema.org","@type":"WebPage","description":"CPU and GPU timing methodologies for measuring and optimizing WebGPU primitive performance in Gridwise.","headline":"Timing Strategy","url":"http://localhost:4000/gridwise/timing-strategy/"}</script>
 <!-- End Jekyll SEO tag -->
-<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css"></head>
+<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css">
+    <script src="/gridwise/docs/assets/js/main.js" defer></script></head>
 <body><header class="site-header" role="banner">
-  <div class="wrapper"><a class="site-title" rel="author" href="/gridwise/">Gridwise</a><nav class="site-nav">
-      <input type="checkbox" id="nav-trigger" class="nav-trigger" />
-      <label for="nav-trigger">
-        <span class="menu-icon">
-          <svg viewBox="0 0 18 15" width="18px" height="15px">
-            <path
-              d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.484C18,14.304,17.335,14.969,16.516,14.969H1.484 C0.665,14.969,0,14.304,0,13.484l0,0C0,12.665,0.665,12,1.484,12h15.032C17.335,12,18,12.665,18,13.484L18,13.484z" />
-          </svg>
-        </span>
-      </label>
+  <div class="wrapper">
+    <div class="header-left">
+      <a class="site-title" rel="author" href="/gridwise/">
+        <span class="gradient-text">Gridwise Docs</span>
+      </a>
+    </div>
 
-      <div class="trigger"><a class="button" href="/gridwise/examples-guide/">Example Docs</a>
-        <a class="button" href="/gridwise/">Read Docs</a>
-        <a class="button" href="javascript:void(0)" onclick="launchExample()">Try Interactive Example</a>
-      </div>
-    </nav></div>
+    <div class="header-right"><a class="header-link" href="/gridwise/examples-guide/">Examples</a>
+      <a class="header-link" href="javascript:void(0)" onclick="launchExample()">Try Demo</a>
+      <a class="github-button" href="https://github.com/gridwise-webgpu/gridwise" target="_blank" aria-label="GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+      </a>
+    </div>
+  </div>
 </header>
 
 <script>
   function launchExample() {
     window.open('https://gridwise-webgpu.github.io/gridwise/examples/scan_pane_example.html', '_blank');
   }
-</script><main class="page-content" aria-label="Content">
-  <div class="wrapper">
-    <div class="docs-container">
-    <!-- Left Sidebar Navigation -->
-    <aside class="docs-sidebar">
-        <h3>Documentation</h3><ul class="docs-nav"><li>
-                <a href="/gridwise/architecture/" >
-                    Gridwise Architecture
-                </a>
-            </li><li>
-                <a href="/gridwise/buffer/" >
-                    Gridwise&#39;s Buffer Class
-                </a>
-            </li><li>
-                <a href="/gridwise/binop/" >
-                    Gridwise&#39;s Binary Operator Class
-                </a>
-            </li><li>
-                <a href="/gridwise/scan-and-reduce/" >
-                    Gridwise Scan and Reduce
-                </a>
-            </li><li>
-                <a href="/gridwise/sort/" >
-                    Gridwise Sort
-                </a>
-            </li><li>
-                <a href="/gridwise/builtins-strategy/" >
-                    Gridwise WebGPU @builtins Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/primitive-design/" >
-                    Gridwise WebGPU Primitive Strategy wrt Subgroups
-                </a>
-            </li><li>
-                <a href="/gridwise/subgroup-strategy/" >
-                    Gridwise WebGPU Subgroup Emulation Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/webgpu-object-caching-strategy/" >
-                    Gridwise WebGPU Object Caching Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/timing-strategy/" class="active" >
-                    Gridwise WebGPU Timing Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/writing-a-webgpu-wgsl-workgroup-reduce-function/" >
-                    Abstraction Challenges in Writing a WebGPU/WGSL Workgroup Reduce Function
-                </a>
-            </li></ul><!-- Sidebar Footer -->
-        <div class="sidebar-footer">
-            <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
-                <svg class="github-icon" viewBox="0 0 16 16" width="20" height="20">
-                    <path fill="currentColor"
-                        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z">
-                    </path>
+</script><div class="main-container">
+  <!-- Modern Sidebar Navigation -->
+  <aside class="docs-sidebar" id="docsSidebar">
+    <div class="sidebar-content">
+      <div class="sidebar-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <h1>Documentation</h1>
+      </div>
+
+      <div class="search-box">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" id="docsSearch" placeholder="Search docs..." />
+      </div>
+
+      <nav class="docs-nav"><div class="nav-section">
+          <h3 class="nav-section-title">Getting Started</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/getting-started/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
-                <span>GitHub</span>
-            </a>
+                <span>Introduction</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/installation/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Quick Start</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Core Concepts</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/architecture/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Architecture</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/primitive-design/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Primitive Design</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/subgroup-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                <span>Subgroup Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Primitives</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/scan-and-reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Scan and Reduce</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                <span>Sort</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/binop/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Binary Operations</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Advanced</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/buffer/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+                <span>Buffer Management</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/timing-strategy/" class="active">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Timing Strategy</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/webgpu-object-caching-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Object Caching</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/builtins-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Builtins Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Examples</h3>
+          <ul><li>
+              <a href="/gridwise/examples/reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Reduce Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/scan/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Scan Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Sort Example</span>
+              </a>
+            </li></ul>
+        </div></nav>
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div class="sidebar-footer">
+      <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
+        <svg class="github-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="docs-content">
+    <div class="content-inner"><div class="docs-hero">
+        <div class="badge">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span>Documentation</span>
         </div>
-    </aside>
+        <h1>Timing Strategy</h1><p class="lead">CPU and GPU timing methodologies for measuring and optimizing WebGPU primitive performance in Gridwise.</p></div><article class="post">
+        <div class="post-content">
+          <div style="max-width: 100%; padding: 0;">
 
-    <!-- Main Content Area -->
-    <main class="docs-content">
-        <article class="post">
-            <header class="post-header">
-                <h1 class="post-title">Gridwise WebGPU Timing Strategy</h1>
-            </header>
+<header style="max-width: 800px; margin-bottom: 3rem;">
+  <h1 style="font-size: 2.5rem; font-weight: 800; color: #111827; margin-bottom: 1.5rem; line-height: 1.2;">Timing Strategy</h1>
+  <p style="font-size: 1.25rem; color: #6b7280; line-height: 1.75;">
+    CPU and GPU timing methodologies for measuring and optimizing WebGPU primitive performance in Gridwise.
+  </p>
+</header>
 
-            <div class="post-content">
-                <p>Building a high-performance WebGPU primitive library requires careful timing measurements to ensure that primitives deliver high performance to their users. In developing Gridwise, we designed both CPU and GPU timing methodologies and describe them here.</p>
+<div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 2rem;">
+  <p style="margin: 0; color: #065f46; line-height: 1.75;">
+    Building a high-performance WebGPU primitive library requires careful timing measurements to ensure that primitives deliver high performance to their users. In developing Gridwise, we designed both <strong>CPU</strong> and <strong>GPU timing methodologies</strong> and describe them here.
+  </p>
+</div>
 
-<h2 id="gpu-timing">GPU Timing</h2>
+<h2 style="font-size: 1.875rem; font-weight: 700; color: #111827; margin: 3rem 0 2rem 0; padding-top: 2rem; border-top: 1px solid #e5e7eb;">GPU Timing</h2>
 
-<p>Gridwise’s GPU timing uses WebGPU’s GPU timestamp queries. Gregg Tavares’s “<a href="https://webgpufundamentals.org/webgpu/lessons/webgpu-timing.html">WebGPU Timing Performance
-</a>” is both an excellent overview of using timestamp queries as well as the basis for our implementation. We began with his <a href="https://webgpufundamentals.org/webgpu/lessons/webgpu-timing.html#a-timing-helper">timing helper</a> and augmented it to support calling multiple kernels (which is useful for benchmarking purposes).</p>
+<div style="max-width: 800px; margin-bottom: 3rem;">
+  <h3 style="font-size: 1.25rem; font-weight: 700; color: #111827; margin-bottom: 1rem;">WebGPU Timestamp Queries</h3>
+  
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1.5rem;">
+    Gridwise's GPU timing uses WebGPU's GPU timestamp queries. Gregg Tavares's <a href="https://webgpufundamentals.org/webgpu/lessons/webgpu-timing.html" style="color: #10b981; text-decoration: none; font-weight: 600;">"WebGPU Timing Performance"</a> is both an excellent overview of using timestamp queries as well as the basis for our implementation. We began with his <a href="https://webgpufundamentals.org/webgpu/lessons/webgpu-timing.html#a-timing-helper" style="color: #10b981; text-decoration: none; font-weight: 600;">timing helper</a> and augmented it to support calling multiple kernels (which is useful for benchmarking purposes).
+  </p>
 
-<p>In our implementation, the <code class="language-plaintext highlighter-rouge">Primitive</code> class has a static <code class="language-plaintext highlighter-rouge">__timingHelper</code> member that is initialized to understand. The timing helper is enabled by passing <code class="language-plaintext highlighter-rouge">enableGPUTiming: true</code> as a member of the argument object to <code class="language-plaintext highlighter-rouge">primitive.execute()</code> (i.e., <code class="language-plaintext highlighter-rouge">primitive.execute{ enableGPUTiming: true, ...}</code>).</p>
+  <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+    <p style="margin: 0; color: #065f46; line-height: 1.75;">
+      In our implementation, the <code>Primitive</code> class has a static <code>__timingHelper</code> member that is initialized to understand. The timing helper is enabled by passing <code>enableGPUTiming: true</code> as a member of the argument object to <code>primitive.execute()</code> (i.e., <code>primitive.execute({ enableGPUTiming: true, ...})</code>).
+    </p>
+  </div>
 
-<p>When GPU timing is enabled in this way, <code class="language-plaintext highlighter-rouge">primitive.execute</code> checks for a defined <code class="language-plaintext highlighter-rouge">__timingHelper</code> and initializes one if not, counting the number of kernels in the current primitive for the timing helper’s initialization. As explained by the <a href="https://webgpufundamentals.org/webgpu/lessons/webgpu-timing.html#a-timing-helper">timing helper</a>’s documentation, the timing helper replaces <code class="language-plaintext highlighter-rouge">beginComputePass</code> with its own <code class="language-plaintext highlighter-rouge">beginComputePass</code> that initializes the timing helper.</p>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    <strong>Initialization:</strong> When GPU timing is enabled, <code>primitive.execute</code> checks for a defined <code>__timingHelper</code> and initializes one if not, counting the number of kernels in the current primitive for the timing helper's initialization.
+  </p>
 
-<p>We record a separate timing value for each kernel in the primitive and thus return a list of kernel time durations, one list element per kernel.</p>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    <strong>Per-Kernel Timing:</strong> We record a separate timing value for each kernel in the primitive and thus return a <strong>list of kernel time durations</strong>, one list element per kernel.
+  </p>
 
-<p><code class="language-plaintext highlighter-rouge">primitive.execute</code>’s argument object also takes a <code class="language-plaintext highlighter-rouge">trials</code> argument that defaults to 1. If <code class="language-plaintext highlighter-rouge">trials</code> is <em>n</em>, then every kernel dispatch within the primitive is replaced with <em>n</em> consecutive dispatches. Running more trials is helpful for more reliable timing measurements.</p>
+  <p style="color: #4b5563; line-height: 1.75;">
+    <strong>Multiple Trials:</strong> <code>primitive.execute</code>'s argument object also takes a <code>trials</code> argument that defaults to 1. If <code>trials</code> is <em>n</em>, then every kernel dispatch within the primitive is replaced with <em>n</em> consecutive dispatches. Running more trials is helpful for more reliable timing measurements.
+  </p>
+</div>
 
-<h2 id="cpu-timing">CPU timing</h2>
+<h2 style="font-size: 1.875rem; font-weight: 700; color: #111827; margin: 3rem 0 2rem 0; padding-top: 2rem; border-top: 1px solid #e5e7eb;">CPU Timing</h2>
 
-<p>CPU timing is only possible if the primitive creates its own encoder to ensure that the resulting command buffer only reflects the work within the primitive. It is enabled in a similar way to GPU timing (<code class="language-plaintext highlighter-rouge">primitive.execute{ enableCPUTiming: true, ...}</code>). In our internal discussions, we have settled on the following way to best measure CPU timing, which is what is implemented within Gridwise, but we are open to better suggestions here. Our strategy is to clear the device’s queue, record the current time as <code class="language-plaintext highlighter-rouge">cpuStartTime</code>, submit the command buffer and wait for the queue to clear, then record the current time as <code class="language-plaintext highlighter-rouge">gpuStartTime</code>. The elapsed time is the time between the two CPU time stamps.</p>
+<div style="max-width: 800px; margin-bottom: 3rem;">
+  <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+    <p style="margin: 0; color: #065f46; line-height: 1.75;">
+      CPU timing is only possible if the primitive creates its own encoder to ensure that the resulting command buffer only reflects the work within the primitive. It is enabled in a similar way to GPU timing (<code>primitive.execute({ enableCPUTiming: true, ...})</code>).
+    </p>
+  </div>
 
-<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">commandBuffer</span> <span class="o">=</span> <span class="nx">encoder</span><span class="p">.</span><span class="nx">finish</span><span class="p">();</span>
-<span class="k">if</span> <span class="p">(</span><span class="nx">args</span><span class="p">?.</span><span class="nx">enableCPUTiming</span><span class="p">)</span> <span class="p">{</span>
-  <span class="k">await</span> <span class="k">this</span><span class="p">.</span><span class="nx">device</span><span class="p">.</span><span class="nx">queue</span><span class="p">.</span><span class="nx">onSubmittedWorkDone</span><span class="p">();</span>
-  <span class="k">this</span><span class="p">.</span><span class="nx">cpuStartTime</span> <span class="o">=</span> <span class="nx">performance</span><span class="p">.</span><span class="nx">now</span><span class="p">();</span>
-<span class="p">}</span>
-<span class="k">this</span><span class="p">.</span><span class="nx">device</span><span class="p">.</span><span class="nx">queue</span><span class="p">.</span><span class="nx">submit</span><span class="p">([</span><span class="nx">commandBuffer</span><span class="p">]);</span>
-<span class="k">if</span> <span class="p">(</span><span class="nx">args</span><span class="p">?.</span><span class="nx">enableCPUTiming</span><span class="p">)</span> <span class="p">{</span>
-  <span class="k">await</span> <span class="k">this</span><span class="p">.</span><span class="nx">device</span><span class="p">.</span><span class="nx">queue</span><span class="p">.</span><span class="nx">onSubmittedWorkDone</span><span class="p">();</span>
-  <span class="k">this</span><span class="p">.</span><span class="nx">cpuEndTime</span> <span class="o">=</span> <span class="nx">performance</span><span class="p">.</span><span class="nx">now</span><span class="p">();</span>
-<span class="p">}</span>
-</code></pre></div></div>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1.5rem;">
+    In our internal discussions, we have settled on the following way to best measure CPU timing, which is what is implemented within Gridwise, but we are open to better suggestions here. Our strategy is to clear the device's queue, record the current time as <code>cpuStartTime</code>, submit the command buffer and wait for the queue to clear, then record the current time as <code>cpuEndTime</code>. The elapsed time is the time between the two CPU time stamps.
+  </p>
 
-<h2 id="returning-timing-information">Returning timing information</h2>
+  <div style="background: #1f2937; border-radius: 0.75rem; overflow: hidden; margin-bottom: 2rem;">
+    <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: #374151; border-bottom: 1px solid #4b5563;">
+      <div style="display: flex; gap: 0.375rem;">
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #10b981;"></div>
+      </div>
+      <span style="font-family: 'Monaco', 'Menlo', monospace; font-size: 0.75rem; color: #9ca3af; margin-left: 1rem;">cpu-timing.js</span>
+    </div>
+    <pre style="padding: 1.5rem; margin: 0; font-family: 'Monaco', 'Menlo', monospace; font-size: 0.875rem; line-height: 1.7; overflow-x: auto;"><code><span style="color: #a5b4fc">const</span> <span style="color: #e2e8f0">commandBuffer = encoder.</span><span style="color: #34d399">finish</span>();
+<span style="color: #a5b4fc">if</span> (<span style="color: #e2e8f0">args?.</span><span style="color: #94a3b8">enableCPUTiming</span>) {
+  <span style="color: #a5b4fc">await</span> <span style="color: #a5b4fc">this</span><span style="color: #e2e8f0">.device.queue.</span><span style="color: #34d399">onSubmittedWorkDone</span>();
+  <span style="color: #a5b4fc">this</span><span style="color: #e2e8f0">.cpuStartTime = performance.</span><span style="color: #34d399">now</span>();
+}
+<span style="color: #a5b4fc">this</span><span style="color: #e2e8f0">.device.queue.</span><span style="color: #34d399">submit</span>([<span style="color: #94a3b8">commandBuffer</span>]);
+<span style="color: #a5b4fc">if</span> (<span style="color: #e2e8f0">args?.</span><span style="color: #94a3b8">enableCPUTiming</span>) {
+  <span style="color: #a5b4fc">await</span> <span style="color: #a5b4fc">this</span><span style="color: #e2e8f0">.device.queue.</span><span style="color: #34d399">onSubmittedWorkDone</span>();
+  <span style="color: #a5b4fc">this</span><span style="color: #e2e8f0">.cpuEndTime = performance.</span><span style="color: #34d399">now</span>();
+}</code></pre>
+  </div>
+</div>
 
-<p>The primitive object has a <code class="language-plaintext highlighter-rouge">async getTimingResult</code> member function that returns the CPU and GPU timing result as <code class="language-plaintext highlighter-rouge">const { gpuTotalTimeNS, cpuTotalTimeNS } = await primitive.getTimingResult();</code>. For GPU timing, this call returns a list of total elapsed times per kernel in ns. For CPU timing, this call returns an elapsed time for the entire primitive in ns. Neither accounts for <code class="language-plaintext highlighter-rouge">trials</code>, so the caller of <code class="language-plaintext highlighter-rouge">getTimingResult</code> should divide any returned values by the number of trials.</p>
+<h2 style="font-size: 1.875rem; font-weight: 700; color: #111827; margin: 3rem 0 2rem 0; padding-top: 2rem; border-top: 1px solid #e5e7eb;">Returning Timing Information</h2>
 
-            </div>
-        </article>
-        </main>
+<div style="max-width: 800px; margin-bottom: 3rem;">
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1.5rem;">
+    The primitive object has an <code>async getTimingResult</code> member function that returns the CPU and GPU timing result:
+  </p>
+
+  <div style="background: #1f2937; border-radius: 0.75rem; overflow: hidden; margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: #374151; border-bottom: 1px solid #4b5563;">
+      <div style="display: flex; gap: 0.375rem;">
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #ef4444;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #f59e0b;"></div>
+        <div style="width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #10b981;"></div>
+      </div>
+      <span style="font-family: 'Monaco', 'Menlo', monospace; font-size: 0.75rem; color: #9ca3af; margin-left: 1rem;">get-timing.js</span>
+    </div>
+    <pre style="padding: 1.5rem; margin: 0; font-family: 'Monaco', 'Menlo', monospace; font-size: 0.875rem; line-height: 1.7; overflow-x: auto;"><code><span style="color: #a5b4fc">const</span> { <span style="color: #94a3b8">gpuTotalTimeNS</span>, <span style="color: #94a3b8">cpuTotalTimeNS</span> } = <span style="color: #a5b4fc">await</span> <span style="color: #e2e8f0">primitive.</span><span style="color: #34d399">getTimingResult</span>();</code></pre>
+  </div>
+
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    <strong>GPU Timing:</strong> Returns a <strong>list of total elapsed times per kernel</strong> in nanoseconds (ns).
+  </p>
+
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1.5rem;">
+    <strong>CPU Timing:</strong> Returns an <strong>elapsed time for the entire primitive</strong> in nanoseconds (ns).
+  </p>
+
+  <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1.5rem; border-radius: 0.5rem;">
+    <p style="margin: 0; color: #065f46; line-height: 1.75;">
+      <strong>Important:</strong> Neither timing method accounts for <code>trials</code>, so the caller of <code>getTimingResult</code> should <strong>divide any returned values by the number of trials</strong>.
+    </p>
+  </div>
+</div>
+
+</div>
+
+        </div>
+      </article>
+    </div>
+  </main>
 </div>
 
 <script>
@@ -188,27 +382,9 @@
     });
   })();
 </script>
-
-  </div>
-</main><footer class="site-footer h-card">
-    <data class="u-url" href="/gridwise/"></data>
-
+<footer class="site-footer">
     <div class="wrapper">
-        <h2 class="footer-heading">Gridwise</h2>
-
-        <div class="footer-col-wrapper">
-            <div class="footer-col footer-col-1">
-                <ul class="contact-list">
-                    <li class="p-name">Gridwise</li><li><a class="u-email" href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></li></ul>
-            </div>
-
-            <div class="footer-col footer-col-3">
-                <p>WebGPU compute primitives in JavaScript</p>
-            </div>
-        </div>
-
-    </div>
-
+        <p>&copy; 2026 Gridwise. WebGPU compute primitives in JavaScript</p><p><a href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></p></div>
 </footer></body>
 
 </html>

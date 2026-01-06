@@ -3,198 +3,397 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Gridwise WebGPU Primitive Strategy wrt Subgroups | Gridwise</title>
+<title>Primitive Strategy with Subgroups | Gridwise</title>
 <meta name="generator" content="Jekyll v3.10.0" />
-<meta property="og:title" content="Gridwise WebGPU Primitive Strategy wrt Subgroups" />
+<meta property="og:title" content="Primitive Strategy with Subgroups" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="How Gridwise implements single-pass chained algorithms for sort, scan, and reduce with and without subgroup support." />
 <meta property="og:description" content="How Gridwise implements single-pass chained algorithms for sort, scan, and reduce with and without subgroup support." />
-<link rel="canonical" href="https://gridwise-webgpu.github.io/gridwise/primitive-design/" />
-<meta property="og:url" content="https://gridwise-webgpu.github.io/gridwise/primitive-design/" />
+<link rel="canonical" href="http://localhost:4000/gridwise/primitive-design/" />
+<meta property="og:url" content="http://localhost:4000/gridwise/primitive-design/" />
 <meta property="og:site_name" content="Gridwise" />
 <meta property="og:type" content="website" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Gridwise WebGPU Primitive Strategy wrt Subgroups" />
+<meta property="twitter:title" content="Primitive Strategy with Subgroups" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebPage","description":"How Gridwise implements single-pass chained algorithms for sort, scan, and reduce with and without subgroup support.","headline":"Gridwise WebGPU Primitive Strategy wrt Subgroups","url":"https://gridwise-webgpu.github.io/gridwise/primitive-design/"}</script>
+{"@context":"https://schema.org","@type":"WebPage","description":"How Gridwise implements single-pass chained algorithms for sort, scan, and reduce with and without subgroup support.","headline":"Primitive Strategy with Subgroups","url":"http://localhost:4000/gridwise/primitive-design/"}</script>
 <!-- End Jekyll SEO tag -->
-<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css"></head>
+<link rel="stylesheet" href="/gridwise/docs/assets/css/style.css">
+    <script src="/gridwise/docs/assets/js/main.js" defer></script></head>
 <body><header class="site-header" role="banner">
-  <div class="wrapper"><a class="site-title" rel="author" href="/gridwise/">Gridwise</a><nav class="site-nav">
-      <input type="checkbox" id="nav-trigger" class="nav-trigger" />
-      <label for="nav-trigger">
-        <span class="menu-icon">
-          <svg viewBox="0 0 18 15" width="18px" height="15px">
-            <path
-              d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.484C18,14.304,17.335,14.969,16.516,14.969H1.484 C0.665,14.969,0,14.304,0,13.484l0,0C0,12.665,0.665,12,1.484,12h15.032C17.335,12,18,12.665,18,13.484L18,13.484z" />
-          </svg>
-        </span>
-      </label>
+  <div class="wrapper">
+    <div class="header-left">
+      <a class="site-title" rel="author" href="/gridwise/">
+        <span class="gradient-text">Gridwise Docs</span>
+      </a>
+    </div>
 
-      <div class="trigger"><a class="button" href="/gridwise/examples-guide/">Example Docs</a>
-        <a class="button" href="/gridwise/">Read Docs</a>
-        <a class="button" href="javascript:void(0)" onclick="launchExample()">Try Interactive Example</a>
-      </div>
-    </nav></div>
+    <div class="header-right"><a class="header-link" href="/gridwise/examples-guide/">Examples</a>
+      <a class="header-link" href="javascript:void(0)" onclick="launchExample()">Try Demo</a>
+      <a class="github-button" href="https://github.com/gridwise-webgpu/gridwise" target="_blank" aria-label="GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+      </a>
+    </div>
+  </div>
 </header>
 
 <script>
   function launchExample() {
     window.open('https://gridwise-webgpu.github.io/gridwise/examples/scan_pane_example.html', '_blank');
   }
-</script><main class="page-content" aria-label="Content">
-  <div class="wrapper">
-    <div class="docs-container">
-    <!-- Left Sidebar Navigation -->
-    <aside class="docs-sidebar">
-        <h3>Documentation</h3><ul class="docs-nav"><li>
-                <a href="/gridwise/architecture/" >
-                    Gridwise Architecture
-                </a>
-            </li><li>
-                <a href="/gridwise/buffer/" >
-                    Gridwise&#39;s Buffer Class
-                </a>
-            </li><li>
-                <a href="/gridwise/binop/" >
-                    Gridwise&#39;s Binary Operator Class
-                </a>
-            </li><li>
-                <a href="/gridwise/scan-and-reduce/" >
-                    Gridwise Scan and Reduce
-                </a>
-            </li><li>
-                <a href="/gridwise/sort/" >
-                    Gridwise Sort
-                </a>
-            </li><li>
-                <a href="/gridwise/builtins-strategy/" >
-                    Gridwise WebGPU @builtins Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/primitive-design/" class="active" >
-                    Gridwise WebGPU Primitive Strategy wrt Subgroups
-                </a>
-            </li><li>
-                <a href="/gridwise/subgroup-strategy/" >
-                    Gridwise WebGPU Subgroup Emulation Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/webgpu-object-caching-strategy/" >
-                    Gridwise WebGPU Object Caching Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/timing-strategy/" >
-                    Gridwise WebGPU Timing Strategy
-                </a>
-            </li><li>
-                <a href="/gridwise/writing-a-webgpu-wgsl-workgroup-reduce-function/" >
-                    Abstraction Challenges in Writing a WebGPU/WGSL Workgroup Reduce Function
-                </a>
-            </li></ul><!-- Sidebar Footer -->
-        <div class="sidebar-footer">
-            <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
-                <svg class="github-icon" viewBox="0 0 16 16" width="20" height="20">
-                    <path fill="currentColor"
-                        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z">
-                    </path>
+</script><div class="main-container">
+  <!-- Modern Sidebar Navigation -->
+  <aside class="docs-sidebar" id="docsSidebar">
+    <div class="sidebar-content">
+      <div class="sidebar-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <h1>Documentation</h1>
+      </div>
+
+      <div class="search-box">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" id="docsSearch" placeholder="Search docs..." />
+      </div>
+
+      <nav class="docs-nav"><div class="nav-section">
+          <h3 class="nav-section-title">Getting Started</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/getting-started/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
-                <span>GitHub</span>
-            </a>
+                <span>Introduction</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/installation/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Quick Start</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Core Concepts</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/architecture/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Architecture</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/primitive-design/" class="active">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Primitive Design</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/subgroup-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                <span>Subgroup Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Primitives</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/scan-and-reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Scan and Reduce</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                <span>Sort</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/binop/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Binary Operations</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Advanced</h3>
+          <ul>
+            <li>
+              <a href="/gridwise/buffer/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+                <span>Buffer Management</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/timing-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Timing Strategy</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/webgpu-object-caching-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                <span>Object Caching</span>
+              </a>
+            </li>
+            <li>
+              <a href="/gridwise/builtins-strategy/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Builtins Strategy</span>
+              </a>
+            </li>
+          </ul>
+        </div><div class="nav-section">
+          <h3 class="nav-section-title">Examples</h3>
+          <ul><li>
+              <a href="/gridwise/examples/reduce/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Reduce Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/scan/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Scan Example</span>
+              </a>
+            </li><li>
+              <a href="/gridwise/examples/sort/" >
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <span>Sort Example</span>
+              </a>
+            </li></ul>
+        </div></nav>
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div class="sidebar-footer">
+      <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
+        <svg class="github-icon" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="docs-content">
+    <div class="content-inner"><div class="docs-hero">
+        <div class="badge">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span>Documentation</span>
         </div>
-    </aside>
+        <h1>Primitive Strategy with Subgroups</h1><p class="lead">How Gridwise implements single-pass chained algorithms for sort, scan, and reduce with and without subgroup support.</p></div><article class="post">
+        <div class="post-content">
+          <div style="max-width: 100%; padding: 0;">
 
-    <!-- Main Content Area -->
-    <main class="docs-content">
-        <article class="post">
-            <header class="post-header">
-                <h1 class="post-title">Gridwise WebGPU Primitive Strategy wrt Subgroups</h1>
-            </header>
+<!-- Header Section -->
+<header style="max-width: 100%; margin-bottom: 3rem;">
+  <h1 style="font-size: 2.5rem; font-weight: 800; color: #111827; margin-bottom: 1.5rem; line-height: 1.2;">Primitive Strategy with Subgroups</h1>
+  <p style="font-size: 1.25rem; color: #6b7280; line-height: 1.75;">
+    We wish to implement WebGPU sort, scan, and reduce. The fastest known GPU techniques for these operations are single-pass (chained) algorithms that minimize overall memory bandwidth. However, these techniques have historically been written using warp/subgroup support, and that subgroup support appears to be critical for their high performance.
+  </p>
+</header>
 
-            <div class="post-content">
-                <p>We wish to implement WebGPU sort, scan, and reduce. The fastest known GPU techniques for these operations are single-pass (chained) algorithms that minimize overall memory bandwidth. However, these techniques have historically been written using warp/subgroup support, and that subgroup support appears to be critical for their high performance. This document looks at the different considerations for different primitive implementations.</p>
+<!-- Section 1: Algorithm Overview -->
+<section style="max-width: 100%; margin-bottom: 4rem;">
+  <h2 style="font-size: 1.5rem; font-weight: 700; color: #111827; margin-bottom: 1rem;">Single-Pass (Chained) Algorithm</h2>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    Most GPU algorithms are limited by memory bandwidth. This is also true of sort, scan, and reduce. The fastest algorithms are those that require the least memory traffic.
+  </p>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    <strong>How it works:</strong>
+  </p>
+  <ol style="color: #4b5563; line-height: 1.75; margin-left: 1.5rem; margin-bottom: 1rem;">
+    <li style="margin-bottom: 0.75rem;">The input is divided into tiles. We launch one workgroup per tile. Each workgroup can process its entire tile in parallel and in its own local workgroup memory.</li>
+    <li style="margin-bottom: 0.75rem;">Each tile maintains a globally visible region of memory where it posts its results. Those results can be in one of three states:
+      <ul style="margin-top: 0.5rem; margin-left: 1rem;">
+        <li style="margin-bottom: 0.25rem;"><strong>"invalid"</strong> — no result yet</li>
+        <li style="margin-bottom: 0.25rem;"><strong>"local reduction"</strong> — result is only a function of the current tile's input</li>
+        <li style="margin-bottom: 0.25rem;"><strong>"global reduction"</strong> — result is a function of the current tile's input AND all previous tiles' inputs</li>
+      </ul>
+    </li>
+    <li style="margin-bottom: 0.5rem;">Each tile follows these steps:
+      <ul style="margin-top: 0.5rem; margin-left: 1rem;">
+        <li style="margin-bottom: 0.25rem;">Consume its input tile and post a globally visible "local reduction" of that input</li>
+        <li style="margin-bottom: 0.25rem;">Compute a globally visible "global reduction" by fetching the previous tile's global reduction result and combining it with the current tile's local reduction result</li>
+        <li style="margin-bottom: 0.25rem;">Post that globally visible global reduction result to globally visible memory</li>
+      </ul>
+    </li>
+  </ol>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    This approach computes tiles in parallel, but then serializes the reduction of the results of each of those tiles. The reduction operation itself is cheap, and all inputs and outputs are likely in cache.
+  </p>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    <strong>Key refinements:</strong>
+  </p>
+  <ul style="color: #4b5563; line-height: 1.75; margin-left: 1.5rem; margin-bottom: 1.5rem;">
+    <li style="margin-bottom: 0.5rem;"><strong>Lookback:</strong> If waiting on the previous tile's global reduction result, look farther back in the serialization chain to aggressively accumulate enough results</li>
+    <li style="margin-bottom: 0.5rem;"><strong>Fallback:</strong> If waiting on the previous tile's local reduction to post, redundantly recompute that local reduction in your own workgroup</li>
+  </ul>
 
-<h2 id="brief-overview-of-single-pass-chained-algorithm">Brief overview of single-pass (chained) algorithm</h2>
-
-<p>Most GPU algorithms are limited by memory bandwidth. This is also true of sort, scan, and reduce. The fastest algorithms are those that require the least memory traffic. This description is high-level and elides many details.</p>
-
-<p>The single-pass (chained) algorithms work as follows:</p>
-
-<ul>
-  <li>The input is divided into tiles. We launch one workgroup per tile. Each workgroup can process its entire tile in parallel and in its own local workgroup memory.</li>
-  <li>Each tile maintains a globally visible region of memory where it posts its results. Those results can be in one of three states: “invalid”, “local reduction” (reflecting a result that is only the function of the current tile’s input), and “global reduction” (reflecting a result that is a function of the current tile’s input AND all previous tiles’ inputs).</li>
-  <li>Each tile follows these steps:
-    <ul>
-      <li>Consume its input tile and post a globally visible “local reduction” of that input.</li>
-      <li>Compute a globally visible “global reduction”. The global reduction is the result of ALL tiles up to and including the current tile. In practice, this is computed by fetching the previous tile’s global reduction result and combining it with the current tile’s local reduction result, resulting in a global reduction result for my tile.</li>
-      <li>Post that globally visible global reduction result to globally visible memory.</li>
+  <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1.5rem; margin-bottom: 1rem;">
+    <h4 style="font-size: 1rem; font-weight: 700; color: #065f46; margin-bottom: 1rem;">Memory Efficiency Benefits</h4>
+    <p style="color: #065f46; margin-bottom: 0.5rem;"><strong>Minimum global memory traffic:</strong></p>
+    <ul style="color: #065f46; line-height: 1.5; margin-left: 1.5rem;">
+      <li style="margin-bottom: 0.5rem;">Each input element read once</li>
+      <li style="margin-bottom: 0.5rem;">Each output element written once</li>
+      <li style="margin-bottom: 0.5rem;">Negligible intermediate traffic</li>
     </ul>
-  </li>
-  <li>This approach computes tiles in parallel, but then serializes the reduction of the results of each of those tiles. Serializing this reduction seems like a performance bottleneck. However, the reduction operation itself is cheap, and all inputs and outputs for this reduction operation are likely in cache. In practice, this reduction is not a bottleneck on modern GPUs.</li>
-  <li>Refinements to this process include:
-    <ul>
-      <li>If your workgroup is waiting on the previous tile’s global reduction result, look farther back in the serialization chain to aggressively accumulate enough results for your tile to reconstruct the global summary your workgroup needs. (“Lookback”)</li>
-      <li>If your workgroup is waiting on the previous tile’s local reduction to post, just (redundantly) recompute that local reduction in your own workgroup. (“Fallback”)</li>
+  </div>
+  
+  <div style="padding: 1.5rem; border: 2px solid #ef4444; border-radius: 0.5rem; background: #fef2f2;">
+    <h4 style="font-size: 1rem; font-weight: 700; color: #991b1b; margin-bottom: 0.5rem;">⚠️ Performance Critical</h4>
+    <p style="color: #991b1b; margin: 0;">Subgroup instructions are essential for sufficient throughput. Without them, workgroup barriers inhibit performance.</p>
+  </div>
+</section>
+
+<!-- Section 2: Making Chained Algorithms Fast -->
+<section style="max-width: 100%; margin-bottom: 4rem;">
+  <h2 style="font-size: 1.5rem; font-weight: 700; color: #111827; margin-bottom: 1rem;">How Can We Make Chained Algorithms Fast?</h2>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    The most important implementation focus is to ensure that the entire implementation is <strong>memory-bound</strong>.
+  </p>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    The computation per tile typically requires:
+  </p>
+  <ul style="color: #4b5563; line-height: 1.75; margin-left: 1.5rem; margin-bottom: 1rem;">
+    <li style="margin-bottom: 0.5rem;">Reading a tile of data from memory</li>
+    <li style="margin-bottom: 0.5rem;">Computing results based on that input tile data</li>
+    <li style="margin-bottom: 0.5rem;">Writing results back to memory</li>
+  </ul>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1rem;">
+    For maximum overall throughput, the <strong>computation throughput must be faster than the memory throughput</strong>. In practice, on today's GPUs, this requires careful kernel design with respect to computation; simple kernels are likely to become performance bottlenecks.
+  </p>
+  <p style="color: #4b5563; line-height: 1.75; margin-bottom: 1.5rem;">
+    Kernels with less memory demand (specifically, <strong>reduction kernels</strong>) are especially performance-sensitive because there is less memory traffic to cover the cost of the computation.
+  </p>
+  
+  <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 2rem;">
+    <p style="color: #991b1b; font-weight: 600; margin: 0;">It appears likely that kernels must take advantage of subgroup instructions to achieve sufficient throughput. Without these primitives, kernels require numerous workgroup barriers that inhibit performance.</p>
+  </div>
+
+  <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1.5rem;">
+    <h4 style="font-size: 1rem; font-weight: 700; color: #065f46; margin-bottom: 1rem;">Subgroup Challenge</h4>
+    <p style="color: #065f46; margin-bottom: 1rem;">
+      Subgroup instructions are particularly challenging because different hardware has different subgroup sizes.
+    </p>
+    <p style="color: #065f46; margin-bottom: 0.5rem;"><strong>Common Subgroup Sizes:</strong></p>
+    <ul style="color: #065f46; line-height: 1.5; margin-left: 1.5rem; margin-bottom: 1rem;">
+      <li style="margin-bottom: 0.25rem;">NVIDIA: 32 threads (warp)</li>
+      <li style="margin-bottom: 0.25rem;">AMD: 64 threads (wavefront)</li>
+      <li style="margin-bottom: 0.25rem;">Intel: 8-32 threads (SIMD)</li>
     </ul>
-  </li>
-</ul>
+    <p style="color: #065f46; margin: 0;">
+      Writing <strong>subgroup-size-agnostic kernels</strong> is complex and requires careful abstraction.
+    </p>
+  </div>
+</section>
 
-<p>The benefit to a single-pass (chained) algorithm is that it requires a minimum of global memory traffic: each input element is only read once, each output element is only written once, and intermediate memory traffic is negligible compared to reads/writes of input/output elements.</p>
+<!-- Section 3: Design Choices -->
+<section style="max-width: 100%; padding-top: 2rem; border-top: 1px solid #e5e7eb; margin-bottom: 3rem;">
+  <h2 style="font-size: 1.875rem; font-weight: 700; color: #111827; margin-bottom: 2rem;">Design Choices</h2>
 
-<h3 id="how-can-we-make-chained-algorithms-fast">How can we make chained algorithms fast?</h3>
+  <h3 style="font-size: 1.25rem; font-weight: 700; color: #111827; margin-bottom: 1rem;">Subgroup Support Strategy</h3>
+  
+  <p style="margin-bottom: 0.5rem;"><strong>Use subgroups everywhere + emulate:</strong></p>
+  <ul style="margin-left: 1.5rem; margin-bottom: 1rem;">
+    <li style="color: #10b981; margin-bottom: 0.25rem;">✓ One code base (easier maintenance)</li>
+    <li style="color: #ef4444; margin-bottom: 0.25rem;">✗ Emulated code is not likely to be performance-competitive</li>
+    <li style="color: #ef4444; margin-bottom: 0.25rem;">✗ Current subgroup support is fragile</li>
+  </ul>
 
-<p>The most important implementation focus in these algorithms is to ensure that the entire implementation is memory-bound. The computation per tile typically requires reading a tile of data from memory, computing results based on that input tile data, and writing results back to memory. For maximum overall throughput, the computation throughput must be faster than the memory throughput. In practice, on today’s GPUs, this requires careful kernel design with respect to computation; simple kernels are likely to become performance bottlenecks. Kernels with less memory demand (specifically, reduction kernels) are especially performance-sensitive because there is less memory traffic to cover the cost of the computation.</p>
+  <p style="margin-bottom: 0.5rem;"><strong>Never use subgroups:</strong></p>
+  <ul style="margin-left: 1.5rem; margin-bottom: 2rem;">
+    <li style="color: #10b981; margin-bottom: 0.25rem;">✓ Most portable</li>
+    <li style="color: #ef4444; margin-bottom: 0.25rem;">✗ Unlikely to deliver top performance</li>
+  </ul>
 
-<p>Specifically, it appears likely that kernels must take advantage of subgroup instructions to achieve sufficient throughput. Without these primitives, kernels require numerous workgroup barriers that inhibit performance. Subgroup instructions are particularly challenging because different hardware has different subgroup sizes; writing subgroup-size-agnostic kernels is complex.</p>
+  <h3 style="font-size: 1.25rem; font-weight: 700; color: #111827; margin-bottom: 1rem;">Algorithm Strategy</h3>
+  
+  <p style="margin-bottom: 0.5rem;"><strong>Always use chained:</strong></p>
+  <ul style="margin-left: 1.5rem; margin-bottom: 1rem;">
+    <li style="color: #10b981; margin-bottom: 0.25rem;">✓ Likely to be highest-performance option</li>
+    <li style="color: #10b981; margin-bottom: 0.25rem;">✓ Maintain only one code base</li>
+    <li style="color: #ef4444; margin-bottom: 0.25rem;">✗ Most complex implementation</li>
+    <li style="color: #ef4444; margin-bottom: 0.25rem;">✗ Unlikely to deliver good performance without subgroups, which present definite fragility challenges in the chained context</li>
+  </ul>
 
-<h2 id="design-choice-use-subgroups--emulation-vs-no-subgroups">Design choice: Use subgroups + emulation vs. no-subgroups</h2>
+  <p style="margin-bottom: 0.5rem;"><strong>Hybrid approach:</strong></p>
+  <ul style="margin-left: 1.5rem; margin-bottom: 1rem;">
+    <li style="color: #10b981; margin-bottom: 0.25rem;">✓ Allows most flexible performance tradeoffs between performance and capabilities</li>
+    <li style="color: #ef4444; margin-bottom: 0.25rem;">✗ Must maintain two different code bases (little overlap)</li>
+    <li style="color: #ef4444; margin-bottom: 0.25rem;">✗ Little ability to specialize beyond "has subgroups vs. no subgroups"</li>
+  </ul>
 
-<h3 id="use-subgroup-instructions-everywhere-emulate-subgroup-instructions-in-software-where-not-available">Use subgroup instructions everywhere, emulate subgroup instructions in software where not available</h3>
+  <p style="margin-bottom: 0.5rem;"><strong>Never use chained:</strong></p>
+  <ul style="margin-left: 1.5rem; margin-bottom: 1.5rem;">
+    <li style="color: #10b981; margin-bottom: 0.25rem;">✓ Well-known and -tested implementation strategy</li>
+    <li style="color: #10b981; margin-bottom: 0.25rem;">✓ Maintain one code base</li>
+    <li style="color: #10b981; margin-bottom: 0.25rem;">✓ Simplest code</li>
+    <li style="color: #ef4444; margin-bottom: 0.25rem;">✗ Will not achieve top performance (theoretically, ⅔ the performance of chained approaches)</li>
+  </ul>
+</section>
 
-<ul>
-  <li>+: One code base (easier maintenance)</li>
-  <li>–: Emulated code is not likely to be performance-competitive</li>
-  <li>–: Current subgroup support is fragile</li>
-</ul>
+</div>
 
-<h3 id="never-use-subgroups-anywhere">Never use subgroups anywhere</h3>
+<style>
+@media (max-width: 768px) {
+  section[style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  div[style*="position: sticky"] {
+    position: relative !important;
+  }
+}
+</style>
 
-<ul>
-  <li>+: Most portable</li>
-  <li>–: Unlikely to deliver top performance</li>
-</ul>
 
-<h2 id="design-choice-use-chained-algorithms-vs-hybrid-vs-not">Design choice: Use chained algorithms vs. hybrid vs. not</h2>
-
-<h3 id="always-use-chained-algorithms">Always use chained algorithms</h3>
-
-<ul>
-  <li>+: Likely to be highest-performance option</li>
-  <li>+: Maintain only one code base</li>
-  <li>–: Most complex implementation</li>
-  <li>–: Unlikely to deliver good performance without subgroups, which present definite fragility challenges in the chained context</li>
-</ul>
-
-<h3 id="hybrid-approach-sometimes-use-chained-algorithms-sometimes-dont">Hybrid approach: sometimes use chained algorithms, sometimes don’t</h3>
-
-<ul>
-  <li>+: Allows most flexible performance tradeoffs between performance and capabilities</li>
-  <li>–: Must maintain two different code bases (little overlap)</li>
-  <li>–: Little ability to specialize beyond “has subgroups vs. no subgroups”</li>
-</ul>
-
-<h3 id="never-use-chained-algorithms">Never use chained algorithms</h3>
-
-<ul>
-  <li>+: Well-known and -tested implementation strategy</li>
-  <li>+: Maintain one code base</li>
-  <li>+: Simplest code</li>
-  <li>–: Will not achieve top performance (theoretically, ⅔ the performance of chained approaches)</li>
-</ul>
-
-            </div>
-        </article>
-        </main>
+        </div>
+      </article>
+    </div>
+  </main>
 </div>
 
 <script>
@@ -233,27 +432,9 @@
     });
   })();
 </script>
-
-  </div>
-</main><footer class="site-footer h-card">
-    <data class="u-url" href="/gridwise/"></data>
-
+<footer class="site-footer">
     <div class="wrapper">
-        <h2 class="footer-heading">Gridwise</h2>
-
-        <div class="footer-col-wrapper">
-            <div class="footer-col footer-col-1">
-                <ul class="contact-list">
-                    <li class="p-name">Gridwise</li><li><a class="u-email" href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></li></ul>
-            </div>
-
-            <div class="footer-col footer-col-3">
-                <p>WebGPU compute primitives in JavaScript</p>
-            </div>
-        </div>
-
-    </div>
-
+        <p>&copy; 2026 Gridwise. WebGPU compute primitives in JavaScript</p><p><a href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></p></div>
 </footer></body>
 
 </html>
