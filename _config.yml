@@ -1,31 +1,36 @@
+# Ultra-minimal Jekyll config
+
 title: Gridwise
-email: jowens@ece.ucdavis.edu
-description: WebGPU compute primitives in JavaScript
-baseurl: "/gridwise"
+description: WebGPU Compute Primitives in JavaScript
 url: "https://gridwise-webgpu.github.io"
-github_username: gridwise-webgpu
+baseurl: "/gridwise"
 
-markdown: kramdown
-remote_theme: jekyll/minima
-permalink: pretty
-plugins:
-  - jekyll-feed
-  - jekyll-remote-theme
+# Tell Jekyll that collections (like _posts) are inside docs/
+source: docs
 
+theme: minima
 
-header_pages:
-  - about.markdown
-
-
+# Exclude everything else from Jekyll processing
 exclude:
-  - misc/
+  - "*.mjs"
+  - "*.js"
+  - "examples/"
+  - "misc/"
   - Gemfile
   - Gemfile.lock
+  - "*.py"
+  - README.md
   - vendor/
   - .bundle/
+  - node_modules/
 
-include:
+# Keep files as-is (don't process)
+keep_files:
+  - examples
   - "*.mjs"
+  - "*.html"
 
-includes_dir: docs/_includes
-layouts_dir: docs/_layouts
+markdown: kramdown
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
