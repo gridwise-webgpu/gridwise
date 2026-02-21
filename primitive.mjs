@@ -6,7 +6,12 @@ import {
   wgslFunctionsWithoutSubgroupSupport,
 } from "./wgslFunctions.mjs";
 import { CountingMap } from "./mapvariants.mjs";
-import { formatWGSL } from "./util.mjs";
+import {
+  formatWGSL,
+  clearBufferWGSL,
+  CLEAR_WORKGROUP_SIZE,
+  divRoundUp,
+} from "./util.mjs";
 
 class WebGPUObjectCache {
   constructor({
@@ -706,7 +711,17 @@ export class BasePrimitive {
 
           /** If we have specified N trials, launch 1 pass with N dispatches.
            * It's the programmer's responsibility to make sure that additional passes
-           * are idempotent if trials > 1. */
+           *   are idempotent if trials > 1.
+           * However, sometimes this might be difficult, because the passes are
+           *   NOT idempotent and cannot easily be made idempotent.
+           *   In this case, we provide one possibly helpful hook.
+           *   If action.resetBuffersForBenchmarkingOnly is a member and contains
+           *   a list with buffers, for each buffer in that list, call clear_buffer
+           *   to reset this buffer to all zeroes. These clear_buffer calls are
+           *   interleaved with the actual kernel dispatch. For N trials, we make
+           *   N-1 dispatches of clear_buffer, interleaved with the N calls to this
+           *   kernel.
+           */
           const kernelPass = args.enableGPUTiming
             ? BasePrimitive.__timingHelper.beginComputePass(
                 encoder,
@@ -742,8 +757,79 @@ export class BasePrimitive {
             dispatchGeometry = this.getDispatchGeometry();
           }
 
+          const needsBufferResetForBenchmarking =
+            (args.trials ?? 1) > 1 &&
+            action.resetBuffersForBenchmarkingOnly?.length > 0;
+          let clearItems = [];
+          if (needsBufferResetForBenchmarking) {
+            const clearModuleCacheKey = generateCacheKey(clearBufferWGSL);
+            let clearModule = webGPUObjectCache.computeModules.get(
+              clearModuleCacheKey
+            );
+            if (!clearModule) {
+              clearModule = this.device.createShaderModule({
+                label: "clear_buffer shader",
+                code: clearBufferWGSL,
+              });
+              clearModule.__cacheKey = clearModuleCacheKey;
+              webGPUObjectCache.computeModules.set(
+                clearModuleCacheKey,
+                clearModule
+              );
+            }
+            const clearPipelineDesc = {
+              layout: "auto",
+              compute: { module: clearModule, entryPoint: "clear_buffer" },
+            };
+            const clearPipelineCacheKey = generateCacheKey(clearPipelineDesc);
+            let clearPipeline = webGPUObjectCache.computePipelines.get(
+              clearPipelineCacheKey
+            );
+            if (!clearPipeline) {
+              clearPipeline =
+                this.device.createComputePipeline(clearPipelineDesc);
+              clearPipeline.__cacheKey = clearPipelineCacheKey;
+              webGPUObjectCache.computePipelines.set(
+                clearPipelineCacheKey,
+                clearPipeline
+              );
+            }
+            for (const bufferName of action.resetBuffersForBenchmarkingOnly) {
+              const buf = this.getBuffer(bufferName);
+              const clearBindGroup = this.device.createBindGroup({
+                label: `clear_buffer bindGroup for ${bufferName}`,
+                layout: clearPipeline.getBindGroupLayout(0),
+                entries: [{ binding: 0, resource: buf.buffer }],
+              });
+              clearItems.push({
+                clearPipeline,
+                clearBindGroup,
+                clearDispatch: divRoundUp(buf.size / 4, CLEAR_WORKGROUP_SIZE),
+              });
+            }
+          }
+
           for (let trial = 0; trial < (args.trials ?? 1); trial++) {
             /* dispatchGeometry is a vector, so spread it to make it x,y,z */
+            if (trial > 0 && needsBufferResetForBenchmarking) {
+              for (const {
+                clearPipeline,
+                clearBindGroup,
+                clearDispatch,
+              } of clearItems) {
+                kernelPass.setPipeline(clearPipeline);
+                kernelPass.setBindGroup(0, clearBindGroup);
+                kernelPass.dispatchWorkgroups(clearDispatch);
+              }
+              /* restore main pipeline and bind groups */
+              kernelPass.setPipeline(computePipeline);
+              for (const [bindGroupIndex] of action.bindings.entries()) {
+                kernelPass.setBindGroup(
+                  bindGroupIndex,
+                  kernelBindGroups[bindGroupIndex]
+                );
+              }
+            }
             kernelPass.dispatchWorkgroups(...dispatchGeometry);
           }
           kernelPass.end();
