@@ -37,7 +37,7 @@ export async function main(navigator) {
     console.warn(
       "Input length (currently: ",
       inputLength,
-      ") must be divisible by 4 (output is likely to be incorrect) "
+      ") must be divisible by 4 (output is likely to be incorrect) ",
     );
   }
   const memsrc = new (datatypeToTypedArray(datatype))(inputLength);
@@ -65,7 +65,7 @@ export async function main(navigator) {
     device,
     datatype,
     inputLength: inputLength,
-    copyOutputToTemp: true,
+    copyOutputToTemp: true /* output is in memdestBuffer */,
   });
 
   const primitive = sortKeysPrimitive;
@@ -114,14 +114,14 @@ export async function main(navigator) {
     0,
     mappableMemdestBuffer,
     0,
-    mappableMemdestBuffer.size
+    mappableMemdestBuffer.size,
   );
   const commandBuffer = encoder.finish();
   device.queue.submit([commandBuffer]);
 
   await mappableMemdestBuffer.mapAsync(GPUMapMode.READ);
   const memdest = new (datatypeToTypedArray(datatype))(
-    mappableMemdestBuffer.getMappedRange().slice()
+    mappableMemdestBuffer.getMappedRange().slice(),
   );
   mappableMemdestBuffer.unmap();
 
