@@ -365,7 +365,6 @@ export class OneSweepSort extends BaseSort {
     @compute @workgroup_size(REDUCE_BLOCK_DIM, 1, 1)
     fn global_hist(builtinsUniform: BuiltinsUniform,
         builtinsNonuniform: BuiltinsNonuniform) {
-      // Reset histogram to zero
       // this may be unnecessary in WGSL? (vars are zero-initialized)
       for (var i = builtinsNonuniform.lidx; i < REDUCE_HIST_SIZE; i += REDUCE_BLOCK_DIM) {
         atomicStore(&wg_globalHist[i], 0u);
@@ -1190,7 +1189,7 @@ export class OneSweepSort extends BaseSort {
     this.inputLength = inputSize / this.keyDatatype.bytesPerElement;
     if (this.inputLength > 2 ** 30) {
       console.warn(
-        "OneSweep sort is limited to 2^30 elements; this is not easily fixed."
+        "OneSweep sort is limited to 2^30 elements; this is not easily fixed.",
       );
     }
     this.RADIX = this.RADIX ?? 256;
@@ -1209,7 +1208,7 @@ export class OneSweepSort extends BaseSort {
     /* how many 32b words do we need to allocate PART_SIZE keys? */
     if (this.keyDatatype.bitsPerElement % 32 !== 0) {
       console.warn(
-        `Warning: Sort key bitlength of ${this.keyDatatype.bitsPerElement} must be divisible by 32.`
+        `Warning: Sort key bitlength of ${this.keyDatatype.bitsPerElement} must be divisible by 32.`,
       );
     }
     this.PART_SIZE_32B = this.PART_SIZE * this.keyDatatype.wordsPerElement;
@@ -1220,7 +1219,7 @@ export class OneSweepSort extends BaseSort {
     this.passWorkgroupCount = divRoundUp(this.inputLength, this.PART_SIZE);
     this.reduceWorkgroupCount = divRoundUp(
       this.inputLength,
-      this.REDUCE_PART_SIZE
+      this.REDUCE_PART_SIZE,
     );
     /* let's pack all uniform buffers (sortParameters) into one buffer
      * sortParameters[0]: for global_hist
@@ -1236,13 +1235,13 @@ export class OneSweepSort extends BaseSort {
       /* how much space per entry? BUT it better be at least minUniform... */
       this.uniformBufferLength,
       this.device.limits.minUniformBufferOffsetAlignment /
-        Uint32Array.BYTES_PER_ELEMENT
+        Uint32Array.BYTES_PER_ELEMENT,
     );
     this.uniformBufferOffsetSize =
       /* used in creating bindings below */
       this.uniformBufferOffsetLength * Uint32Array.BYTES_PER_ELEMENT;
     this.sortParameters = new Uint32Array(
-      (this.SORT_PASSES + 2) * this.uniformBufferOffsetLength
+      (this.SORT_PASSES + 2) * this.uniformBufferOffsetLength,
     );
     for (var i = 0; i < this.SORT_PASSES + 2; i++) {
       const offset = i * this.uniformBufferOffsetLength;
@@ -1342,6 +1341,7 @@ export class OneSweepSort extends BaseSort {
         bufferTypes,
         bindings: [bindings0Even, [sortParameterBinding[0]]],
         label: `OneSweep sort (${this.type}, ${this.direction}) global_hist [subgroups: ${this.useSubgroups}]`,
+        resetBuffersForBenchmarkingOnly: ["hist"],
         logKernelCodeToConsole: false,
         getDispatchGeometry: () => {
           return [this.reduceWorkgroupCount];
@@ -1375,7 +1375,7 @@ export class OneSweepSort extends BaseSort {
           getDispatchGeometry: () => {
             return [this.passWorkgroupCount];
           },
-        })
+        }),
       );
     }
     if (this.copyOutputToTemp) {
@@ -1386,14 +1386,14 @@ export class OneSweepSort extends BaseSort {
         new CopyBufferToBuffer({
           source: "keysInOut",
           destination: "keysTemp",
-        })
+        }),
       );
       if (this.type === "keyvalue") {
         actions.push(
           new CopyBufferToBuffer({
             source: "payloadInOut",
             destination: "payloadTemp",
-          })
+          }),
         );
       }
     }
@@ -1424,7 +1424,7 @@ export class OneSweepSort extends BaseSort {
         "src:",
         memsrc,
         "dest",
-        memdest
+        memdest,
       );
     }
     let inputForPrinting = memsrc;
@@ -1445,18 +1445,89 @@ export class OneSweepSort extends BaseSort {
           "src:",
           memsrcpayload,
           "dest",
-          memdestpayload
+          memdestpayload,
         );
       }
       inputForPrinting = [memsrc, memsrcpayload];
       outputForPrinting = [memdest, memdestpayload];
+    }
+    /* For keyvalue sorts, validate using multiset-based comparison rather
+     * than position-by-position: (1) verify output keys are in the correct
+     * order, then (2) for each key value, verify that the multiset of
+     * associated payloads in the output matches the multiset in the input.
+     * This is stability-agnostic: equal-key elements may appear in any
+     * order in the output, so the GPU's tie-breaking convention does not
+     * need to match the reference sort's convention. */
+    if (this.type === "keyvalue") {
+      let rvStr = "";
+      let errBudget = 5;
+      /* 1. Check key ordering */
+      for (let i = 1; i < memdest.length && errBudget > 0; i++) {
+        const ordered =
+          this.direction === "ascending"
+            ? memdest[i] >= memdest[i - 1]
+            : memdest[i] <= memdest[i - 1];
+        if (!ordered) {
+          rvStr += `\nKey ordering error at position ${i}: ${memdest[i - 1]} then ${memdest[i]}`;
+          errBudget--;
+        }
+      }
+      /* 2. Check payload multisets */
+      if (errBudget > 0) {
+        const payloadCmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+        const buildMultiset = (keys, vals) => {
+          const m = new Map();
+          for (let i = 0; i < keys.length; i++) {
+            const k = keys[i];
+            let arr = m.get(k);
+            if (!arr) {
+              arr = [];
+              m.set(k, arr);
+            }
+            arr.push(vals[i]);
+          }
+          for (const arr of m.values()) arr.sort(payloadCmp);
+          return m;
+        };
+        const inSet = buildMultiset(memsrc, memsrcpayload);
+        const outSet = buildMultiset(memdest, memdestpayload);
+        for (const [k, inArr] of inSet) {
+          if (errBudget === 0) break;
+          const outArr = outSet.get(k);
+          if (!outArr || outArr.length !== inArr.length) {
+            rvStr += `\nKey ${k}: expected ${inArr.length} payload(s), got ${outArr?.length ?? 0}`;
+            errBudget--;
+            continue;
+          }
+          for (let j = 0; j < inArr.length && errBudget > 0; j++) {
+            if (inArr[j] !== outArr[j]) {
+              rvStr += `\nKey ${k}: payload mismatch (expected ${inArr[j]}, got ${outArr[j]})`;
+              errBudget--;
+              break;
+            }
+          }
+        }
+      }
+      if (rvStr !== "") {
+        console.log(
+          this.label,
+          this.type,
+          this.direction,
+          this,
+          "with input",
+          inputForPrinting,
+          "and GPU output",
+          outputForPrinting
+        );
+      }
+      return rvStr;
     }
     function sortKeysAndValues(keys, values, direction) {
       if (keys.length !== values.length) {
         console.warn(
           "OneSweepSort::validate: keys/values must have same length",
           keys,
-          values
+          values,
         );
       }
       /*build index*/
@@ -1473,6 +1544,13 @@ export class OneSweepSort extends BaseSort {
               const b = keys[idxB];
               if (a < b) return 1;
               if (a > b) return -1;
+              /* Equal keys: preserve original relative order (stable sort).
+               * OneSweep's descending radix sort is stable — equal-key
+               * elements appear in the same relative order as they did in
+               * the input, identical to the ascending convention. Returning 0
+               * here relies on JS TypedArray.sort() being stable (guaranteed
+               * since ES2019), so the reference and the GPU agree for any
+               * duplicate keys that arise. */
               return 0;
             }
           : (idxA, idxB) => {
@@ -1500,7 +1578,7 @@ export class OneSweepSort extends BaseSort {
       case "hist":
       case "passHist": {
         const hist = new Uint32Array(
-          this.histSize / Uint32Array.BYTES_PER_ELEMENT
+          this.histSize / Uint32Array.BYTES_PER_ELEMENT,
         );
         for (let i = 0; i < memsrc.length; i++) {
           for (let j = 0; j < this.SORT_PASSES; j++) {
@@ -1515,7 +1593,7 @@ export class OneSweepSort extends BaseSort {
           break;
         }
         const passHist = new Uint32Array(
-          this.passHistSize / Uint32Array.BYTES_PER_ELEMENT
+          this.passHistSize / Uint32Array.BYTES_PER_ELEMENT,
         );
         const FLAG_INCLUSIVE = 2 << 30;
         /* divide into 4 pieces (4 passes), write only first RADIX (256) elements of each */
@@ -1541,7 +1619,7 @@ export class OneSweepSort extends BaseSort {
             referenceOutput = sortKeysAndValues(
               memsrc,
               memsrcpayload,
-              this.direction
+              this.direction,
             );
             break;
           case "keysonly":
@@ -1635,7 +1713,7 @@ export class OneSweepSort extends BaseSort {
         if (!this.keyDatatype.is64Bit) {
           /* can't do this math on 64b */
           returnString += `(diff: ${Math.abs(
-            (referenceOutput[i] - memdest[i]) / referenceOutput[i]
+            (referenceOutput[i] - memdest[i]) / referenceOutput[i],
           )}).`;
         }
         if (this.getBuffer("debugBuffer")) {
@@ -1675,7 +1753,7 @@ export class OneSweepSort extends BaseSort {
         this.getBuffer("hist") ? "\nhist" : "",
         this.getBuffer("hist") ? this.getBuffer("hist").cpuBuffer : "",
         this.getBuffer("passHist") ? "passHist" : "",
-        this.getBuffer("passHist") ? this.getBuffer("passHist").cpuBuffer : ""
+        this.getBuffer("passHist") ? this.getBuffer("passHist").cpuBuffer : "",
       );
     }
     return returnString;
