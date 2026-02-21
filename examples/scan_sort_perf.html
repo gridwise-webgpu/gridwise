@@ -1,16 +1,13 @@
 <!DOCTYPE html>
-
 <html>
   <head>
     <meta charset="utf-8" />
     <title>Standalone WebGPU Scan/Reduce/Sort Performance Test</title>
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css"
-    />
+    <link rel="stylesheet" href="gridwise.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css" />
   </head>
-
   <body>
+    <h1>Scan / Sort Performance</h1>
     <p>
       This example is a self-contained use of the <code>scan</code> and
       <code>sort</code> primitives, meant to plot performance. This builds on
@@ -23,13 +20,8 @@
       lengths. Otherwise, the parameters are the same as in the
       <a href="scan_sort_pane_example.html">functionality example</a>. This
       example explains
-      <a href="/gridwise/docs/gridwise/timing-strategy.html"
-        >how to time a Gridwise primitive</a
-      >.
-      <a
-        href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_sort_perf.mjs"
-        >The entire JS source file is in github.</a
-      >
+      <a href="/gridwise/docs/gridwise/timing-strategy.html">how to time a Gridwise primitive</a>.
+      <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_sort_perf.mjs">The entire JS source file is in github.</a>
     </p>
     <p>
       To measure CPU and/or GPU timing, include a timing directive in the call
@@ -73,12 +65,10 @@ averageCpuTotalTimeNS = cpuTotalTimeNS / params.trials;</code></pre>
       not doing that here.
     </p>
     <hr />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script>
-      hljs.highlightAll();
-    </script>
-    <script src="scan_sort_perf.mjs" type="module"></script>
     <div id="webgpu-results"></div>
     <div id="plot"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+    <script src="scan_sort_perf.mjs" type="module"></script>
   </body>
 </html>
