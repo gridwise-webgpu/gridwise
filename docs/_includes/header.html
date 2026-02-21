@@ -17,13 +17,22 @@
       </label>
 
       <div class="trigger">
-        {%- for path in page_paths -%}
-        {%- assign my_page = site.pages | where: "path", path | first -%}
-        {%- if my_page.title and my_page.path != "docs/example.html" and my_page.path != "docs/docs.html" -%}
-        <a class="page-link" href="{{ my_page.url | relative_url }}">{{ my_page.title | escape }}</a>
-        {%- endif -%}
-        {%- endfor -%}
-        <a class="button" href="{{ "/examples-guide/" | relative_url }}">Example Docs</a>
+        <!-- Articles dropdown -->
+        <div class="nav-dropdown">
+          <button class="page-link nav-dropdown-btn" aria-haspopup="true" aria-expanded="false">Articles ▾</button>
+          <div class="nav-dropdown-content">
+            {%- assign gridwise_pages = site.pages | where: "category", "gridwise" | sort: "order" -%}
+            {%- for p in gridwise_pages -%}
+              {%- unless p.url contains "examples" -%}
+                <a href="{{ p.url | relative_url }}">{{ p.title | escape }}</a>
+              {%- endunless -%}
+            {%- endfor -%}
+          </div>
+        </div>
+
+        <!-- Separate Examples link -->
+        <a class="page-link" href="{{ "/examples-guide/" | relative_url }}">Examples</a>
+
         <a class="button" href="{{ "/" | relative_url }}">Read Docs</a>
         <a class="button" href="javascript:void(0)" onclick="launchExample()">Try Interactive Example</a>
       </div>
@@ -32,8 +41,74 @@
   </div>
 </header>
 
+<style>
+  .nav-dropdown {
+    display: inline-block;
+    position: relative;
+  }
+
+  .nav-dropdown-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: inherit;
+    font-family: inherit;
+    color: inherit;
+    padding: 0;
+  }
+
+  .nav-dropdown-content {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: #fff;
+    border: 1px solid #e8e8e8;
+    border-radius: 4px;
+    min-width: 260px;
+    z-index: 200;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  }
+
+  .nav-dropdown-content a {
+    display: block;
+    padding: 8px 14px;
+    text-decoration: none;
+    color: #111;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  .nav-dropdown-content a:hover {
+    background: #f5f5f5;
+  }
+
+  .nav-dropdown:hover .nav-dropdown-content,
+  .nav-dropdown-btn[aria-expanded="true"] + .nav-dropdown-content {
+    display: block;
+  }
+</style>
+
 <script>
   function launchExample() {
     window.open('https://gridwise-webgpu.github.io/gridwise/examples/scan_pane_example.html', '_blank');
   }
+
+  // Toggle dropdown on click for mobile / keyboard users
+  document.addEventListener('DOMContentLoaded', function() {
+    var btn = document.querySelector('.nav-dropdown-btn');
+    if (btn) {
+      btn.addEventListener('click', function(e) {
+        var expanded = this.getAttribute('aria-expanded') === 'true';
+        this.setAttribute('aria-expanded', !expanded);
+        var menu = this.nextElementSibling;
+        menu.style.display = expanded ? 'none' : 'block';
+        e.stopPropagation();
+      });
+      document.addEventListener('click', function() {
+        btn.setAttribute('aria-expanded', 'false');
+        btn.nextElementSibling.style.display = '';
+      });
+    }
+  });
 </script>
