@@ -268,3 +268,23 @@ export function formatWGSL(wgslCode) {
   });
   return formattedLines.join("\n");
 }
+
+/** General-purpose GPU buffer clear kernel.
+ * Binds any buffer as array<u32> and sets all elements to zero.
+ * Use CLEAR_WORKGROUP_SIZE when computing dispatch geometry:
+ *   divRoundUp(numElements, CLEAR_WORKGROUP_SIZE)
+ * where numElements = bufferSizeInBytes / 4.
+ * Note: the same GPUBuffer may be bound as array<atomic<u32>> in other
+ * shaders; WebGPU permits this across separate pipelines.
+ */
+export const CLEAR_WORKGROUP_SIZE = 256;
+export const clearBufferWGSL = /* wgsl */ `
+@group(0) @binding(0) var<storage, read_write> clearTarget: array<u32>;
+
+@compute @workgroup_size(${CLEAR_WORKGROUP_SIZE}, 1, 1)
+fn clear_buffer(@builtin(global_invocation_id) id: vec3<u32>) {
+  if (id.x < arrayLength(&clearTarget)) {
+    clearTarget[id.x] = 0u;
+  }
+}
+`;
