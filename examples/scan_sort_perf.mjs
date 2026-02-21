@@ -8,9 +8,8 @@ import {
 import { DLDFScan } from "../scandldf.mjs";
 import { OneSweepSort } from "../onesweep.mjs";
 
-let Plot = await import(
-  "https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm"
-);
+let Plot =
+  await import("https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm");
 
 /* set up a WebGPU device */
 const adapter = await navigator.gpu?.requestAdapter();
@@ -42,17 +41,25 @@ function isSort(primitive) {
 }
 
 /* set up the UI, with parameters stored in the "params" object */
+/* can override defaults with urlParams */
+/* e.g.: http:// ... scan_sort_perf.html?primitive=sort_keys&inputLengthStart=256&inputLengthEnd=128&inputCount=1 */
+const urlParams = new URL(window.location.href).searchParams;
+const urlParamsGetNum = (key) => {
+  const val = urlParams.get(key);
+  // Return undefined if null so the ?? operator works later
+  return val === null ? undefined : Number(val);
+};
 const pane = new Pane();
 const params = {
   /* defaults */
-  primitive: "exclusive",
-  datatype: "u32",
-  binop: "add",
-  direction: "ascending",
-  inputLengthStart: 2 ** 20,
-  inputLengthEnd: 2 ** 22,
-  inputCount: 3,
-  trials: 5,
+  primitive: urlParams.get("primitive") ?? "exclusive",
+  datatype: urlParams.get("datatype") ?? "u32",
+  binop: urlParams.get("binop") ?? "add",
+  direction: urlParams.get("direction") ?? "ascending",
+  inputLengthStart: urlParamsGetNum("inputLengthStart") ?? 2 ** 20,
+  inputLengthEnd: urlParamsGetNum("inputLengthEnd") ?? 2 ** 22,
+  inputCount: urlParamsGetNum("inputCount") ?? 3,
+  trials: urlParamsGetNum("trials") ?? 5,
 };
 pane
   .addBinding(params, "primitive", {
@@ -133,11 +140,12 @@ button.on("click", async () => {
   results.innerHTML = `<p>I ran this</p>
   <ul>
   <li>Primitive: ${params.primitive}
+  ${params.primitive ? `<li>Direction: ${params.direction}` : ""}
   <li>Datatype: ${params.datatype}
   <li>Binop: ${params.binop}
   <li>Input length: ${params.inputCount} lengths from ${params.inputLengthStart} to ${params.inputLengthEnd} (items)
   </ul>
-  <p>${validation}</p>`;
+  <p><pre>${validation}</pre></p>`;
 });
 /* end of setting up the UI */
 
@@ -149,12 +157,12 @@ async function buildAndRun() {
   for (const inputLength of logspaceRounded(
     params.inputLengthStart,
     params.inputLengthEnd,
-    params.inputCount
+    params.inputCount,
   )) {
     /* generate an input dataset */
     const memsrc = new (datatypeToTypedArray(params.datatype))(inputLength);
 
-    /*for values*/
+    /* and a dataset values in a key-value sort */
     const payLoadsrc = new (datatypeToTypedArray(params.datatype))(inputLength);
 
     /* generate ~random input datasets that are friendly for a
@@ -283,7 +291,7 @@ async function buildAndRun() {
       usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
-    /*buffers for values*/
+    /* buffers for values */
     const payLoadsrcBuffer = device.createBuffer({
       label: `value source buffer (${params.datatype})`,
       size: payLoadsrc.byteLength,
@@ -400,37 +408,41 @@ async function buildAndRun() {
     const encoder = device.createCommandEncoder({
       label: "copy result CPU->GPU encoder",
     });
+    const outputIsInMemsrcBuffer =
+      params.primitive === "sort_keys" || params.primitive === "sort_pairs";
     encoder.copyBufferToBuffer(
-      memdestBuffer,
+      outputIsInMemsrcBuffer ? memsrcBuffer : memdestBuffer,
       0,
       mappableMemdestBuffer,
       0,
-      mappableMemdestBuffer.size
+      mappableMemdestBuffer.size,
     );
+
     if (params.primitive == "sort_pairs") {
       encoder.copyBufferToBuffer(
-        payloadDestBuffer,
+        payLoadsrcBuffer,
         0,
         mappablePayloadDestBuffer,
         0,
-        mappablePayloadDestBuffer.size
+        mappablePayloadDestBuffer.size,
       );
     }
+
     const commandBuffer = encoder.finish();
     device.queue.submit([commandBuffer]);
 
     await mappableMemdestBuffer.mapAsync(GPUMapMode.READ);
     const memdest = new (datatypeToTypedArray(params.datatype))(
-      mappableMemdestBuffer.getMappedRange().slice()
+      mappableMemdestBuffer.getMappedRange().slice(),
     );
     mappableMemdestBuffer.unmap();
 
-    /*Read values back to cpu(only for sort_pairs)*/
+    /* Read values back to cpu (only for sort_pairs) */
     let payloadDest;
     if (params.primitive == "sort_pairs") {
       await mappablePayloadDestBuffer.mapAsync(GPUMapMode.READ);
       payloadDest = new (datatypeToTypedArray(params.datatype))(
-        mappablePayloadDestBuffer.getMappedRange().slice()
+        mappablePayloadDestBuffer.getMappedRange().slice(),
       );
       mappablePayloadDestBuffer.unmap();
     }
@@ -527,7 +539,7 @@ function plotResults(results, adapterDescription) {
     if (plot.maxBW) {
       const dataMin = yValues.reduce(
         (min, v) => (v > 0 ? Math.min(min, v) : min),
-        Infinity
+        Infinity,
       );
       const dataMax = yValues.reduce((max, v) => Math.max(max, v || 0), 0);
       const validMin = dataMin === Infinity ? 1 : dataMin;
@@ -572,7 +584,7 @@ function plotResults(results, adapterDescription) {
           }),
           textAnchor: "start",
           dx: 5,
-        })
+        }),
       ),
       Plot.text([plot.text_tl ?? ""], {
         lineWidth: 30,
@@ -594,7 +606,7 @@ function plotResults(results, adapterDescription) {
           stroke: "red",
           strokeDasharray: "4,4",
           strokeWidth: 2,
-        })
+        }),
       );
 
       // 2. The Label (Positioned explicitly using data coordinates)
@@ -617,7 +629,7 @@ function plotResults(results, adapterDescription) {
           fontWeight: "bold",
           dy: labelPosition === "below" ? 15 : -5,
           clip: false, // <--- CRITICAL: Allows text to render even if on the exact chart edge
-        })
+        }),
       );
     }
 
