@@ -1,0 +1,70 @@
+<!-- Simple Code Box without Sidebar -->
+<style>
+:root {
+  --code-border: #e5e7eb;
+  --code-bg: #ffffff;
+  --code-title-bg: #f9fafb;
+  /* Syntax Highlighting Colors (k6-inspired) */
+  --hl-keyword: #7d64ff;
+  --hl-string: #db2777;
+  --hl-function: #2563eb;
+  --hl-comment: #9ca3af;
+  --hl-property: #4b5563;
+  --hl-number: #059669;
+}
+
+.code-box-simple {
+  max-width: 100%;
+  margin: 2rem 0;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.code-box-header {
+  padding: 1rem 1.5rem;
+  background: var(--code-title-bg);
+  border-bottom: 1px solid var(--code-border);
+  font-family: sans-serif;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #000;
+}
+
+.code-box-content {
+  padding: 1.5rem 2rem;
+  background: var(--code-bg);
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.code-box-content pre {
+  margin: 0;
+}
+
+/* Syntax Highlighting */
+.code-box-content .keyword { color: var(--hl-keyword); font-weight: 500; }
+.code-box-content .string { color: var(--hl-string); }
+.code-box-content .function { color: var(--hl-function); }
+.code-box-content .comment { color: var(--hl-comment); font-style: italic; }
+.code-box-content .property { color: var(--hl-property); }
+.code-box-content .number { color: var(--hl-number); }
+.code-box-content .type { color: #2563eb; }
+.code-box-content .builtin { color: #db2777; }
+</style>
+
+<!-- Usage Example:
+<div class="code-box-simple">
+  <div class="code-box-header">Your Title Here</div>
+  <div class="code-box-content">
+    <pre><code><span class="keyword">export default function</span>() {
+  <span class="keyword">let</span> url = <span class="string">'wss://example.com'</span>
+  <span class="keyword">let</span> res = ws.<span class="function">connect</span>(url)
+}</code></pre>
+  </div>
+</div>
+-->
