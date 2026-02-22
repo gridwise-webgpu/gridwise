@@ -1,5 +1,5 @@
 ---
-layout: page
+layout: gridwise-home
 title: "Gridwise WebGPU Timing Strategy"
 category: gridwise
 permalink: /timing-strategy/

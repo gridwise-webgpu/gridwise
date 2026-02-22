@@ -1,5 +1,5 @@
 ---
-layout: page
+layout: gridwise-home
 title: "Gridwise Architecture"
 category: gridwise
 permalink: /architecture/

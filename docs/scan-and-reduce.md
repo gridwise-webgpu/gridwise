@@ -1,5 +1,5 @@
 ---
-layout: page
+layout: gridwise-home
 title: "Gridwise Scan and Reduce"
 category: gridwise
 permalink: /scan-and-reduce/

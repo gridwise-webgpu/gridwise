@@ -1,24 +1,13 @@
-<footer class="site-footer h-card">
-    <data class="u-url" href="{{ "/" | relative_url }}"></data>
-
-    <div class="wrapper">
-        <h2 class="footer-heading">{{ site.title | escape }}</h2>
-
-        <div class="footer-col-wrapper">
-            <div class="footer-col footer-col-1">
-                <ul class="contact-list">
-                    <li class="p-name">{{ site.title | escape }}</li>
-                    {%- if site.email -%}
-                    <li><a class="u-email" href="mailto:{{ site.email }}">{{ site.email }}</a></li>
-                    {%- endif -%}
-                </ul>
-            </div>
-
-            <div class="footer-col footer-col-3">
-                <p>{{- site.description | escape -}}</p>
-            </div>
-        </div>
-
-    </div>
-
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <span class="footer-copy">&copy; {{ site.time | date: "%Y" }} Gridwise</span>
+    <span class="footer-sep">&#183;</span>
+    <a class="footer-link" href="https://github.com/gridwise-webgpu/gridwise" target="_blank">GitHub</a>
+    <span class="footer-sep">&#183;</span>
+    <span class="footer-copy">Contact: <a class="footer-link" href="mailto:jowens@ece.ucdavis.edu">jowens@ece.ucdavis.edu</a></span>
+    <span class="footer-sep">&#183;</span>
+    <a class="footer-link" href="{{ "/" | relative_url }}">Docs</a>
+    <span class="footer-sep">&#183;</span>
+    <a class="footer-link" href="{{ "/examples.html" | relative_url }}">Examples</a>
+  </div>
 </footer>

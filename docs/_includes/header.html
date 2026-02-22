@@ -1,91 +1,177 @@
 <header class="site-header" role="banner">
-  <div class="wrapper">
-    {%- assign default_paths = site.pages | map: "path" -%}
-    {%- assign page_paths = site.header_pages | default: default_paths -%}
-    <a class="site-title" rel="author" href="{{ "/" | relative_url }}">{{ site.title | escape }}</a>
+  <div class="site-header-inner">
 
-    {%- if page_paths -%}
+    <a class="site-title" href="{{ "/" | relative_url }}"><span class="site-title-g">G</span>ridwise</a>
+
+    <div class="site-header-spacer"></div>
+
     <nav class="site-nav">
-      <input type="checkbox" id="nav-trigger" class="nav-trigger" />
-      <label for="nav-trigger">
-        <span class="menu-icon">
-          <svg viewBox="0 0 18 15" width="18px" height="15px">
-            <path
-              d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.484C18,14.304,17.335,14.969,16.516,14.969H1.484 C0.665,14.969,0,14.304,0,13.484l0,0C0,12.665,0.665,12,1.484,12h15.032C17.335,12,18,12.665,18,13.484L18,13.484z" />
+
+      <!-- Articles dropdown -->
+      <div class="nav-dropdown nav-dropdown-hover">
+        <button class="nav-btn nav-dropdown-btn" aria-expanded="false">
+          Articles
+          <svg class="chevron" width="10" height="6" viewBox="0 0 10 6" fill="none">
+            <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-        </span>
-      </label>
-
-      <div class="trigger">
-        <!-- Articles dropdown -->
-        <div class="nav-dropdown">
-          <button class="page-link nav-dropdown-btn" aria-haspopup="true" aria-expanded="false">Articles ▾</button>
-          <div class="nav-dropdown-content">
-            {%- assign gridwise_pages = site.pages | where: "category", "gridwise" | sort: "order" -%}
-            {%- for p in gridwise_pages -%}
-              {%- unless p.url contains "examples" -%}
-                <a href="{{ p.url | relative_url }}">{{ p.title | escape }}</a>
-              {%- endunless -%}
-            {%- endfor -%}
-          </div>
+        </button>
+        <div class="dropdown-panel">
+          {%- assign gridwise_pages = site.pages | where: "category", "gridwise" | sort: "order" -%}
+          {%- for p in gridwise_pages -%}
+            {%- unless p.url contains "examples" -%}
+              <a class="dropdown-item" href="{{ p.url | relative_url }}">{{ p.title | escape }}</a>
+            {%- endunless -%}
+          {%- endfor -%}
         </div>
-
-        <!-- Separate Examples link -->
-        <a class="page-link" href="{{ "/examples-guide/" | relative_url }}">Examples</a>
-
-        <a class="button" href="{{ "/" | relative_url }}">Read Docs</a>
-        <a class="button" href="javascript:void(0)" onclick="launchExample()">Try Interactive Example</a>
       </div>
+
+      <!-- Examples: click goes to examples page, hover shows list -->
+      <div class="nav-dropdown nav-dropdown-hover">
+        <a class="nav-btn" href="{{ "/examples.html" | relative_url }}">
+          Examples
+          <svg class="chevron" width="10" height="6" viewBox="0 0 10 6" fill="none">
+            <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+        <div class="dropdown-panel">
+          <a class="dropdown-item" href="{{ "/examples.html#scan" | relative_url }}">Scan</a>
+          <a class="dropdown-item" href="{{ "/examples.html#sort" | relative_url }}">Sort</a>
+          <a class="dropdown-item" href="{{ "/examples.html#reduce" | relative_url }}">Reduce</a>
+          <a class="dropdown-item" href="{{ "/examples.html#performance" | relative_url }}">Performance</a>
+          <a class="dropdown-item" href="{{ "/examples.html#testing" | relative_url }}">Testing</a>
+        </div>
+      </div>
+
+      <a class="nav-btn" href="{{ "/" | relative_url }}">Docs</a>
+      <a class="nav-btn nav-btn-solid" href="javascript:void(0)" onclick="launchExample()">Try it</a>
+
     </nav>
-    {%- endif -%}
+
   </div>
 </header>
 
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
 <style>
-  .nav-dropdown {
-    display: inline-block;
-    position: relative;
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 500;
+    background: rgba(255,255,255,0.97);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid #e9e9e7;
   }
 
-  .nav-dropdown-btn {
+  .site-header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    height: 62px;
+    padding: 0 28px 0 8px;
+    display: flex;
+    align-items: center;
+  }
+
+  .site-header-spacer { flex: 1; }
+
+  .site-title {
+    font-size: 28px;
+    font-weight: 600;
+    font-family: 'Space Grotesk', sans-serif;
+    color: #111;
+    text-decoration: none;
+    letter-spacing: -0.8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-right: auto;
+  }
+  .site-title:hover { color: #28a745; }
+
+  .site-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .nav-btn {
+    font-size: 15px;
+    font-weight: 500;
+    color: #3b3b3b;
     background: none;
     border: none;
     cursor: pointer;
-    font-size: inherit;
     font-family: inherit;
-    color: inherit;
-    padding: 0;
+    text-decoration: none;
+    padding: 7px 12px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.1s, color 0.1s;
+    white-space: nowrap;
+    line-height: 1;
+  }
+  .nav-btn:hover { background: #eaf7ee; color: #28a745; }
+
+  .nav-btn-solid {
+    background: #28a745;
+    color: #fff !important;
+    margin-left: 6px;
+  }
+  .nav-btn-solid:hover { background: #22913c; }
+
+  .chevron {
+    opacity: 0.45;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+  }
+  .nav-dropdown-btn[aria-expanded="true"] .chevron {
+    transform: rotate(180deg);
+    opacity: 0.8;
+  }
+  .nav-dropdown-btn[aria-expanded="true"] {
+    color: #28a745;
+    background: #eaf7ee;
   }
 
-  .nav-dropdown-content {
+  .nav-dropdown { position: relative; }
+
+  /* click-triggered dropdown (Articles) */
+  .dropdown-panel {
     display: none;
     position: absolute;
-    top: 100%;
-    left: 0;
+    top: calc(100% + 6px);
+    right: 0;
+    left: auto;
     background: #fff;
-    border: 1px solid #e8e8e8;
-    border-radius: 4px;
-    min-width: 260px;
+    border: 1px solid #e3e3e0;
+    border-radius: 8px;
+    min-width: 185px;
+    padding: 4px;
     z-index: 200;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.06);
   }
+  .dropdown-panel.is-open { display: block; }
 
-  .nav-dropdown-content a {
+  /* hover-triggered dropdown (Examples) */
+  .nav-dropdown-hover:hover .dropdown-panel { display: block; }
+
+  .dropdown-item {
     display: block;
-    padding: 8px 14px;
+    padding: 10px 14px;
+    font-size: 15px;
+    color: #37352f;
     text-decoration: none;
-    color: #111;
-    font-size: 14px;
+    border-radius: 5px;
+    transition: background 0.1s, color 0.1s;
     white-space: nowrap;
+    line-height: 1.4;
   }
+  .dropdown-item:hover { background: #eaf7ee; color: #28a745; }
 
-  .nav-dropdown-content a:hover {
-    background: #f5f5f5;
-  }
-
-  .nav-dropdown:hover .nav-dropdown-content,
-  .nav-dropdown-btn[aria-expanded="true"] + .nav-dropdown-content {
-    display: block;
+  @media (max-width: 640px) {
+    .site-header-spacer { flex: 1; }
+    .nav-btn { padding: 6px 8px; font-size: 13px; }
   }
 </style>
 
@@ -94,21 +180,24 @@
     window.open('https://gridwise-webgpu.github.io/gridwise/examples/scan_pane_example.html', '_blank');
   }
 
-  // Toggle dropdown on click for mobile / keyboard users
-  document.addEventListener('DOMContentLoaded', function() {
-    var btn = document.querySelector('.nav-dropdown-btn');
-    if (btn) {
-      btn.addEventListener('click', function(e) {
-        var expanded = this.getAttribute('aria-expanded') === 'true';
-        this.setAttribute('aria-expanded', !expanded);
-        var menu = this.nextElementSibling;
-        menu.style.display = expanded ? 'none' : 'block';
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.nav-dropdown').forEach(function (dd) {
+      var btn = dd.querySelector('.nav-dropdown-btn');
+      var panel = dd.querySelector('.dropdown-panel');
+      btn.addEventListener('click', function (e) {
         e.stopPropagation();
+        var isOpen = panel.classList.contains('is-open');
+        document.querySelectorAll('.dropdown-panel').forEach(function (p) { p.classList.remove('is-open'); });
+        document.querySelectorAll('.nav-dropdown-btn').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
+        if (!isOpen) {
+          panel.classList.add('is-open');
+          btn.setAttribute('aria-expanded', 'true');
+        }
       });
-      document.addEventListener('click', function() {
-        btn.setAttribute('aria-expanded', 'false');
-        btn.nextElementSibling.style.display = '';
-      });
-    }
+    });
+    document.addEventListener('click', function () {
+      document.querySelectorAll('.dropdown-panel').forEach(function (p) { p.classList.remove('is-open'); });
+      document.querySelectorAll('.nav-dropdown-btn').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
+    });
   });
 </script>

@@ -1,5 +1,5 @@
 ---
-layout: page
+layout: gridwise-home
 title: "Gridwise's Binary Operator Class"
 category: gridwise
 permalink: /binop/

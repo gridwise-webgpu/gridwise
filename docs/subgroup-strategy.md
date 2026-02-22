@@ -1,5 +1,5 @@
 ---
-layout: page
+layout: gridwise-home
 title: "Gridwise WebGPU Subgroup Emulation Strategy"
 category: gridwise
 permalink: /subgroup-strategy/

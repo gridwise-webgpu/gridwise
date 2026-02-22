@@ -1,5 +1,5 @@
 ---
-layout: page
+layout: gridwise-home
 title: "Gridwise WebGPU Object Caching Strategy"
 category: gridwise
 permalink: /webgpu-object-caching-strategy/

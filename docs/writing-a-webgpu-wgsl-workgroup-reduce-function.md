@@ -1,5 +1,5 @@
 ---
-layout: page
+layout: gridwise-home
 title: "Abstraction Challenges in Writing a WebGPU/WGSL Workgroup Reduce Function"
 category: gridwise
 permalink: /writing-a-webgpu-wgsl-workgroup-reduce-function/

@@ -1,172 +1,338 @@
 ---
-layout: home
+layout: gridwise-home
 title: Examples
-permalink: /examples-guide/
+permalink: /examples.html
 ---
 
+<p>GPU-accelerated scan, sort, and reduce primitives running in-browser via WebGPU.</p>
+
 <style>
-    .doc-btn {
-        display: inline-block;
-        padding: 8px 14px;
-        background: #39bda7;
-        color: white;
-        text-decoration: none;
-        border-radius: 4px;
-        margin-right: 8px;
-        margin-bottom: 10px;
-        font-size: 14px;
-        transition: background 0.2s;
-    }
-
-    .doc-btn:hover {
-        background: #2a9a87;
-        text-decoration: none;
-        color: white;
-    }
-
-    .code-block {
-        background: #f5f5f5;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        padding: 12px;
-        overflow-x: auto;
-        font-family: 'Courier New', monospace;
-        font-size: 13px;
-        margin: 10px 0;
-    }
+  .ex-cat {
+    margin: 40px 0 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e1e4e8;
+  }
+  .ex-cat-label {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    color: #111;
+  }
+  .ex-item {
+    padding: 20px 0;
+    border-bottom: 1px solid #e1e4e8;
+  }
+  .ex-desc {
+    font-size: 14px;
+    font-weight: 500;
+    color: #111;
+    margin-bottom: 5px;
+  }
+  .ex-note {
+    font-size: 13px;
+    color: #555;
+    line-height: 1.65;
+    margin-bottom: 14px;
+  }
+  .ex-note code {
+    font-family: 'Courier New', monospace;
+    font-size: 11.5px;
+    background: #f5f5f5;
+    padding: 1px 5px;
+    color: #111;
+  }
+  .ex-code {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin-bottom: 14px;
+  }
+  .ex-code-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: #999;
+    border-bottom: 1px solid #dee2e6;
+    padding: 6px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ex-copy-btn {
+    background: none;
+    border: 1px solid #dee2e6;
+    padding: 2px 8px;
+    font-size: 10px;
+    color: #555;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .ex-copy-btn:hover { background: #eee; }
+  .ex-code pre {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    color: #111;
+    overflow-x: auto;
+    white-space: pre;
+    padding: 12px 16px;
+    margin: 0;
+  }
+  .kw  { color: #0033bb; }
+  .fn  { color: #007070; }
+  .str { color: #cc3300; }
+  .num { color: #777; }
+  .cm  { color: #999; font-style: italic; }
+  .ex-links { display: flex; gap: 8px; }
+  .btn-demo {
+    display: inline-block;
+    padding: 6px 14px;
+    background: #28a745;
+    color: white;
+    text-decoration: none;
+    border-radius: 3px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.12s;
+  }
+  .btn-demo:hover { background: #218838; color: white; }
+  .btn-src {
+    display: inline-block;
+    padding: 6px 14px;
+    background: #fff;
+    color: #555;
+    text-decoration: none;
+    border-radius: 3px;
+    border: 1px solid #dee2e6;
+    font-size: 13px;
+    transition: background 0.12s;
+  }
+  .btn-src:hover { background: #f5f5f5; }
 </style>
-<p>Explore practical examples demonstrating how to use Gridwise WebGPU primitives for scan, sort, and reduce
-    operations. Each example includes code snippets, explanations of key concepts, and links to source code and
-    performance benchmarks.</p>
 
-<h2>Scan Example</h2>
-<p>Compact example that demonstrates exclusive vs inclusive scans using DLDFScan: how to choose scanType, build the
-    input array, run the primitive, and validate outputs. Good for understanding prefix-sum semantics and the effect of
-    different binary ops (add/max/min).</p>
-<p><em>Open the page, pick parameters in the pane (datatype/binop/input length), click Start, then inspect the result
-        and plots.</em></p>
+<!-- SCAN -->
+<div id="scan" class="ex-cat"><span class="ex-cat-label">Scan</span></div>
 
-<h3>Scan Types</h3>
-<p><strong>Exclusive:</strong> Output[i] = sum of all elements before position i (output[0] is identity).</p>
-<p><strong>Inclusive:</strong> Output[i] = sum of all elements up to and including position i.</p>
+<div class="ex-item">
+  <div class="ex-desc">Prefix scan &mdash; inclusive and exclusive modes.</div>
+  <div class="ex-note">
+    Configurable over <code>datatype</code> (i32, u32, f32) and <code>binop</code> (Add, Min, Max).
+    <code>inputLength</code> must be a multiple of 4. The primitive handles workgroup sizing internally &mdash;
+    no manual dispatch math needed. Output buffer is sized to match input for scan; 4 bytes for reduce.
+  </div>
+  <div class="ex-code">
+    <div class="ex-code-label"><span>JavaScript</span><button class="ex-copy-btn" onclick="exCopy(this)">Copy</button></div>
+    <pre><span class="kw">const</span> datatype = <span class="str">"i32"</span>;
+<span class="kw">const</span> binop = <span class="kw">new</span> <span class="fn">BinOpAdd</span>({ datatype });
 
-<h3>Binary Operations</h3>
-<p>Add, Min, Max — combines elements using the specified operation. Custom operations supported via binop.mjs.</p>
+<span class="kw">const</span> primitive = <span class="kw">new</span> <span class="fn">DLDFScan</span>({
+  device,
+  binop,
+  type: <span class="str">"exclusive"</span>, <span class="cm">// "inclusive" | "exclusive" | "reduce"</span>
+  datatype,
+});
 
-<h3>Supported Data Types</h3>
-<p>u32, i32, f32 — all data types work with all binary operations.</p>
-
-<h3>Code Structure</h3>
-<div class="code-block">
-    // Exclusive scan with add operation<br>
-    const primitive = new DLDFScan({<br>
-    &nbsp;&nbsp;device,<br>
-    &nbsp;&nbsp;binop: new BinOpAdd({ datatype: "u32" }),<br>
-    &nbsp;&nbsp;type: "exclusive",<br>
-    &nbsp;&nbsp;datatype: "u32"<br>
-    });<br>
-    <br>
-    // Inclusive scan with max operation<br>
-    const primitive = new DLDFScan({<br>
-    &nbsp;&nbsp;device,<br>
-    &nbsp;&nbsp;binop: new BinOpMax({ datatype: "i32" }),<br>
-    &nbsp;&nbsp;type: "inclusive",<br>
-    &nbsp;&nbsp;datatype: "i32"<br>
-    });
+<span class="kw">await</span> primitive.<span class="fn">execute</span>({
+  inputBuffer: memsrcBuffer,
+  outputBuffer: memdestBuffer,
+});</pre>
+  </div>
+  <div class="ex-links">
+    <a class="btn-demo" href="https://gridwise-webgpu.github.io/gridwise/examples/scan_example.html" target="_blank">Live Demo</a>
+    <a class="btn-src" href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_example.mjs" target="_blank">View source &#8599;</a>
+  </div>
 </div>
 
-<p>
-    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_example.mjs" target="_blank"
-        class="doc-btn">Source Code</a>
-    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_sort_perf.html" target="_blank"
-        class="doc-btn">Performance</a>
-</p>
+<div class="ex-item">
+  <div class="ex-desc">Scan with interactive control pane.</div>
+  <div class="ex-note">
+    Same primitives as above, but wired to a <code>tweakpane</code> UI. Lets you swap
+    <code>primitive</code>, <code>datatype</code>, <code>binop</code>, and <code>inputLength</code> at runtime without touching code.
+    Sort mode is also exposed here &mdash; binop options hide automatically when sort is selected.
+  </div>
+  <div class="ex-code">
+    <div class="ex-code-label"><span>JavaScript</span><button class="ex-copy-btn" onclick="exCopy(this)">Copy</button></div>
+    <pre><span class="kw">const</span> primitive = <span class="kw">new</span> <span class="fn">DLDFScan</span>({
+  device,
+  binop: <span class="fn">makeBinOp</span>({ op: params.binop, datatype: params.datatype }),
+  type: params.primitive,   <span class="cm">// bound to tweakpane dropdown</span>
+  datatype: params.datatype,
+});
 
-<h2>Key/Value Sort Demo</h2>
-<p>Demonstrates OneSweepSort with two modes: key-only sorting and key-value pair sorting with payload validation. Shows
-    how to configure the primitive for different operations and data types.</p>
-<p><em>Open the page, pick parameters in the pane (datatype/binop/input length), click Start, then inspect the result
-        and plots.</em></p>
-
-<h3>Sort Operations</h3>
-<p><strong>Sort Keys:</strong> Sorts only the keys array in ascending or descending order.</p>
-<p><strong>Sort Pairs:</strong> Sorts keys while maintaining associated payloads, useful for sorting complex data
-    structures.</p>
-
-<h3>Supported Data Types</h3>
-<p>u32, i32, f32 — all data types support both sort modes with configurable sort direction.</p>
-
-<h3>Code Structure</h3>
-<div class="code-block">
-    // Key-only sort<br>
-    const primitive = new OneSweepSort({<br>
-    &nbsp;&nbsp;device,<br>
-    &nbsp;&nbsp;datatype: "u32",<br>
-    &nbsp;&nbsp;direction: "ascending",<br>
-    &nbsp;&nbsp;copyOutputToTemp: true,<br>
-    &nbsp;&nbsp;inputLength: 1024<br>
-    });<br>
-    <br>
-    // Key-value pair sort<br>
-    const primitive = new OneSweepSort({<br>
-    &nbsp;&nbsp;device,<br>
-    &nbsp;&nbsp;datatype: "u32",<br>
-    &nbsp;&nbsp;direction: "ascending",<br>
-    &nbsp;&nbsp;copyOutputToTemp: true,<br>
-    &nbsp;&nbsp;type: "keyvalue",<br>
-    &nbsp;&nbsp;inputLength: 1024<br>
-    });
+<span class="kw">await</span> primitive.<span class="fn">execute</span>({
+  inputBuffer: memsrcBuffer,
+  outputBuffer: memdestBuffer,
+});</pre>
+  </div>
+  <div class="ex-links">
+    <a class="btn-demo" href="https://gridwise-webgpu.github.io/gridwise/examples/scan_pane_example.html" target="_blank">Live Demo</a>
+    <a class="btn-src" href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_pane_example.mjs" target="_blank">View source &#8599;</a>
+  </div>
 </div>
 
-<p>
-    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/sort_pairs_example.mjs" target="_blank"
-        class="doc-btn">Source Code</a>
-    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_sort_perf.html" target="_blank"
-        class="doc-btn">Performance</a>
-</p>
+<!-- SORT -->
+<div id="sort" class="ex-cat"><span class="ex-cat-label">Sort</span></div>
 
-<h2>Reduce Operation</h2>
-<p>A minimal, hands-on example showing how to run the reduce primitive end-to-end: device setup, buffer upload, a single
-    execution, and result readback. Use this to learn the basic API calls and validation pattern. Parameters shown:
-    datatype and binop (add/max/min). Ideal as the first example before any benchmarking.</p>
-<p><em>Open the page, pick parameters in the pane (datatype/binop/input length), click Start, then inspect the result
-        and plots.</em></p>
+<div class="ex-item">
+  <div class="ex-desc">OneSweep radix sort &mdash; keys-only and key-value pairs.</div>
+  <div class="ex-note">
+    Requires <code>maxComputeWorkgroupStorageSize: 32768</code> &mdash; larger than the WebGPU default, so you must request it explicitly.
+    Set <code>copyOutputToTemp: true</code> to land sorted output in <code>keysTemp</code> rather than sorting in-place.
+    Pass <code>inputLength</code> at construction time; the primitive pre-allocates internal histograms based on it.
+  </div>
+  <div class="ex-code">
+    <div class="ex-code-label"><span>JavaScript</span><button class="ex-copy-btn" onclick="exCopy(this)">Copy</button></div>
+    <pre><span class="kw">const</span> primitive = <span class="kw">new</span> <span class="fn">OneSweepSort</span>({
+  device,
+  datatype: <span class="str">"i32"</span>,
+  inputLength,
+  direction: <span class="str">"ascending"</span>,  <span class="cm">// "ascending" | "descending"</span>
+  type: <span class="str">"keyvalue"</span>,          <span class="cm">// "keysonly" | "keyvalue"</span>
+  copyOutputToTemp: <span class="kw">true</span>,
+});
 
-<h3>What is Reduce?</h3>
-<p>Reduces an entire array to a single value by repeatedly applying a binary operation across all elements.</p>
-
-<h3>Binary Operations</h3>
-<p>Add, Min, Max — aggregates all elements using the specified operation. Custom operations supported via binop.mjs.</p>
-
-<h3>Supported Data Types</h3>
-<p>u32, i32, f32 — all data types work with all binary operations.</p>
-
-<h3>Code Structure</h3>
-<div class="code-block">
-    // Reduce with add operation<br>
-    const primitive = new DLDFScan({<br>
-    &nbsp;&nbsp;device,<br>
-    &nbsp;&nbsp;binop: new BinOpAdd({ datatype: "u32" }),<br>
-    &nbsp;&nbsp;type: "reduce",<br>
-    &nbsp;&nbsp;datatype: "u32"<br>
-    });<br>
-    <br>
-    // Reduce with min operation<br>
-    const primitive = new DLDFScan({<br>
-    &nbsp;&nbsp;device,<br>
-    &nbsp;&nbsp;binop: new BinOpMin({ datatype: "i32" }),<br>
-    &nbsp;&nbsp;type: "reduce",<br>
-    &nbsp;&nbsp;datatype: "i32"<br>
-    });
+<span class="kw">await</span> primitive.<span class="fn">execute</span>({
+  keysInOut: memsrcBuffer,
+  keysTemp: memdestBuffer,
+  <span class="cm">// payloadInOut + payloadTemp required for keyvalue</span>
+});</pre>
+  </div>
+  <div class="ex-links">
+    <a class="btn-demo" href="https://gridwise-webgpu.github.io/gridwise/examples/sort_example.html" target="_blank">Live Demo</a>
+    <a class="btn-src" href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/sort_example.mjs" target="_blank">View source &#8599;</a>
+  </div>
 </div>
 
-<p>
-    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/reduce_example.mjs" target="_blank"
-        class="doc-btn">Source Code</a>
-    <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/reduce_perf.mjs" target="_blank"
-        class="doc-btn">Performance</a>
-</p>
-class="doc-btn">Performance</a>
-</p>
+<!-- REDUCE -->
+<div id="reduce" class="ex-cat"><span class="ex-cat-label">Reduce</span></div>
 
-<hr>
+<div class="ex-item">
+  <div class="ex-desc">Single-value reduction using <code>DLDFScan</code> in reduce mode.</div>
+  <div class="ex-note">
+    <code>type: "reduce"</code> reuses the same <code>DLDFScan</code> primitive &mdash; only the output size changes.
+    Output buffer should be 4 bytes (one element), not <code>memsrc.byteLength</code>.
+    Validation is available via <code>primitive.validate()</code> and works the same across all three modes.
+  </div>
+  <div class="ex-code">
+    <div class="ex-code-label"><span>JavaScript</span><button class="ex-copy-btn" onclick="exCopy(this)">Copy</button></div>
+    <pre><span class="kw">const</span> primitive = <span class="kw">new</span> <span class="fn">DLDFScan</span>({
+  device,
+  binop: <span class="kw">new</span> <span class="fn">BinOpAdd</span>({ datatype }),  <span class="cm">// BinOpMin / BinOpMax also valid</span>
+  type: <span class="str">"reduce"</span>,
+  datatype,                              <span class="cm">// "i32" | "u32" | "f32"</span>
+});
+
+<span class="cm">// output buffer is 4 bytes &mdash; one scalar, not memsrc.byteLength</span>
+<span class="kw">const</span> memdestBuffer = device.<span class="fn">createBuffer</span>({ size: <span class="num">4</span>, usage: <span class="cm">/* ... */</span> });
+
+<span class="kw">await</span> primitive.<span class="fn">execute</span>({
+  inputBuffer: memsrcBuffer,
+  outputBuffer: memdestBuffer,
+});</pre>
+  </div>
+  <div class="ex-links">
+    <a class="btn-demo" href="https://gridwise-webgpu.github.io/gridwise/examples/reduce_example.html" target="_blank">Live Demo</a>
+    <a class="btn-src" href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/reduce_example.mjs" target="_blank">View source &#8599;</a>
+  </div>
+</div>
+
+<!-- PERFORMANCE -->
+<div id="performance" class="ex-cat"><span class="ex-cat-label">Performance</span></div>
+
+<div class="ex-item">
+  <div class="ex-desc">Scan and sort throughput across a sweep of input sizes.</div>
+  <div class="ex-note">
+    Runs each configuration <code>trials</code> times and averages. Reports both CPU timing
+    (<code>performance.now</code>) and GPU timing (timestamp queries, when the adapter supports it).
+    Input sizes are log-spaced between <code>inputLengthStart</code> and <code>inputLengthEnd</code>.
+    Results plot as bandwidth (GB/s) vs. input size.
+  </div>
+  <div class="ex-code">
+    <div class="ex-code-label"><span>JavaScript</span><button class="ex-copy-btn" onclick="exCopy(this)">Copy</button></div>
+    <pre><span class="kw">await</span> primitive.<span class="fn">execute</span>({
+  inputBuffer: memsrcBuffer,
+  outputBuffer: memdestBuffer,
+  trials: params.trials,
+  enableGPUTiming: hasTimestampQuery,
+  enableCPUTiming: <span class="kw">true</span>,
+});
+
+<span class="kw">const</span> { gpuTotalTimeNS, cpuTotalTimeNS } =
+  <span class="kw">await</span> primitive.<span class="fn">getTimingResult</span>();</pre>
+  </div>
+  <div class="ex-links">
+    <a class="btn-demo" href="https://gridwise-webgpu.github.io/gridwise/examples/scan_sort_perf.html" target="_blank">Live Demo</a>
+    <a class="btn-src" href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_sort_perf.mjs" target="_blank">View source &#8599;</a>
+  </div>
+</div>
+
+<div class="ex-item">
+  <div class="ex-desc">Reduce throughput benchmark across datatypes and input sizes.</div>
+  <div class="ex-note">
+    Scoped exclusively to <code>type: "reduce"</code>. Does one warmup <code>execute()</code> before
+    the timed runs so the first measurement is not cold. <code>gpuTotalTimeNS</code> may be an array
+    &mdash; sum it before dividing by <code>trials</code>.
+  </div>
+  <div class="ex-code">
+    <div class="ex-code-label"><span>JavaScript</span><button class="ex-copy-btn" onclick="exCopy(this)">Copy</button></div>
+    <pre><span class="cm">// warmup</span>
+<span class="kw">await</span> primitive.<span class="fn">execute</span>({ inputBuffer: memsrcBuffer, outputBuffer: memdestBuffer });
+
+<span class="kw">await</span> primitive.<span class="fn">execute</span>({
+  inputBuffer: memsrcBuffer,
+  outputBuffer: memdestBuffer,
+  trials: params.trials,
+  enableGPUTiming: hasTimestampQuery,
+  enableCPUTiming: <span class="kw">true</span>,
+});
+
+<span class="kw">let</span> { gpuTotalTimeNS } = <span class="kw">await</span> primitive.<span class="fn">getTimingResult</span>();
+<span class="kw">if</span> (gpuTotalTimeNS <span class="kw">instanceof</span> Array)
+  gpuTotalTimeNS = gpuTotalTimeNS.<span class="fn">reduce</span>((x, a) => x + a, <span class="num">0</span>);</pre>
+  </div>
+  <div class="ex-links">
+    <a class="btn-demo" href="https://gridwise-webgpu.github.io/gridwise/examples/reduce_perf.html" target="_blank">Live Demo</a>
+    <a class="btn-src" href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/reduce_perf.mjs" target="_blank">View source &#8599;</a>
+  </div>
+</div>
+
+<!-- TESTING -->
+<div id="testing" class="ex-cat"><span class="ex-cat-label">Testing</span></div>
+
+<div class="ex-item">
+  <div class="ex-desc">Regression suite across scan, sort, and reduce.</div>
+  <div class="ex-note">
+    Covers all three scan types &times; three datatypes &times; Add/Min/Max, plus edge-case sizes.
+    Sort tests cover keys-only and key-value, ascending and descending.
+    Each test calls <code>primitive.validate()</code> and reports pass/fail &mdash; no external test runner needed.
+  </div>
+  <div class="ex-code">
+    <div class="ex-code-label"><span>JavaScript</span><button class="ex-copy-btn" onclick="exCopy(this)">Copy</button></div>
+    <pre><span class="kw">await</span> <span class="fn">runTest</span>(name, () =>
+  <span class="fn">runScanTest</span>({ type, datatype, binop, size })
+);
+
+<span class="cm">// inside runScanTest:</span>
+<span class="kw">const</span> errorstr = primitive.<span class="fn">validate</span>({
+  inputBuffer: memsrc,
+  outputBuffer: memdest,
+});
+<span class="cm">// "" = pass, anything else = fail with details</span></pre>
+  </div>
+  <div class="ex-links">
+    <a class="btn-demo" href="https://gridwise-webgpu.github.io/gridwise/examples/regression.html" target="_blank">Live Demo</a>
+    <a class="btn-src" href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/regression.mjs" target="_blank">View source &#8599;</a>
+  </div>
+</div>
+
+<script>
+  function exCopy(btn) {
+    const pre = btn.closest('.ex-code').querySelector('pre');
+    navigator.clipboard.writeText(pre.innerText).then(() => {
+      btn.textContent = 'Copied';
+      setTimeout(() => btn.textContent = 'Copy', 1800);
+    });
+  }
+</script>

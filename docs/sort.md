@@ -1,5 +1,5 @@
 ---
-layout: page
+layout: gridwise-home
 title: "Gridwise Sort"
 category: gridwise
 permalink: /sort/

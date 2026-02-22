@@ -1,5 +1,5 @@
 ---
-layout: page
+layout: gridwise-home
 title: "Gridwise WebGPU @builtins Strategy"
 category: gridwise
 permalink: /builtins-strategy/

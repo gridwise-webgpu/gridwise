@@ -1,5 +1,5 @@
 ---
-layout: page
+layout: gridwise-home
 title: "Gridwise WebGPU Primitive Strategy wrt Subgroups"
 category: gridwise
 permalink: /primitive-design/

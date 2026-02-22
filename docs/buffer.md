@@ -1,5 +1,5 @@
 ---
-layout: page
+layout: gridwise-home
 title: "Gridwise's Buffer Class"
 category: gridwise
 permalink: /buffer/
