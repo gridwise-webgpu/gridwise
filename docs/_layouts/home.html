@@ -5,6 +5,22 @@ layout: default
 <div class="docs-container">
   <!-- Left Sidebar Navigation -->
   <aside class="docs-sidebar">
+    {%- if page.sidebar == "examples" -%}
+    <h3>Examples</h3>
+    <ul class="docs-nav">
+      <li class="nav-section-heading">Standalone</li>
+      <li><a href="{{ "/examples/scan_example.html" | relative_url }}">Scan / Reduce</a></li>
+      <li><a href="{{ "/examples/sort_example.html" | relative_url }}">Sort</a></li>
+      <li><a href="{{ "/examples/reduce_example.html" | relative_url }}">Reduce</a></li>
+      <li class="nav-section-heading">Configurable</li>
+      <li><a href="{{ "/examples/scan_pane_example.html" | relative_url }}">Scan / Reduce (Pane)</a></li>
+      <li class="nav-section-heading">Performance</li>
+      <li><a href="{{ "/examples/scan_sort_perf.html" | relative_url }}">Scan / Sort Performance</a></li>
+      <li><a href="{{ "/examples/reduce_perf.html" | relative_url }}">Reduce Performance</a></li>
+      <li class="nav-section-heading">Regression</li>
+      <li><a href="{{ "/examples/regression.html" | relative_url }}">Regression Tests</a></li>
+    </ul>
+    {%- else -%}
     <h3>Documentation</h3>
     {%- assign gridwise_pages = site.pages | where: "category", "gridwise" | sort: "order" -%}
     {%- if gridwise_pages.size > 0 -%}
@@ -15,6 +31,7 @@ layout: default
       </li>
       {%- endfor -%}
     </ul>
+    {%- endif -%}
     {%- endif -%}
 
     <!-- Sidebar Footer -->
