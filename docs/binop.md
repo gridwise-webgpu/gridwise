@@ -38,11 +38,10 @@ We want to write primitives that work for any monoid. Other languages have more 
 - A GPU-side function declaration `wgslop`. This must define a WGSL function named `binop`. Like `op`, this function takes two arguments `a` and `b` and returns `a op b`. It can use string interpolation as appropriate and will probably have to use a datatype. Example: `this.wgslfn = fn binop(a : ${this.datatype}, b : ${this.datatype}) -> ${this.datatype} {return a+b;};`
 - Four optional WGSL function names. These are "optional" in the sense that they are not a core part of `BinOp`, so most primitives will probably work if they are not specified. These are:
   - An atomic function `wgslatomic`. This should be a string that is a function name. This names the WGSL atomic function that is the atomic variant of `wgslop`. Any of [these functions](https://www.w3.org/TR/WGSL/#atomic-rmw) are appropriate, but note that (at the time of writing) WGSL atomics are only available for `i32` and `u32` datatypes. Example: `this.wgslatomic = "atomicAdd";`
-  - Three subgroup functions. Note these functions apply to only a subset of operations and datatypes. Supporting anything outside of this subset requires [emulation](subgroup-strategy.html).
+  - Three subgroup functions. Note these functions apply to only a subset of operations and datatypes. Supporting anything outside of this subset requires [emulation](../subgroup-strategy/).
     - `subgroupReduceOp`, which reduces the values in a subgroup using this operation. At the time of writing, supported WGSL functions of this type are `subgroup{Add,And,Max,Min,Mul,Or,Xor}`. Example: `this.subgroupReduceOp = "subgroupAdd";`
     - `subgroupInclusiveScanOp`, which computes an inclusive scan of the values in a subgroup using this operation. At the time of writing, supported WGSL functions of this type are `subgroupInclusive{Add,Mul}`. Example: `this.subgroupInclusiveScanOp = "subgroupInclusiveAdd";`
     - `subgroupExclusiveScanOp`, which computes an exclusive scan of the values in a subgroup using this operation. At the time of writing, supported WGSL functions of this type are `subgroupExclusive{Add,Mul}`. Example: `this.subgroupExclusiveScanOp = "subgroupExclusiveAdd";`
-
 
 Below is an example implementation, `BinOpAdd`, which takes an argument of `{ datatype = "..." }` that is used to specialize it.
 

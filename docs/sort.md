@@ -9,7 +9,7 @@ order: 5
 
 The dominant approach to GPU sorting is a [radix sort](https://en.wikipedia.org/wiki/Radix_sort) over input keys. In general, radix sorts deliver high performance on GPUs because they require _O(n)_ work for inputs of _n_ elements, because their constituent memory accesses are generally fairly coalesced and thus deliver good memory performance, and because the underlying compute primitives that compose to make the sort are good matches for GPUs.
 
-The specific sort architecture we choose is [OneSweep](https://research.nvidia.com/publication/2022-06_onesweep-faster-least-significant-digit-radix-sort-gpus), developed by Andrey Adinets and Duane Merrill of NVIDIA. Internally, OneSweep uses a chained scan, as does our implementation. The challenges we outlined in our [scan description](scan-and-reduce.html#decoupled-lookback-and-forward-progress-guarantees) with respect to forward-progress guarantees are the same. Our sort implementation employs both lookback and fallback to ensure that it will work on GPUs that lack forward-progress guarantees.
+The specific sort architecture we choose is [OneSweep](https://research.nvidia.com/publication/2022-06_onesweep-faster-least-significant-digit-radix-sort-gpus), developed by Andrey Adinets and Duane Merrill of NVIDIA. Internally, OneSweep uses a chained scan, as does our implementation. The challenges we outlined in our [scan description](../scan-and-reduce/index.html#decoupled-lookback-and-forward-progress-guarantees) with respect to forward-progress guarantees are the same. Our sort implementation employs both lookback and fallback to ensure that it will work on GPUs that lack forward-progress guarantees.
 
 ## Our Sort Implementation
 
@@ -30,7 +30,7 @@ We compute (2) by first computing the number of keys per bucket within my histog
 
 Given this computed address per key, we could directly scatter each key to its location in global memory. However, to improve memory coalescing, we first write keys into workgroup memory and scatter from there. This puts neighboring keys next to each other in workgroup memory and significantly improves the throughput of the global scatter.
 
-Note that the chained scan in onesweep is a chained scan over an entire 256-entry histogram. Lookback on such a large data structure is more complicated than lookback on a single data value, as we see in [our scan implementation](scan-and-reduce.html), because we use an entire workgroup to look back. The additional complexity is that _any_ thread in the lookback may fail to find a ready value, and if this is the case, the entire workgroup must drop into fallback. Thus we have to keep track of both per-thread lookback success as well as per-subgroup lookback success, and only determine lookback is successful if all subgroups report success.
+Note that the chained scan in onesweep is a chained scan over an entire 256-entry histogram. Lookback on such a large data structure is more complicated than lookback on a single data value, as we see in [our scan implementation](../scan-and-reduce/), because we use an entire workgroup to look back. The additional complexity is that _any_ thread in the lookback may fail to find a ready value, and if this is the case, the entire workgroup must drop into fallback. Thus we have to keep track of both per-thread lookback success as well as per-subgroup lookback success, and only determine lookback is successful if all subgroups report success.
 
 Radix sort implementations (including ours) typically use a ping-pong pair of arrays: on each pass, one array is the input and one array is the output, and on each pass, their roles switch. Because we are sorting 32- or 64-bit keys at 8 bits per pass, this means the input will be overwritten by the output and the primitive's output will be produced in the same buffer as its original input. Overwriting the input is not ideal behavior but is probably preferable to approaches that hide it from the user (by, say, preemptively copying the input into a temporary buffer and copying the temporary input and output at the end of the computation).
 
@@ -38,7 +38,7 @@ Radix sort implementations (including ours) typically use a ping-pong pair of ar
 
 ### Defining the primitive
 
-Declare the scan or reduce primitive as an instance of the `OneSweepSort` class.  An example scan declaration:
+Declare the scan or reduce primitive as an instance of the `OneSweepSort` class. An example scan declaration:
 
 ```js
 const datatype = "u32"; // or "i32" or "f32"
@@ -58,7 +58,7 @@ Gridwise OneSweep supports all combinations of:
 
 ### Configuring the primitive
 
-Once the primitive is _defined_, it must then be _configured_. The primitive knows that it requires an input/output and temporary buffer, labeled `keysInOut` and `keysTemp`. (We use our [`Buffer` class](buffer.html) for this.) If we are doing a key-value sort, we also require `payloadInOut` and `payloadTemp` buffers, which store the values.) We configure the primitive by registering data buffers with the primitive. This can be done either with a `primitive.registerBuffer()` call or as an argument to the `execute` call. (The former is preferred if we need to register the buffer(s) once and then call `execute` many times.)
+Once the primitive is _defined_, it must then be _configured_. The primitive knows that it requires an input/output and temporary buffer, labeled `keysInOut` and `keysTemp`. (We use our [`Buffer` class](../buffer/) for this.) If we are doing a key-value sort, we also require `payloadInOut` and `payloadTemp` buffers, which store the values.) We configure the primitive by registering data buffers with the primitive. This can be done either with a `primitive.registerBuffer()` call or as an argument to the `execute` call. (The former is preferred if we need to register the buffer(s) once and then call `execute` many times.)
 
 To register a buffer, simply call `primitive.registerBuffer(buffer)`, where `buffer.label` is one of the buffers above. The below code creates a `Buffer` then registers it.
 
@@ -71,10 +71,10 @@ testKeysBuffer = new Buffer({
   label: "keysInOut",
   createCPUBuffer: true,
   initializeCPUBuffer: true /* fill with default data */,
-  storeCPUBackup: true, /* because readback will overwrite the CPU data */
+  storeCPUBackup: true /* because readback will overwrite the CPU data */,
   createGPUBuffer: true,
   initializeGPUBuffer: true /* with CPU data */,
-  createMappableGPUBuffer: true, /* we read this back to test correctness */
+  createMappableGPUBuffer: true /* we read this back to test correctness */,
 });
 oneSweepSortPrimitive.registerBuffer(testKeysBuffer);
 ```
@@ -86,6 +86,7 @@ Once the primitive is defined and configured, simply call its `execute()` method
 If you have not yet registered buffers, you can specify them in the argument object as `keysInOut`, `keysTemp`, etc.
 
 Other possible arguments (which are timing-specific and thus which you are unlikely to use unless you are benchmarking) are:
+
 - `trials` with an integer argument. This will run the kernel(s) that number of times. Default: 1.
 - `enableGPUTiming` with either true or false. If true, please ensure that the device has a set of required features that include `timestamp-query`. Default: false.
 - `enableCPUTiming` with either true or false. Default: false.
@@ -109,8 +110,12 @@ await oneSweepSortPrimitive.execute({
 
 ## Usage and performance notes
 
-The number of items to sort must be no greater than 2^30. (CUB does the same thing.) We use the two most-significant bits as status bits. It would take a large engineering effort to remove this limitation.
+The number of items to sort must be no greater than 2^30. (CUB's OneSweep implementation has the same restriction.) We use the two most-significant bits as status bits. It would take a large engineering effort to remove this limitation.
 
 Just as with scan, input lengths _must be_ a multiple of 4. Pad the end of your input array with enough largest-key-value elements to make this work. (This is because internally, we use `vec4`s for computation.)
 
 During its development, sort had extensive performance testing and the defaults are fairly stable across different GPUs. We sort 8 bits per pass and this particular implementation has never been tested with a different number of bits per pass. This could be remedied with engineering effort.
+
+Ascending key-value sort is stable. Elements with equal keys preserve their original order from the input.
+
+Descending key-value sort's ordering is more complicated to specify. Gridwise does not guarantee a particular tie-breaking order, only that keys will be properly ordered. Gridwise's validation has no dependence on any descending tie-breaking convention.
