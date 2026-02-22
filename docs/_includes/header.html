@@ -1,10 +1,7 @@
 <header class="site-header" role="banner">
   <div class="wrapper">
-    {%- assign default_paths = site.pages | map: "path" -%}
-    {%- assign page_paths = site.header_pages | default: default_paths -%}
     <a class="site-title" rel="author" href="{{ "/" | relative_url }}">{{ site.title | escape }}</a>
 
-    {%- if page_paths -%}
     <nav class="site-nav">
       <input type="checkbox" id="nav-trigger" class="nav-trigger" />
       <label for="nav-trigger">
@@ -17,98 +14,35 @@
       </label>
 
       <div class="trigger">
-        <!-- Articles dropdown -->
+        <!-- Documentation link + dropdown -->
         <div class="nav-dropdown">
-          <button class="page-link nav-dropdown-btn" aria-haspopup="true" aria-expanded="false">Articles ▾</button>
+          <a class="page-link nav-dropdown-toggle" href="{{ "/documentation/" | relative_url }}">Documentation ▾</a>
           <div class="nav-dropdown-content">
             {%- assign gridwise_pages = site.pages | where: "category", "gridwise" | sort: "order" -%}
             {%- for p in gridwise_pages -%}
-              {%- unless p.url contains "examples" -%}
-                <a href="{{ p.url | relative_url }}">{{ p.title | escape }}</a>
-              {%- endunless -%}
+            <a href="{{ p.url | relative_url }}">{{ p.title | escape }}</a>
             {%- endfor -%}
           </div>
         </div>
 
-        <!-- Separate Examples link -->
-        <a class="page-link" href="{{ "/examples-guide/" | relative_url }}">Examples</a>
-
-        <a class="button" href="{{ "/" | relative_url }}">Read Docs</a>
-        <a class="button" href="javascript:void(0)" onclick="launchExample()">Try Interactive Example</a>
+        <!-- Examples link + dropdown -->
+        <div class="nav-dropdown">
+          <a class="page-link nav-dropdown-toggle" href="{{ "/examples/" | relative_url }}">Examples ▾</a>
+          <div class="nav-dropdown-content">
+            <span class="nav-dropdown-heading">Standalone</span>
+            <a href="{{ "/examples/scan_example.html" | relative_url }}">Scan / Reduce</a>
+            <a href="{{ "/examples/sort_example.html" | relative_url }}">Sort</a>
+            <a href="{{ "/examples/reduce_example.html" | relative_url }}">Reduce</a>
+            <span class="nav-dropdown-heading">Configurable</span>
+            <a href="{{ "/examples/scan_pane_example.html" | relative_url }}">Scan / Reduce (Pane)</a>
+            <span class="nav-dropdown-heading">Performance</span>
+            <a href="{{ "/examples/scan_sort_perf.html" | relative_url }}">Scan / Sort Performance</a>
+            <a href="{{ "/examples/reduce_perf.html" | relative_url }}">Reduce Performance</a>
+            <span class="nav-dropdown-heading">Regression</span>
+            <a href="{{ "/examples/regression.html" | relative_url }}">Regression Tests</a>
+          </div>
+        </div>
       </div>
     </nav>
-    {%- endif -%}
   </div>
 </header>
-
-<style>
-  .nav-dropdown {
-    display: inline-block;
-    position: relative;
-  }
-
-  .nav-dropdown-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: inherit;
-    font-family: inherit;
-    color: inherit;
-    padding: 0;
-  }
-
-  .nav-dropdown-content {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    background: #fff;
-    border: 1px solid #e8e8e8;
-    border-radius: 4px;
-    min-width: 260px;
-    z-index: 200;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-  }
-
-  .nav-dropdown-content a {
-    display: block;
-    padding: 8px 14px;
-    text-decoration: none;
-    color: #111;
-    font-size: 14px;
-    white-space: nowrap;
-  }
-
-  .nav-dropdown-content a:hover {
-    background: #f5f5f5;
-  }
-
-  .nav-dropdown:hover .nav-dropdown-content,
-  .nav-dropdown-btn[aria-expanded="true"] + .nav-dropdown-content {
-    display: block;
-  }
-</style>
-
-<script>
-  function launchExample() {
-    window.open('https://gridwise-webgpu.github.io/gridwise/examples/scan_pane_example.html', '_blank');
-  }
-
-  // Toggle dropdown on click for mobile / keyboard users
-  document.addEventListener('DOMContentLoaded', function() {
-    var btn = document.querySelector('.nav-dropdown-btn');
-    if (btn) {
-      btn.addEventListener('click', function(e) {
-        var expanded = this.getAttribute('aria-expanded') === 'true';
-        this.setAttribute('aria-expanded', !expanded);
-        var menu = this.nextElementSibling;
-        menu.style.display = expanded ? 'none' : 'block';
-        e.stopPropagation();
-      });
-      document.addEventListener('click', function() {
-        btn.setAttribute('aria-expanded', 'false');
-        btn.nextElementSibling.style.display = '';
-      });
-    }
-  });
-</script>
