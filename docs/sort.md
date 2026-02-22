@@ -9,7 +9,7 @@ order: 5
 
 The dominant approach to GPU sorting is a [radix sort](https://en.wikipedia.org/wiki/Radix_sort) over input keys. In general, radix sorts deliver high performance on GPUs because they require _O(n)_ work for inputs of _n_ elements, because their constituent memory accesses are generally fairly coalesced and thus deliver good memory performance, and because the underlying compute primitives that compose to make the sort are good matches for GPUs.
 
-The specific sort architecture we choose is [OneSweep](https://research.nvidia.com/publication/2022-06_onesweep-faster-least-significant-digit-radix-sort-gpus), developed by Andrey Adinets and Duane Merrill of NVIDIA. Internally, OneSweep uses a chained scan, as does our implementation. The challenges we outlined in our [scan description](../scan-and-reduce/index.html#decoupled-lookback-and-forward-progress-guarantees) with respect to forward-progress guarantees are the same. Our sort implementation employs both lookback and fallback to ensure that it will work on GPUs that lack forward-progress guarantees.
+The specific sort architecture we choose is [OneSweep](https://research.nvidia.com/publication/2022-06_onesweep-faster-least-significant-digit-radix-sort-gpus), developed by Andrey Adinets and Duane Merrill of NVIDIA. Internally, OneSweep uses a chained scan, as does our implementation. The challenges we outlined in our [scan description](../scan-and-reduce/#decoupled-lookback-and-forward-progress-guarantees) with respect to forward-progress guarantees are the same. Our sort implementation employs both lookback and fallback to ensure that it will work on GPUs that lack forward-progress guarantees.
 
 ## Our Sort Implementation
 
