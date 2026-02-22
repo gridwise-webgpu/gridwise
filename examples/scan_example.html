@@ -1,13 +1,75 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <title>Standalone WebGPU Scan/Reduce Primitive Test</title>
     <link rel="stylesheet" href="gridwise.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css"
+    />
   </head>
   <body>
-    <h1>Scan / Reduce Example</h1>
+    <h1>WebGPU Scan / Reduce Primitive Example</h1>
+    <p>
+      This example calls Gridwise's <code>scan</code> primitive. You can look
+      at your developer console and see the input and output of this primitive,
+      and whether the output matches what is expected (in which case the
+      developer console will indicate "Validation passed").
+    </p>
+    <p>
+      It computes an exclusive prefix-sum (scan) over an input array of
+      2<sup>24</sup> i32s, producing an output array of the same length.
+      In an exclusive scan, output element <em>i</em> is the sum of all input
+      elements before position <em>i</em>; the first output element is always
+      the identity value (0 for addition).
+      <a
+        href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_example.mjs"
+        >The entire JS source file is in github.</a
+      >
+      While the entire file contains substantial WebGPU and input-output setup
+      boilerplate, the important parts follow.
+    </p>
+    <p>
+      First, we declare the scan primitive. We configure its datatype (i32),
+      the binary operation (sum), and the scan type (exclusive).
+    </p>
+    <pre><code class="language-javascript">const datatype = "i32";
+const binop = new BinOpAdd({ datatype });
+const scanType = "exclusive";
+const dldfscanPrimitive = new DLDFScan({
+  device,
+  binop,
+  type: scanType,
+  datatype,
+});
+const primitive = dldfscanPrimitive;</code></pre>
+    <p>
+      We have declared buffers (using WebGPU's <code>device.createBuffer</code>)
+      called <code>memsrcBuffer</code> and <code>memdestBuffer</code>. For scan,
+      the output buffer is the same size as the input. We then call the
+      primitive's <code>execute</code> procedure (note that
+      <code>execute</code> is an <code>async</code> call):
+    </p>
+    <pre><code class="language-javascript">await primitive.execute({
+  inputBuffer: memsrcBuffer,
+  outputBuffer: memdestBuffer,
+});</code></pre>
+    <p>We then read back the result from the GPU and validate it.</p>
+    <p>
+      Your developer console should show a result that allows you to inspect the
+      input and output, and prints "Validation passed" if the output matches the
+      (CPU-computed) reference. It should look something like:
+    </p>
+    <pre><code>input array Int32Array(16777216) [11, 12, 13, 14, ...]
+output Int32Array(16777216) [0, 11, 23, 36, ...]
+Validation passed
+</code></pre>
     <div id="plot"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
     <script src="scan_example.mjs" type="module"></script>
   </body>
 </html>

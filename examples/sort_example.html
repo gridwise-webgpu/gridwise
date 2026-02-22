@@ -1,13 +1,74 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <title>Standalone WebGPU Sort Primitive Test</title>
     <link rel="stylesheet" href="gridwise.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css"
+    />
   </head>
   <body>
-    <h1>Sort Example</h1>
+    <h1>WebGPU Sort Primitive Example</h1>
+    <p>
+      This example calls Gridwise's <code>sort</code> primitive. You can look at
+      your developer console and see the input and output of this primitive, and
+      whether the output matches what is expected (in which case the developer
+      console will indicate "Validation passed").
+    </p>
+    <p>
+      It sorts an array of 2<sup>24</sup> random i32 values in ascending order
+      using the OneSweep radix sort algorithm.
+      <a
+        href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/sort_example.mjs"
+        >The entire JS source file is in github.</a
+      >
+      While the entire file contains substantial WebGPU and input-output setup
+      boilerplate, the important parts follow.
+    </p>
+    <p>
+      First, we declare the sort primitive. We configure its datatype (i32), the
+      input length, and set <code>copyOutputToTemp</code> to
+      <code>true</code> so the sorted result is written to a separate
+      destination buffer rather than overwriting the input.
+    </p>
+    <pre><code class="language-javascript">const datatype = "i32";
+const sortKeysPrimitive = new OneSweepSort({
+  device,
+  datatype,
+  inputLength: inputLength,
+  copyOutputToTemp: true,
+});
+const primitive = sortKeysPrimitive;</code></pre>
+    <p>
+      We have declared buffers (using WebGPU's <code>device.createBuffer</code>)
+      called <code>memsrcBuffer</code> and <code>memdestBuffer</code>. Sort
+      operates on <code>keysInOut</code> (the input, which may be modified in
+      place during sorting) and <code>keysTemp</code> (the destination buffer
+      that holds the final sorted output when <code>copyOutputToTemp</code> is
+      true). We then call the primitive's <code>execute</code> procedure (note
+      that <code>execute</code> is an <code>async</code> call):
+    </p>
+    <pre><code class="language-javascript">await primitive.execute({
+  keysInOut: memsrcBuffer,
+  keysTemp: memdestBuffer,
+});</code></pre>
+    <p>We then read back the result from the GPU and validate it.</p>
+    <p>
+      Your developer console should show a result that allows you to inspect the
+      input and output, and prints "Validation passed" if the output is
+      correctly sorted. It should look something like:
+    </p>
+    <pre><code>input array Int32Array(16777216) [random values...]
+output Int32Array(16777216) [sorted values in ascending order...]
+Validation passed
+</code></pre>
     <div id="plot"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      hljs.highlightAll();
+    </script>
     <script src="sort_example.mjs" type="module"></script>
   </body>
 </html>
