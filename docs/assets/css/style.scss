@@ -239,6 +239,17 @@ body {
     margin-bottom: 0.15rem;
 }
 
+.docs-nav li.nav-section-heading {
+    padding: 0.9rem 0.8rem 0.2rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #999;
+    cursor: default;
+    margin-bottom: 0;
+}
+
 .docs-nav a {
     display: block;
     padding: 0.6rem 0.8rem;
@@ -469,3 +480,115 @@ body {
 .highlight .ni, .highlight .si { color: #24292f; }
 .highlight .ge { color: #24292f; font-style: italic; }
 .highlight .gs { color: #24292f; font-weight: bold; }
+
+/* ------------------------------------------------------------------ */
+/* Navigation dropdowns                                                 */
+/* ------------------------------------------------------------------ */
+
+.nav-dropdown {
+    display: inline-block;
+    position: relative;
+    line-height: 54px;
+}
+
+.nav-dropdown-toggle {
+    cursor: default;
+}
+
+.nav-dropdown-content {
+    display: none;
+    position: absolute;
+    top: calc(100% - 8px);
+    left: 0;
+    background: #fff;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    min-width: 240px;
+    z-index: 2000;
+    padding: 6px 0;
+    line-height: 1.4;
+}
+
+.nav-dropdown:hover .nav-dropdown-content {
+    display: block;
+}
+
+.nav-dropdown-content a {
+    display: block;
+    padding: 7px 16px;
+    color: #333;
+    text-decoration: none;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.nav-dropdown-content a:hover {
+    background-color: #f6f8fa;
+    color: #39bda7;
+}
+
+.nav-dropdown-heading {
+    display: block;
+    padding: 10px 16px 3px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #999;
+    user-select: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Splash / home page layout                                            */
+/* ------------------------------------------------------------------ */
+
+.splash-content {
+    max-width: 860px;
+    margin: 60px auto;
+    padding: 0 40px;
+}
+
+.splash-content h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #111;
+    margin-bottom: 1.5rem;
+}
+
+.splash-content p {
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: #333;
+    margin-bottom: 1.5rem;
+}
+
+.splash-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* Shared doc-btn link style (used on docs and examples index pages)   */
+/* ------------------------------------------------------------------ */
+
+.doc-btn {
+    display: inline-block;
+    padding: 7px 14px;
+    background: #39bda7;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    margin-right: 8px;
+    margin-bottom: 10px;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.doc-btn:hover {
+    background: #2a9a87;
+    text-decoration: none;
+    color: white;
+}
