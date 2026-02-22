@@ -2,213 +2,48 @@
 layout: default
 ---
 
-<div class="main-container">
-  <!-- Modern Sidebar Navigation -->
-  <aside class="docs-sidebar" id="docsSidebar">
-    <div class="sidebar-content">
-      <div class="sidebar-header">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-        </svg>
-        <h1>Documentation</h1>
-      </div>
-
-      <div class="search-box">
-        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8"/>
-          <path d="m21 21-4.35-4.35"/>
-        </svg>
-        <input type="text" id="docsSearch" placeholder="Search docs..." />
-      </div>
-
-      <nav class="docs-nav">
-        {%- assign getting_started = site.pages | where: "category", "gridwise" | where: "section", "getting-started" | sort: "order" -%}
-        {%- assign examples_docs = site.pages | where: "category", "examples" | sort: "title" -%}
-
-        {%- comment -%} Getting Started Section {%- endcomment -%}
-        <div class="nav-section">
-          <h3 class="nav-section-title">Getting Started</h3>
-          <ul>
+<div class="docs-container">
+    <!-- Left Sidebar Navigation -->
+    <aside class="docs-sidebar">
+        <h3>Documentation</h3>
+        {%- assign gridwise_pages = site.pages | where: "category", "gridwise" | sort: "order" -%}
+        {%- if gridwise_pages.size > 0 -%}
+        <ul class="docs-nav">
+            {%- for p in gridwise_pages -%}
             <li>
-              <a href="{{ '/getting-started/' | relative_url }}" {% if page.url contains '/getting-started/' %}class="active"{% endif %}>
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <span>Introduction</span>
-              </a>
-            </li>
-            <li>
-              <a href="{{ '/installation/' | relative_url }}" {% if page.url contains '/installation/' %}class="active"{% endif %}>
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span>Quick Start</span>
-              </a>
-            </li>
-          </ul>
-        </div>
-
-        {%- comment -%} Core Concepts Section {%- endcomment -%}
-        <div class="nav-section">
-          <h3 class="nav-section-title">Core Concepts</h3>
-          <ul>
-            <li>
-              <a href="{{ '/architecture/' | relative_url }}" {% if page.url contains '/architecture/' %}class="active"{% endif %}>
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
-                </svg>
-                <span>Architecture</span>
-              </a>
-            </li>
-            <li>
-              <a href="{{ '/primitive-design/' | relative_url }}" {% if page.url contains '/primitive-design/' %}class="active"{% endif %}>
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span>Primitive Design</span>
-              </a>
-            </li>
-            <li>
-              <a href="{{ '/subgroup-strategy/' | relative_url }}" {% if page.url contains '/subgroup-strategy/' %}class="active"{% endif %}>
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                </svg>
-                <span>Subgroup Strategy</span>
-              </a>
-            </li>
-          </ul>
-        </div>
-
-        {%- comment -%} Primitives Section {%- endcomment -%}
-        <div class="nav-section">
-          <h3 class="nav-section-title">Primitives</h3>
-          <ul>
-            <li>
-              <a href="{{ '/scan-and-reduce/' | relative_url }}" {% if page.url contains '/scan-and-reduce/' %}class="active"{% endif %}>
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                <span>Scan and Reduce</span>
-              </a>
-            </li>
-            <li>
-              <a href="{{ '/sort/' | relative_url }}" {% if page.url contains '/sort/' %}class="active"{% endif %}>
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                </svg>
-                <span>Sort</span>
-              </a>
-            </li>
-            <li>
-              <a href="{{ '/binop/' | relative_url }}" {% if page.url contains '/binop/' %}class="active"{% endif %}>
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span>Binary Operations</span>
-              </a>
-            </li>
-          </ul>
-        </div>
-
-        {%- comment -%} Advanced Section {%- endcomment -%}
-        <div class="nav-section">
-          <h3 class="nav-section-title">Advanced</h3>
-          <ul>
-            <li>
-              <a href="{{ '/buffer/' | relative_url }}" {% if page.url contains '/buffer/' %}class="active"{% endif %}>
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-                </svg>
-                <span>Buffer Management</span>
-              </a>
-            </li>
-            <li>
-              <a href="{{ '/timing-strategy/' | relative_url }}" {% if page.url contains '/timing-strategy/' %}class="active"{% endif %}>
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>Timing Strategy</span>
-              </a>
-            </li>
-            <li>
-              <a href="{{ '/webgpu-object-caching-strategy/' | relative_url }}" {% if page.url contains '/webgpu-object-caching-strategy/' %}class="active"{% endif %}>
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
-                </svg>
-                <span>Object Caching</span>
-              </a>
-            </li>
-            <li>
-              <a href="{{ '/builtins-strategy/' | relative_url }}" {% if page.url contains '/builtins-strategy/' %}class="active"{% endif %}>
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span>Builtins Strategy</span>
-              </a>
-            </li>
-          </ul>
-        </div>
-
-        {%- comment -%} Examples Section {%- endcomment -%}
-        {%- if examples_docs.size > 0 -%}
-        <div class="nav-section">
-          <h3 class="nav-section-title">Examples</h3>
-          <ul>
-            {%- for p in examples_docs -%}
-            <li>
-              <a href="{{ p.url | relative_url }}" {% if p.url==page.url %}class="active"{% endif %}>
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                </svg>
-                <span>{{ p.title | escape }}</span>
-              </a>
+                <a href="{{ p.url | relative_url }}" {% if p.url==page.url %}class="active" {% endif %}>
+                    {{ p.title | escape }}
+                </a>
             </li>
             {%- endfor -%}
-          </ul>
-        </div>
+        </ul>
         {%- endif -%}
-      </nav>
-    </div>
 
-    <!-- Sidebar Footer -->
-    <div class="sidebar-footer">
-      <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
-        <svg class="github-icon" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-        </svg>
-        <span>GitHub</span>
-      </a>
-    </div>
-  </aside>
-
-  <!-- Main Content Area -->
-  <main class="docs-content">
-    <div class="content-inner">
-      {%- if page.title -%}
-      <div class="docs-hero">
-        <div class="badge">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-          </svg>
-          <span>Documentation</span>
+        <!-- Sidebar Footer -->
+        <div class="sidebar-footer">
+            <a href="https://github.com/gridwise-webgpu/gridwise" target="_blank" class="github-link">
+                <svg class="github-icon" viewBox="0 0 16 16" width="20" height="20">
+                    <path fill="currentColor"
+                        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z">
+                    </path>
+                </svg>
+                <span>GitHub</span>
+            </a>
         </div>
-        <h1>{{ page.title }}</h1>
-        {%- if page.excerpt -%}
-        <p class="lead">{{ page.excerpt }}</p>
-        {%- endif -%}
-      </div>
-      {%- endif -%}
+    </aside>
 
-      <article class="post">
-        <div class="post-content">
-          {{ content }}
-        </div>
-      </article>
-    </div>
-  </main>
+    <!-- Main Content Area -->
+    <main class="docs-content">
+        <article class="post">
+            <header class="post-header">
+                <h1 class="post-title">{{ page.title | escape }}</h1>
+            </header>
+
+            <div class="post-content">
+                {{ content }}
+            </div>
+        </article>
+        </main>
 </div>
 
 <script>
