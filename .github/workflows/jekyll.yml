@@ -20,11 +20,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Copy examples and source files to docs
-        run: |
-          cp -r examples docs/examples
-          cp *.mjs docs/ 2>/dev/null || true
-
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
@@ -35,7 +30,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Build with Jekyll
-        run: bundle exec jekyll build --source docs --baseurl "/gridwise"
+        run: bundle exec jekyll build --baseurl "/gridwise"
         env:
           JEKYLL_ENV: production
 
