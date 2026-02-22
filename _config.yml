@@ -5,30 +5,26 @@ description: WebGPU Compute Primitives in JavaScript
 url: "https://gridwise-webgpu.github.io"
 baseurl: "/gridwise"
 
-# Tell Jekyll that collections (like _posts) are inside docs/
-source: docs
+# Layouts and includes live inside docs/ even though source is the repo root
+layouts_dir: docs/_layouts
+includes_dir: docs/_includes
 
-theme: minima
-
-# Exclude everything else from Jekyll processing
+# Exclude everything that shouldn't become part of the site
 exclude:
-  - "*.mjs"
   - "*.js"
-  - "examples/"
   - "misc/"
   - Gemfile
   - Gemfile.lock
   - "*.py"
+  - "*.sh"
   - README.md
+  - CLAUDE.md
   - vendor/
   - .bundle/
   - node_modules/
-
-# Keep files as-is (don't process)
-keep_files:
-  - examples
-  - "*.mjs"
-  - "*.html"
+  - tmp/
+  - docs/README.md
+  - _site/
 
 markdown: kramdown
 plugins:
