@@ -10,19 +10,21 @@
     />
   </head>
   <body>
-    <h1>WebGPU Scan / Reduce Primitive Example</h1>
+    <h1>WebGPU Scan Primitive Example</h1>
     <p>
-      This example calls Gridwise's <code>scan</code> primitive. You can look
-      at your developer console and see the input and output of this primitive,
-      and whether the output matches what is expected (in which case the
-      developer console will indicate "Validation passed").
+      This example calls Gridwise's <code>scan</code> primitive. You can look at
+      your developer console and see the input and output of this primitive, and
+      whether the output matches what is expected (in which case the developer
+      console will indicate "Validation passed").
     </p>
     <p>
-      It computes an exclusive prefix-sum (scan) over an input array of
-      2<sup>24</sup> i32s, producing an output array of the same length.
-      In an exclusive scan, output element <em>i</em> is the sum of all input
-      elements before position <em>i</em>; the first output element is always
-      the identity value (0 for addition).
+      It computes an exclusive prefix-sum (scan) over an input array of 2<sup
+        >24</sup
+      >
+      i32s, producing an output array of the same length. In an exclusive scan,
+      output element <em>i</em> is the sum of all input elements before position
+      <em>i</em>; the first output element is always the identity value (0 for
+      addition).
       <a
         href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_example.mjs"
         >The entire JS source file is in github.</a
@@ -31,8 +33,8 @@
       boilerplate, the important parts follow.
     </p>
     <p>
-      First, we declare the scan primitive. We configure its datatype (i32),
-      the binary operation (sum), and the scan type (exclusive).
+      First, we declare the scan primitive. We configure its datatype (i32), the
+      binary operation (sum), and the scan type (exclusive).
     </p>
     <pre><code class="language-javascript">const datatype = "i32";
 const binop = new BinOpAdd({ datatype });
