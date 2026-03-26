@@ -116,3 +116,20 @@ ul.test-list li.fail {
 #large-section {
   display: none;
 }
+
+.back-link {
+  display: inline-block;
+  padding: 5px 12px;
+  background: #39bda7;
+  color: white;
+  text-decoration: none;
+  border-radius: 4px;
+  margin-bottom: 1em;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+.back-link:hover {
+  background: #2a9a87;
+  color: white;
+  text-decoration: none;
+}
