@@ -14,8 +14,14 @@ export async function main(navigator) {
         ],
     });
 
+    const resultsEl = document.getElementById("webgpu-results");
     if (!device) {
-        console.error("Fatal error: Device does not support WebGPU.");
+        const msg = "Fatal error: Device does not support WebGPU.";
+        console.error(msg);
+        if (resultsEl) {
+            resultsEl.innerHTML = `<p style="color: red; font-weight: bold;">${msg}</p>`;
+        }
+        return;
     }
 
     /* configure the primitive */
@@ -135,9 +141,17 @@ export async function main(navigator) {
             outputBuffer: memdest,
         });
         if (errorstr === "") {
-            console.info("Validation passed");
+            const msg = "Validation passed";
+            console.info(msg);
+            if (resultsEl) {
+                resultsEl.innerHTML = `<p style="color: green; font-weight: bold;">✓ ${msg}</p>`;
+            }
         } else {
-            console.error(`Validation failed:\n${errorstr}`);
+            const msg = `Validation failed:\n${errorstr}`;
+            console.error(msg);
+            if (resultsEl) {
+                resultsEl.innerHTML = `<p style="color: red; font-weight: bold;">✗ ${msg.replace(/\n/g, "<br/>")}</p>`;
+            }
         }
     }
 }
