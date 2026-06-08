@@ -613,6 +613,8 @@ function updateUniforms() {
   u32[6] = isOperating ? 1 : 0;
   f32[7] = 100.0; // padding
   
+  document.title = `GridWise Optimal | Canvas: ${canvas.width}x${canvas.height} | Mouse: ${Math.round(mouseX)},${Math.round(mouseY)}`;
+  
   device.queue.writeBuffer(simulationUniformBuffer, 0, uniformData);
 }
 
