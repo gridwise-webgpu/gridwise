@@ -98,6 +98,10 @@ let initTargetsPipeline = null;
 let renderPipeline = null;
 let extractKeysPipeline = null;
 let applySortedPipeline = null;
+let applyScanPipeline = null;
+let applyReducePipeline = null;
+let applyScanBindGroup = null;
+let applyReduceBindGroup = null;
 
 // Initialize GPU Resources
 function initGPUResources(count) {
@@ -402,6 +406,113 @@ const resetTargetsWGSL = `
   }
 `;
 
+const applyScanWGSL = `
+  struct Particle {
+    pos: vec2f,
+    origPos: vec2f,
+    vel: vec2f,
+    destination: vec2f,
+    colorIndex: u32,
+    size: f32,
+  }
+
+  struct Params {
+    mouseX: f32,
+    mouseY: f32,
+    canvasWidth: f32,
+    canvasHeight: f32,
+    mouseDown: u32,
+    attractMode: u32,
+    isOperating: u32,
+    padding: f32,
+  }
+
+  @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
+  @group(0) @binding(1) var<storage, read> scannedValues: array<u32>;
+  @group(0) @binding(2) var<uniform> params: Params;
+
+  @compute @workgroup_size(256)
+  fn main(@builtin(global_invocation_id) id: vec3u) {
+    let idx = id.x;
+    let count = arrayLength(&particles);
+    if (idx >= count) { return; }
+
+    var maxValue = scannedValues[count - 1u];
+    if (maxValue == 0u) {
+      maxValue = 1u;
+    }
+
+    let normalized = f32(scannedValues[idx]) / f32(maxValue);
+    let wavePhase = normalized * 3.14159265 * 12.0;
+    
+    let usableWidth = params.canvasWidth - params.padding * 2.0;
+    
+    particles[idx].destination.x = params.padding + normalized * usableWidth;
+    particles[idx].destination.y = params.canvasHeight / 2.0 + sin(wavePhase) * (params.canvasHeight * 0.3);
+    particles[idx].vel = vec2f(0.0, 0.0);
+  }
+`;
+
+const applyReduceWGSL = `
+  struct Particle {
+    pos: vec2f,
+    origPos: vec2f,
+    vel: vec2f,
+    destination: vec2f,
+    colorIndex: u32,
+    size: f32,
+  }
+
+  struct Params {
+    mouseX: f32,
+    mouseY: f32,
+    canvasWidth: f32,
+    canvasHeight: f32,
+    mouseDown: u32,
+    attractMode: u32,
+    isOperating: u32,
+    padding: f32,
+  }
+
+  @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
+  @group(0) @binding(1) var<storage, read> reduceResult: array<u32>;
+  @group(0) @binding(2) var<uniform> params: Params;
+
+  fn hash(x: u32) -> f32 {
+    var a = x;
+    a = (a ^ 61u) ^ (a >> 16u);
+    a = a + (a << 3u);
+    a = a ^ (a >> 4u);
+    a = a * 0x27d4eb2du;
+    a = a ^ (a >> 15u);
+    return f32(a) / 4294967296.0;
+  }
+
+  @compute @workgroup_size(256)
+  fn main(@builtin(global_invocation_id) id: vec3u) {
+    let idx = id.x;
+    let count = arrayLength(&particles);
+    if (idx >= count) { return; }
+
+    let totalSize = reduceResult[0];
+    let meanSize = f32(totalSize) / f32(count);
+    
+    let maxRadius = min(params.canvasWidth, params.canvasHeight) * 0.45;
+    let scaledRadius = maxRadius * min(meanSize / 700.0, 1.5);
+    
+    let centerX = params.canvasWidth / 2.0;
+    let centerY = params.canvasHeight / 2.0;
+    
+    let progress = f32(idx) / f32(count);
+    let angle = (f32(idx) * 137.5) * (3.14159265 / 180.0);
+    let radius = sqrt(progress) * scaledRadius;
+    
+    particles[idx].destination.x = centerX + cos(angle) * radius;
+    particles[idx].destination.y = centerY + sin(angle) * radius;
+    particles[idx].vel = vec2f(0.0, 0.0);
+  }
+`;
+
 const renderWGSL = `
   struct Particle {
     pos: vec2f,
@@ -504,6 +615,8 @@ const simModule = await createShaderModuleWithLogging(device, simulationWGSL, "s
 const extractModule = await createShaderModuleWithLogging(device, extractKeysWGSL, "extractKeys");
 const applySortedModule = await createShaderModuleWithLogging(device, applySortedWGSL, "applySorted");
 const resetTargetsModule = await createShaderModuleWithLogging(device, resetTargetsWGSL, "resetTargets");
+const applyScanModule = await createShaderModuleWithLogging(device, applyScanWGSL, "applyScan");
+const applyReduceModule = await createShaderModuleWithLogging(device, applyReduceWGSL, "applyReduce");
 const renderModule = await createShaderModuleWithLogging(device, renderWGSL, "render");
 
 computePipeline = device.createComputePipeline({
@@ -524,6 +637,16 @@ applySortedPipeline = device.createComputePipeline({
 initTargetsPipeline = device.createComputePipeline({
   layout: "auto",
   compute: { module: resetTargetsModule, entryPoint: "main" },
+});
+
+applyScanPipeline = device.createComputePipeline({
+  layout: "auto",
+  compute: { module: applyScanModule, entryPoint: "main" },
+});
+
+applyReducePipeline = device.createComputePipeline({
+  layout: "auto",
+  compute: { module: applyReduceModule, entryPoint: "main" },
 });
 
 renderPipeline = device.createRenderPipeline({
@@ -595,6 +718,24 @@ function buildBindGroups() {
       { binding: 0, resource: { buffer: particlesBuffer } },
       { binding: 1, resource: { buffer: colorBuffer } },
       { binding: 2, resource: { buffer: renderUniformBuffer } },
+    ],
+  });
+
+  applyScanBindGroup = device.createBindGroup({
+    layout: applyScanPipeline.getBindGroupLayout(0),
+    entries: [
+      { binding: 0, resource: { buffer: particlesBuffer } },
+      { binding: 1, resource: { buffer: scanOutputBuffer } },
+      { binding: 2, resource: { buffer: simulationUniformBuffer } },
+    ],
+  });
+
+  applyReduceBindGroup = device.createBindGroup({
+    layout: applyReducePipeline.getBindGroupLayout(0),
+    entries: [
+      { binding: 0, resource: { buffer: particlesBuffer } },
+      { binding: 1, resource: { buffer: reduceOutputBuffer } },
+      { binding: 2, resource: { buffer: simulationUniformBuffer } },
     ],
   });
 }
@@ -679,26 +820,52 @@ async function performSort() {
   }
 }
 
-// Placeholder performScan and performReduce (re-implemented on GPU for Phase 2)
 async function performScan() {
   if (currentOperation) clearTimeout(currentOperation);
   isOperating = true;
   
   try {
-    const sizeValues = new Uint32Array(particleCount);
-    // Write size values (placeholder)
-    device.queue.writeBuffer(scanInputBuffer, 0, sizeValues);
+    const commandEncoder = device.createCommandEncoder();
     
+    // 1. Extract particle sizes
+    const pass = commandEncoder.beginComputePass();
+    pass.setPipeline(extractKeysPipeline);
+    pass.setBindGroup(0, extractBindGroup);
+    pass.dispatchWorkgroups(Math.ceil(particleCount / 256));
+    pass.end();
+    
+    device.queue.submit([commandEncoder.finish()]);
+
+    // 2. Scan
     await scanner.execute({
-      inputBuffer: scanInputBuffer,
+      inputBuffer: sortKeysBuffer,
       outputBuffer: scanOutputBuffer,
     });
 
-    // GPU wave targets could be mapped, but for Phase 2 demo benchmarking, 
-    // we want to ensure sort performance is measured cleanly.
+    // 3. Apply scan targets
+    updateUniforms();
+    const commandEncoder2 = device.createCommandEncoder();
+    const pass2 = commandEncoder2.beginComputePass();
+    pass2.setPipeline(applyScanPipeline);
+    pass2.setBindGroup(0, applyScanBindGroup);
+    pass2.dispatchWorkgroups(Math.ceil(particleCount / 256));
+    pass2.end();
+    device.queue.submit([commandEncoder2.finish()]);
+
+    // 4. Setup resets
     currentOperation = setTimeout(() => {
-      isOperating = false;
-      currentOperation = null;
+      const encoderReset = device.createCommandEncoder();
+      const passReset = encoderReset.beginComputePass();
+      passReset.setPipeline(initTargetsPipeline);
+      passReset.setBindGroup(0, initTargetsBindGroup);
+      passReset.dispatchWorkgroups(Math.ceil(particleCount / 256));
+      passReset.end();
+      device.queue.submit([encoderReset.finish()]);
+
+      currentOperation = setTimeout(() => {
+        isOperating = false;
+        currentOperation = null;
+      }, 8000);
     }, 8000);
   } catch (error) {
     console.error("Scan error:", error);
@@ -711,14 +878,47 @@ async function performReduce() {
   isOperating = true;
   
   try {
+    const commandEncoder = device.createCommandEncoder();
+    
+    // 1. Extract particle sizes
+    const pass = commandEncoder.beginComputePass();
+    pass.setPipeline(extractKeysPipeline);
+    pass.setBindGroup(0, extractBindGroup);
+    pass.dispatchWorkgroups(Math.ceil(particleCount / 256));
+    pass.end();
+    
+    device.queue.submit([commandEncoder.finish()]);
+
+    // 2. Reduce
     await reducer.execute({
-      inputBuffer: reduceInputBuffer,
+      inputBuffer: sortKeysBuffer,
       outputBuffer: reduceOutputBuffer,
     });
-    
+
+    // 3. Apply reduce targets
+    updateUniforms();
+    const commandEncoder2 = device.createCommandEncoder();
+    const pass2 = commandEncoder2.beginComputePass();
+    pass2.setPipeline(applyReducePipeline);
+    pass2.setBindGroup(0, applyReduceBindGroup);
+    pass2.dispatchWorkgroups(Math.ceil(particleCount / 256));
+    pass2.end();
+    device.queue.submit([commandEncoder2.finish()]);
+
+    // 4. Setup resets
     currentOperation = setTimeout(() => {
-      isOperating = false;
-      currentOperation = null;
+      const encoderReset = device.createCommandEncoder();
+      const passReset = encoderReset.beginComputePass();
+      passReset.setPipeline(initTargetsPipeline);
+      passReset.setBindGroup(0, initTargetsBindGroup);
+      passReset.dispatchWorkgroups(Math.ceil(particleCount / 256));
+      passReset.end();
+      device.queue.submit([encoderReset.finish()]);
+
+      currentOperation = setTimeout(() => {
+        isOperating = false;
+        currentOperation = null;
+      }, 8000);
     }, 8000);
   } catch (error) {
     console.error("Reduce error:", error);
