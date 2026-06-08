@@ -58,9 +58,15 @@ export async function main(navigator) {
   /* Device setup                                                         */
   /* ------------------------------------------------------------------ */
 
+  const summaryEl = document.getElementById("summary");
   const adapter = await navigator.gpu?.requestAdapter();
   if (!adapter) {
-    console.error("Fatal: no GPU adapter");
+    const msg = "Fatal: no GPU adapter";
+    console.error(msg);
+    if (summaryEl) {
+      summaryEl.textContent = msg;
+      summaryEl.className = "summary some-fail";
+    }
     return;
   }
   const hasSubgroups = adapter.features.has("subgroups");
@@ -71,7 +77,12 @@ export async function main(navigator) {
     },
   });
   if (!device) {
-    console.error("Fatal: device creation failed");
+    const msg = "Fatal: device creation failed";
+    console.error(msg);
+    if (summaryEl) {
+      summaryEl.textContent = msg;
+      summaryEl.className = "summary some-fail";
+    }
     return;
   }
 
@@ -375,7 +386,6 @@ export async function main(navigator) {
   /* ------------------------------------------------------------------ */
 
   const listEl = isNode ? null : document.getElementById("test-list");
-  const summaryEl = isNode ? null : document.getElementById("summary");
   const { runTest, summarize } = makeRunner(listEl, summaryEl);
 
   for (const [type, datatype, BinOpClass, size] of scanTests) {
