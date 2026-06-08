@@ -428,7 +428,7 @@ const applyScanWGSL = `
   }
 
   @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
-  @group(0) @binding(1) var<storage, read> scannedValues: array<u32>;
+  @group(0) @binding(1) var<storage, read> scannedValues: array<vec4<u32>>;
   @group(0) @binding(2) var<uniform> params: Params;
 
   @compute @workgroup_size(256)
@@ -437,12 +437,13 @@ const applyScanWGSL = `
     let count = arrayLength(&particles);
     if (idx >= count) { return; }
 
-    var maxValue = scannedValues[count - 1u];
+    var maxValue = scannedValues[(count - 1u) / 4u][(count - 1u) % 4u];
     if (maxValue == 0u) {
       maxValue = 1u;
     }
 
-    let normalized = f32(scannedValues[idx]) / f32(maxValue);
+    let val = scannedValues[idx / 4u][idx % 4u];
+    let normalized = f32(val) / f32(maxValue);
     let wavePhase = normalized * 3.14159265 * 12.0;
     
     let usableWidth = params.canvasWidth - params.padding * 2.0;
