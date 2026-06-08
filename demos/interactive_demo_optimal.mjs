@@ -168,7 +168,7 @@ function initGPUResources(count) {
 
   // Simulation Uniform Buffer
   simulationUniformBuffer = device.createBuffer({
-    size: 48, // mouseX (f32), mouseY (f32), mouseDown (u32), attractMode (u32), isOperating (u32), width (f32), height (f32), padding (f32) + padding to 48 bytes
+    size: 32, // mousePos (vec2f), canvasSize (vec2f), mouseDown (u32), attractMode (u32), isOperating (u32), padding (f32) = 32 bytes
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
 
@@ -256,10 +256,10 @@ const simulationWGSL = `
 
   struct Params {
     mousePos: vec2f,
+    canvasSize: vec2f,
     mouseDown: u32,
     attractMode: u32,
     isOperating: u32,
-    canvasSize: vec2f,
     padding: f32,
   }
 
@@ -339,10 +339,10 @@ const applySortedWGSL = `
 
   struct Params {
     mousePos: vec2f,
+    canvasSize: vec2f,
     mouseDown: u32,
     attractMode: u32,
     isOperating: u32,
-    canvasSize: vec2f,
     padding: f32,
   }
 
@@ -588,17 +588,17 @@ function buildBindGroups() {
 }
 
 function updateUniforms() {
-  const uniformData = new ArrayBuffer(48);
+  const uniformData = new ArrayBuffer(32);
   const f32 = new Float32Array(uniformData);
   const u32 = new Uint32Array(uniformData);
   
   f32[0] = mouseX;
   f32[1] = mouseY;
-  u32[2] = mouseDown ? 1 : 0;
-  u32[3] = attractMode ? 1 : 0;
-  u32[4] = isOperating ? 1 : 0;
-  f32[5] = canvas.width;
-  f32[6] = canvas.height;
+  f32[2] = canvas.width;
+  f32[3] = canvas.height;
+  u32[4] = mouseDown ? 1 : 0;
+  u32[5] = attractMode ? 1 : 0;
+  u32[6] = isOperating ? 1 : 0;
   f32[7] = 100.0; // padding
   
   device.queue.writeBuffer(simulationUniformBuffer, 0, uniformData);
