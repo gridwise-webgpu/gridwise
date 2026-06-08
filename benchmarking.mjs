@@ -20,13 +20,6 @@ if (typeof process !== "undefined" && process.release.name === "node") {
   Plot = await import(
     "https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm"
   );
-  /* begin https://github.com/sharonchoong/svg-exportJS */
-  /* svg-exportJS prerequisite: canvg */
-  await import("https://cdnjs.cloudflare.com/ajax/libs/canvg/3.0.9/umd.js");
-  /* svg-exportJS plugin */
-  await import("https://sharonchoong.github.io/svg-exportJS/svg-export.min.js");
-  await import("https://cdn.jsdelivr.net/gh/sharonchoong/svg-exportJS@master/dist/umd/svg-export.umd.min.js");
-  /* end https://github.com/sharonchoong/svg-exportJS */
   const urlParams = new URL(window.location.href).searchParams;
   saveJSON = urlParams.get("saveJSON"); // string or undefined
   if (saveJSON === "false") {
@@ -500,14 +493,6 @@ async function main(navigator) {
       const plotted = Plot.plot(schema);
       const div = document.querySelector("#plot");
       div.append(plotted);
-      if (saveSVG) {
-        // eslint-disable-next-line no-undef
-        svgExport.downloadSvg(
-          div.lastChild,
-          `${testSuite.testsuite}-${testSuite.category}`, // chart title: file name of exported image
-          {}
-        );
-      }
       div.append(document.createElement("hr"));
     }
   }
@@ -580,6 +565,7 @@ function processAndRecordResults(
     bandwidth: result.bandwidthCPU,
     inputItemsPerSecondE9: result.inputItemsPerSecondE9CPU,
   });
+  console.info(`### METRIC: category=${result.category}, testSuite=${result.testSuite}, inputLength=${result.inputLength}, datatype=${result.datatype}, GPU_Time_ms=${(result.gputime / 1e6).toFixed(3)}, GPU_BW_GBs=${result.bandwidthGPU.toFixed(2)}, GPU_ItemsSec_E9=${result.inputItemsPerSecondE9GPU.toFixed(4)}`);
 }
 
 export { main };
