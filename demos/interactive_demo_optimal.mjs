@@ -33,9 +33,14 @@ context.configure({
   alphaMode: "premultiplied",
 });
 
+let renderUniformBuffer = null;
+
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
+  if (device && renderUniformBuffer) {
+    device.queue.writeBuffer(renderUniformBuffer, 0, new Float32Array([canvas.width, canvas.height]));
+  }
 }
 resizeCanvas();
 window.addEventListener("resize", resizeCanvas);
@@ -566,7 +571,7 @@ function buildBindGroups() {
   });
 
   // Render Uniform canvas size
-  const renderUniformBuffer = device.createBuffer({
+  renderUniformBuffer = device.createBuffer({
     size: 8,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
