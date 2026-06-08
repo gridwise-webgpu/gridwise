@@ -39,7 +39,7 @@ function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
   if (device && renderUniformBuffer) {
-    device.queue.writeBuffer(renderUniformBuffer, 0, new Float32Array([canvas.width, canvas.height]));
+    device.queue.writeBuffer(renderUniformBuffer, 0, new Float32Array([canvas.width, canvas.height, 0, 0]));
   }
 }
 resizeCanvas();
@@ -255,8 +255,10 @@ const simulationWGSL = `
   }
 
   struct Params {
-    mousePos: vec2f,
-    canvasSize: vec2f,
+    mouseX: f32,
+    mouseY: f32,
+    canvasWidth: f32,
+    canvasHeight: f32,
     mouseDown: u32,
     attractMode: u32,
     isOperating: u32,
@@ -274,8 +276,8 @@ const simulationWGSL = `
     var p = particles[index];
 
     if (params.isOperating == 0u) {
-      let dx = params.mousePos.x - p.pos.x;
-      let dy = params.mousePos.y - p.pos.y;
+      let dx = params.mouseX - p.pos.x;
+      let dy = params.mouseY - p.pos.y;
       let dist = sqrt(dx * dx + dy * dy);
 
       if (params.mouseDown == 1u && dist < 150.0 && dist > 0.1) {
@@ -290,10 +292,10 @@ const simulationWGSL = `
       p.pos.x += p.vel.x;
       p.pos.y += p.vel.y;
 
-      if (p.pos.x < 0.0 || p.pos.x > params.canvasSize.x) { p.vel.x *= -0.5; }
-      if (p.pos.y < 0.0 || p.pos.y > params.canvasSize.y) { p.vel.y *= -0.5; }
-      p.pos.x = max(0.0, min(params.canvasSize.x, p.pos.x));
-      p.pos.y = max(0.0, min(params.canvasSize.y, p.pos.y));
+      if (p.pos.x < 0.0 || p.pos.x > params.canvasWidth) { p.vel.x *= -0.5; }
+      if (p.pos.y < 0.0 || p.pos.y > params.canvasHeight) { p.vel.y *= -0.5; }
+      p.pos.x = max(0.0, min(params.canvasWidth, p.pos.x));
+      p.pos.y = max(0.0, min(params.canvasHeight, p.pos.y));
     } else {
       p.pos.x += (p.destination.x - p.pos.x) * 0.08;
       p.pos.y += (p.destination.y - p.pos.y) * 0.08;
@@ -338,8 +340,10 @@ const applySortedWGSL = `
   }
 
   struct Params {
-    mousePos: vec2f,
-    canvasSize: vec2f,
+    mouseX: f32,
+    mouseY: f32,
+    canvasWidth: f32,
+    canvasHeight: f32,
     mouseDown: u32,
     attractMode: u32,
     isOperating: u32,
@@ -370,8 +374,8 @@ const applySortedWGSL = `
     let origIdx = sortedIndices[rank];
     let progress = f32(rank) / f32(count);
     
-    let usableWidth = params.canvasSize.x - params.padding * 2.0;
-    let usableHeight = params.canvasSize.y - params.padding * 2.0;
+    let usableWidth = params.canvasWidth - params.padding * 2.0;
+    let usableHeight = params.canvasHeight - params.padding * 2.0;
 
     particles[origIdx].destination.x = params.padding + progress * usableWidth;
     particles[origIdx].destination.y = params.padding + (hash(rank) * 0.5 + 0.25) * usableHeight;
@@ -415,9 +419,16 @@ const renderWGSL = `
     @location(2) size: f32,
   }
 
+  struct RenderParams {
+    canvasWidth: f32,
+    canvasHeight: f32,
+    padding1: f32,
+    padding2: f32,
+  }
+
   @group(0) @binding(0) var<storage, read> particles: array<Particle>;
   @group(0) @binding(1) var<storage, read> colors: array<vec3f>;
-  @group(0) @binding(2) var<uniform> canvasSize: vec2f;
+  @group(0) @binding(2) var<uniform> renderParams: RenderParams;
 
   @vertex
   fn vs(
@@ -445,6 +456,7 @@ const renderWGSL = `
     }
 
     // Convert pixel position to NDC [-1, 1]
+    let canvasSize = vec2f(renderParams.canvasWidth, renderParams.canvasHeight);
     let pixelPos = p.pos + quadOffset * size;
     let ndcPos = (pixelPos / canvasSize) * 2.0 - 1.0;
     
@@ -572,10 +584,10 @@ function buildBindGroups() {
 
   // Render Uniform canvas size
   renderUniformBuffer = device.createBuffer({
-    size: 8,
+    size: 16,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
-  device.queue.writeBuffer(renderUniformBuffer, 0, new Float32Array([canvas.width, canvas.height]));
+  device.queue.writeBuffer(renderUniformBuffer, 0, new Float32Array([canvas.width, canvas.height, 0, 0]));
 
   renderBindGroup = device.createBindGroup({
     layout: renderPipeline.getBindGroupLayout(0),
