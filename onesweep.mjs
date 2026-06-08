@@ -87,16 +87,15 @@ export class OneSweepSort extends BaseSort {
   }
 
   get bytesTransferred() {
+    const keysSize = this.getBuffer("keysInOut").size;
     switch (this.type) {
-      case "keyvalue":
-        return (
-          (this.getBuffer("keysInOut").size +
-            this.getBuffer("payloadInOut").size) *
-          2
-        );
+      case "keyvalue": {
+        const payloadSize = this.getBuffer("payloadInOut").size;
+        return keysSize * (2 * this.SORT_PASSES + 1) + payloadSize * (2 * this.SORT_PASSES);
+      }
       case "keysonly":
       default:
-        return this.getBuffer("keysInOut").size * 2;
+        return keysSize * (2 * this.SORT_PASSES + 1);
     }
   }
 
