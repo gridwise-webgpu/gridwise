@@ -943,10 +943,6 @@ dispatchGeometry: ${dispatchGeometry}`);
             } else {
               if (action.clearBufferOnReuse ?? true) {
                 /* clear the buffer if clearBufferOnReuse is unspecified or true */
-                console.log(
-                  "Clearing buffer [clearBufferOnReuse]: ",
-                  existingBuffer
-                );
                 encoder.clearBuffer(existingBuffer.buffer.buffer);
               }
             }
