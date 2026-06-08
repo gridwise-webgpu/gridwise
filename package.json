@@ -1,0 +1,59 @@
+{
+  "name": "gridwise",
+  "version": "0.1.0",
+  "description": "High-performance WebGPU parallel primitives for JavaScript",
+  "type": "module",
+  "main": "./index.mjs",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "scripts": {
+    "test:node": "node examples/regression_node.mjs",
+    "test:node:update-baseline": "UPDATE_BASELINE=true node examples/regression_node.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "index.d.ts",
+    "primitive.mjs",
+    "buffer.mjs",
+    "binop.mjs",
+    "scandldf.mjs",
+    "onesweep.mjs",
+    "scan.mjs",
+    "sort.mjs",
+    "reduce.mjs",
+    "util.mjs",
+    "mapvariants.mjs",
+    "webgpufundamentals-timing.mjs",
+    "wgslFunctions.mjs",
+    "testbuffer.mjs",
+    "testsuite.mjs",
+    "datatype.mjs",
+    "LICENSE.txt"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gridwise-js/gridwise.git"
+  },
+  "keywords": [
+    "webgpu",
+    "parallel",
+    "primitives",
+    "prefix-scan",
+    "scan",
+    "radix-sort",
+    "sort",
+    "reduce",
+    "gpgpu"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/gridwise-js/gridwise/issues"
+  },
+  "homepage": "https://github.com/gridwise-js/gridwise#readme",
+  "devDependencies": {
+    "webgpu": "^0.4.0"
+  }
+}
