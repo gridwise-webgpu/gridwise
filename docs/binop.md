@@ -43,13 +43,32 @@ We want to write primitives that work for any monoid. Other languages have more 
     - `subgroupInclusiveScanOp`, which computes an inclusive scan of the values in a subgroup using this operation. At the time of writing, supported WGSL functions of this type are `subgroupInclusive{Add,Mul}`. Example: `this.subgroupInclusiveScanOp = "subgroupInclusiveAdd";`
     - `subgroupExclusiveScanOp`, which computes an exclusive scan of the values in a subgroup using this operation. At the time of writing, supported WGSL functions of this type are `subgroupExclusive{Add,Mul}`. Example: `this.subgroupExclusiveScanOp = "subgroupExclusiveAdd";`
 
-Below is an example implementation, `BinOpAdd`, which takes an argument of `{ datatype = "..." }` that is used to specialize it.
+Below is an example implementation, `BinOpAdd`, which is specialized by passing its datatype as an option.
 
 ```js
 export class BinOpAdd extends BinOp {
   constructor(args) {
     super(args);
     this.identity = 0;
+
+    // GPU-side definitions
+    this.wgslfn = `fn binop(a : ${this.datatype}, b : ${this.datatype}) -> ${this.datatype} {return a+b;}`;
+    
+    switch (this.datatype) {
+      case "f32":
+        break;
+      case "i32":
+        break;
+      case "u32": // fall-through OK
+      default:
+        this.wgslatomic = "atomicAdd"; // u32 only
+        break;
+    }
+    this.subgroupReduceOp = "subgroupAdd";
+    this.subgroupInclusiveScanOp = "subgroupInclusiveAdd";
+    this.subgroupExclusiveScanOp = "subgroupExclusiveAdd";
+
+    // CPU-side implementation (used for correctness checking / validation)
     if (args.datatype == "f32") {
       const f32array = new Float32Array(3);
       this.op = (a, b) => {
@@ -61,20 +80,6 @@ export class BinOpAdd extends BinOp {
     } else {
       this.op = (a, b) => a + b;
     }
-    switch (this.datatype) {
-      case "f32":
-        break;
-      case "i32":
-        break;
-      case "u32": // fall-through OK
-      default:
-        this.wgslatomic = "atomicAdd"; // u32 only
-        break;
-    }
-    this.wgslfn = `fn binop(a : ${this.datatype}, b : ${this.datatype}) -> ${this.datatype} {return a+b;}`;
-    this.subgroupReduceOp = "subgroupAdd";
-    this.subgroupInclusiveScanOp = "subgroupInclusiveAdd";
-    this.subgroupExclusiveScanOp = "subgroupExclusiveAdd";
   }
 }
 ```
