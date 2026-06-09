@@ -538,7 +538,7 @@ fn main(builtinsUniform: BuiltinsUniform,
     this.MAX_READBACK_SIZE = 8192; // Max size of our readback buffer
     this.workgroupSize = 256;
     this.SUBGROUP_MIN_SIZE =
-      this.device.adapterInfo.subgroupMinSize ?? this.workgroupSize;
+      this.adapterInfo?.subgroupMinSize ?? this.workgroupSize;
     const inputSize = this.getBuffer("inputBuffer").size; // bytes
     const inputLength = inputSize / 4; /* 4 is size of datatype */
     this.workgroupCount = Math.ceil(inputLength / this.PART_SIZE);

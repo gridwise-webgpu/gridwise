@@ -185,11 +185,15 @@ export class BasePrimitive {
     }
     if (this.useSubgroups) {
       this.fnDeclarations = new wgslFunctions(this);
-      this.SUBGROUP_MIN_SIZE = this.device.adapterInfo.subgroupMinSize;
-      this.SUBGROUP_MAX_SIZE = this.device.adapterInfo.subgroupMaxSize;
+      this.SUBGROUP_MIN_SIZE = this.adapterInfo?.subgroupMinSize ?? 32;
+      this.SUBGROUP_MAX_SIZE = this.adapterInfo?.subgroupMaxSize ?? 64;
     } else {
       this.fnDeclarations = new wgslFunctionsWithoutSubgroupSupport(this);
     }
+  }
+
+  get adapterInfo() {
+    return this.adapter?.info ?? this.device.adapterInfo;
   }
 
   makeParamString(params) {

@@ -1198,7 +1198,7 @@ export class OneSweepSort extends BaseSort {
 
     /* the following better match what's in the shader! */
     this.SUBGROUP_MIN_SIZE =
-      this.device.adapterInfo.subgroupMinSize ?? this.RADIX; // this is fragile, if RADIX changes, check it
+      this.adapterInfo?.subgroupMinSize ?? this.RADIX; // this is fragile, if RADIX changes, check it
     this.BLOCK_DIM = this.BLOCK_DIM ?? 256;
     this.workgroupSize = this.BLOCK_DIM; // this is only for subgroup emulation
     this.KEYS_PER_THREAD =
