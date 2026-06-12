@@ -607,7 +607,7 @@ export class wgslFunctionsWithoutSubgroupSupport extends wgslFunctions {
     var<workgroup> wg_sw_subgroups_flag_steps: array<array<atomic<u32>, ${env.workgroupSize}>, 6>;
     var<workgroup> wg_thread_shuffle_count: array<atomic<u32>, ${env.workgroupSize}>;
     const sgsz: u32 = 32u;
-    const SPIN_TIMEOUT: u32 = 5000u;
+    const SPIN_TIMEOUT: u32 = 5000000u;
     var<private> sgid: u32;
     var<private> lidx_private: u32;
     var<private> shuffle_count: u32;
