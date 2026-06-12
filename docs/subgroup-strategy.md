@@ -185,6 +185,22 @@ To prevent this under emulation, we must introduce workgroup-uniform synchroniza
 
 Thus, to achieve 100% spec compliance, we are forced to separate the WGSL codebases, or place strict design constraints on the developer.
 
+### SwiftShader and CPU Spin-Loop Starvation
+
+A major source of hangs on platforms like GitHub Actions CI is the execution environment itself. Standard cloud CI runners lack physical GPUs and run WebGPU shaders via **SwiftShader** (a CPU-based Vulkan software rasterizer).
+
+Under native GPU execution, even if emulated subgroup helpers (like `subgroupShuffle` or `subgroupBallot` in `wgslFunctions.mjs`) use atomic-based spin-loops:
+$$\text{while} \ (\text{atomicLoad}(\text{flag}) < \text{shuffle\_count}) \ \{ \ \dots \ \}$$
+the GPU's hardware warp scheduler ensures that threads make progress and eventually update their flags, allowing the loop to terminate.
+
+However, on a CPU-based software renderer like SwiftShader:
+1. Workgroups are mapped to standard CPU/OS threads.
+2. The CPU has a very limited number of physical cores/hardware execution threads.
+3. If a thread \(i\) enters an atomic spin loop waiting for another thread \(j\) in the same workgroup to write its data, thread \(i\) will consume $100\%$ CPU time on its core.
+4. Because WebGPU makes no execution progress guarantees and has no concept of thread yielding or OS-level preemption for compute shaders, the spinning thread \(i\) starves thread \(j\) on the CPU core. Thread \(j\) is never scheduled to run, so it can never update the flag, leading to a permanent CPU deadlock/hang.
+
+To prevent this deadlock on CPU-based emulators, any emulation layer relying on shared-memory synchronization must use explicit `workgroupBarrier()` calls rather than atomic spin-loops. However, introducing `workgroupBarrier()` into the emulation functions forces those functions to be called strictly in statically uniform control flow, which conflicts with standard hardware-subgroup usage where subgroup instructions can run inside divergent conditional branches.
+
 ### Host-Side JS Templating as a Preprocessor
 
 In our codebase, we utilize Javascript string interpolation (e.g., `${this.useSubgroups ? '...' : '...'}`) to dynamically generate the WGSL shader source before passing it to the WebGPU device. This acts as a host-side preprocessor (similar to `#ifdef` in C/C++).
