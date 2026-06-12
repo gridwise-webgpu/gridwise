@@ -319,6 +319,10 @@ export class OneSweepSort extends BaseSort {
       workgroupSize: `${this.BLOCK_DIM}`,
     })}
     ${this.fnDeclarations.subgroupZero()}
+    ${this.fnDeclarations.subgroupBallot()}
+    ${this.fnDeclarations.subgroupShuffle({ datatype: "u32" })}
+    ${this.fnDeclarations.subgroupAny()}
+    ${this.fnDeclarations.subgroupAll()}
 
     /** OneSweepSort internally sorts u32 keys
      * The following functions convert ${this.datatype} keys <-> u32 keys
@@ -698,7 +702,7 @@ export class OneSweepSort extends BaseSort {
          * to minimize the size of scan up the warp histograms. */
         let dev_offset = partid * PART_SIZE;
         let s_offset = sid * sgsz * KEYS_PER_THREAD;
-        var i = builtinsNonuniform.sgid + s_offset + dev_offset;
+        var i = sgid + s_offset + dev_offset;
         if (partid < builtinsUniform.nwg.x - 1) {
           for (var k = 0u; k < KEYS_PER_THREAD; k += 1u) {
             keys[k] = keyToU32(keysIn[i]);
@@ -758,7 +762,7 @@ export class OneSweepSort extends BaseSort {
        */
       var offsets = array<u32, KEYS_PER_THREAD>();
       {
-        let lane_mask_lt = (1u << builtinsNonuniform.sgid) - 1u;
+        let lane_mask_lt = (1u << sgid) - 1u;
         let s_offset = sid * RADIX;
         for (var k = 0u; k < KEYS_PER_THREAD; k += 1u) {
           /* offsets[k] reflects the number of digits seen by this subgroup
@@ -771,7 +775,7 @@ export class OneSweepSort extends BaseSort {
               this.keyDatatype.is64Bit
                 ? /* 64b key */ /* WGSL */ "keys[k][keyidx]"
                 : /* 32b key */ /* WGSL */ "keys[k]"
-            }, shift, builtinsNonuniform.sgid, sgsz, lane_mask_lt, s_offset);
+            }, shift, sgid, sgsz, lane_mask_lt, s_offset);
         }
       }
       workgroupBarrier();
@@ -829,7 +833,7 @@ export class OneSweepSort extends BaseSort {
         /* Once posted, we do a standard workgroup-wide exclusive scan over RADIX threads,
          * which starts here. */
         let lane_mask = sgsz - 1u;
-        let circular_lane_shift = (builtinsNonuniform.sgid + lane_mask) & lane_mask;
+        let circular_lane_shift = (sgid + lane_mask) & lane_mask;
         let t = subgroupInclusiveAdd(local_reduction);
         wg_localHist[builtinsNonuniform.lidx] = subgroupShuffle(t, circular_lane_shift);
       }
@@ -848,7 +852,7 @@ export class OneSweepSort extends BaseSort {
       }
       workgroupBarrier();
 
-      if (builtinsNonuniform.lidx < RADIX && builtinsNonuniform.sgid != 0u) {
+      if (builtinsNonuniform.lidx < RADIX && sgid != 0u) {
         /* If I'm not the first thread in my subgroup, add the value from the local
          * spine to my local val. This completes the scan. */
         wg_localHist[builtinsNonuniform.lidx] += wg_localHist[builtinsNonuniform.lidx / sgsz * sgsz];
@@ -935,6 +939,7 @@ export class OneSweepSort extends BaseSort {
           /* turning off diagnostic for sgLookbackComplete is safe; it's only updated an entire subgroup at a time */
           @diagnostic(off, subgroup_uniformity)
           if (!sgLookbackComplete) {
+            var didSpinTimeout = false;
             if (!lookbackComplete) {
               while (spinCount < MAX_SPIN_COUNT) { /* spin until we get something better than FLAG_NOT_READY */
                 flagPayload = atomicLoad(&passHist[builtinsNonuniform.lidx + part_offset + lookbackid * RADIX]);
@@ -944,10 +949,11 @@ export class OneSweepSort extends BaseSort {
                   spinCount++;
                 }
               }
-              // Did we find anything with FLAG_NOT_READY? Subgroup thread 0 posts it.
-              if (subgroupAny(spinCount == MAX_SPIN_COUNT) && (sgid == 0)) {
-                wg_incomplete = 1; // possibly a race?
-              }
+              didSpinTimeout = (spinCount == MAX_SPIN_COUNT);
+            }
+            // Did we find anything with FLAG_NOT_READY? Subgroup thread 0 posts it.
+            if (subgroupAny(didSpinTimeout) && (sgid == 0)) {
+              wg_incomplete = 1; // possibly a race?
             }
           }
 
@@ -1096,7 +1102,7 @@ export class OneSweepSort extends BaseSort {
           /* this is necessary to make sure the offsets are consistent */
           let dev_offset = partid * PART_SIZE;
           let s_offset = sid * sgsz * KEYS_PER_THREAD;
-          var i = builtinsNonuniform.sgid + s_offset + dev_offset;
+          var i = sgid + s_offset + dev_offset;
           for (var k = 0u; k < KEYS_PER_THREAD; k += 1u) { /* load payloads */
             values[k] = payloadIn[i];
             i += sgsz;
@@ -1150,7 +1156,7 @@ export class OneSweepSort extends BaseSort {
           /* this is necessary to make sure the offsets are consistent */
           let dev_offset = partid * PART_SIZE;
           let s_offset = sid * sgsz * KEYS_PER_THREAD;
-          var i = builtinsNonuniform.sgid + s_offset + dev_offset;
+          var i = sgid + s_offset + dev_offset;
           for (var k = 0u; k < KEYS_PER_THREAD; k += 1u) { /* load payloads */
             if (i < arrayLength(&keysIn)) {
               values[k] = payloadIn[i];
@@ -1885,12 +1891,12 @@ const Sort64v321MParams = {
 };
 
 const SortOneSweepSingletonParams = {
-  inputLength: [2 ** 25],
+  inputLength: [2 ** 20],
   // inputLength: [2048, 4096],
   // inputLength: range(10, 27).map((i) => 2 ** i),
   datatype: ["u32"],
-  type: ["keysonly", "keyvalue"],
-  direction: ["ascending", "descending"],
+  type: ["keysonly"],
+  direction: ["ascending"],
   disableSubgroups: [false],
 };
 

@@ -104,33 +104,155 @@ fn kernel() {
 
 ### Challenge: choosing an emulated subgroup size
 
-Finally, we will have to write each emu subgroup operation. Our third challenge is to choose a subgroup size to emulate.
+Finally, we will have to actually write each emu subgroup operation. Our third challenge is to choose a subgroup size to emulate.
 
 First, we know that using hw subgroup operations will deliver better performance than emu, for several reasons.
 
 1. Hardware-supported subgroup instructions will run faster than the sequences of instructions we need to emulate them
-2. Because emulated subgroups don't run in lockstep, we will require more workgroup barriers to emulate subgroups
+2. Because emulated subgroups lack hardware subgroup communication primitives, we must coordinate them manually using workgroup memory and barriers
    - Workgroup barriers will have the largest impact in latency-sensitive and/or large-workgroup kernels
 3. Emulated subgroup instructions need to run through workgroup memory, which is slower than registers
 4. Allocating additional workgroup memory (at least one word per thread of the workgroup) might decrease the number of subgroups that can fit on a processor, hurting occupancy
 
-Recall that WebGPU does not specify a subgroup size (in hw), although it does specify a minimum and maximum subgroup size. (In fact, some WebGPU-capable hardware may use different subgroup sizes across different kernels in the same application.) WebGPU developers must thus write their code assuming any subgroup size between the minimum and the maximum. Since our kernels already have to handle a range of subgroup sizes, we have some flexibility to choose a subgroup size in emu. We have 3 main choices:
+Recall that WebGPU does not specify a subgroup size (in hw), although it does specify a minimum and maximum subgroup size. (In fact, some WebGPU-capable hardware may use different subgroup sizes across different kernels in the same application.) WebGPU developers must thus write their code assuming any subgroup size between the minimum and the maximum. Since our kernels already have to handle a range of subgroup sizes, we have some flexibility to choose a subgroup size in emu.
 
-1. Assume that very small subgroup sizes run in lockstep, and use those subgroup sizes. Then we can potentially avoid some barriers and gain some efficiency.
-   - But: We can't assume that. WebGPU does not report that information. (If it did, we could take advantage of it.)
-2. Assume a comfortable subgroup size (e.g., 32), and add appropriate barriers.
-3. Since we're going to have to put barriers everywhere anyway, assume subgroup size == workgroup size.
+We choose to emulate virtual subgroups of size **32** (partitioning the workgroup's flat array and tracking thread subgroup IDs via `lidx % 32u`). 
 
-Let's take a step back and think about how subgroups are used. Consider a reduction across a workgroup (each thread has one item and the workgroup adds up all items). The typical pattern for a workgroup reduction leveraging subgroup support is to (a) use a subgroup reduction on each subgroup then (b) reduce across the results from each subgroup. This pattern is typical: parallelize across subgroups, then combine the results.
+### Why 32-thread virtual subgroups?
+Some key primitives like Radix Sort's warp-level multi-split (`WLMS`) algorithm use `subgroupBallot` and expect the ballot to fit inside a single 32-bit register (`ballot.x`). If we emulated subgroups equal to the workgroup size (e.g., 256), the ballot would be truncated, leading to incorrect sorted output. By emulating virtual subgroups of size 32, we remain compatible with these requirements.
 
-Now, if we choose alternatives 1 or 2, then it is highly likely that each workgroup will contain several subgroups. Many primitives will thus have two stages: per-subgroup, then per-workgroup. If we choose alternative 3 (subgroup size == workgroup size), then our algorithms may be simpler, because we don't have to combine results from multiple subgroups within a workgroup. This also simplifies the code that emulates subgroups.
+### Challenge: Uniform Control Flow and Emulated Barriers
+WebGPU/WGSL provides no guarantee of lockstep execution and requires explicit synchronization for cross-thread memory visibility. Emulating subgroup operations inside non-uniform control flow (such as subgroup-conditional branches like `if (sg0)`) poses a major dilemma:
+* We need barriers (like `workgroupBarrier()`) to synchronize emulated subgroup operations.
+* However, WGSL restricts `workgroupBarrier()` to strictly **uniform control flow** across the entire workgroup.
 
-We do see one clear structural issue, though: some subgroup operations have a maximum size (e.g., `subgroupBallot` has a maximum subgroup size of 128, because it returns exactly 128 bits).
-
-Nonetheless for simplicity, we currently choose to always emulate subgroups that are the size of the workgroup, recognizing that this is not a fully generalizable solution.
+We resolve this dilemma using two different strategies depending on the code pattern:
+1. **Barrier-Free Emulation**: For simple subgroup shuffles/ballots within uniform code paths, we omit internal `workgroupBarrier()` calls. This relies on the assumption that the 32 threads in the virtual subgroup are scheduled such that their memory writes are visible without explicit synchronization. Note that this is a spec violation and technically a data race under the WebGPU specification, as WebGPU makes no guarantees about lockstep execution or implicit memory visibility across threads. We do this purely as a pragmatic workaround to avoid uniformity compilation errors on current compilers, but it is not spec-compliant.
+2. **Workgroup-Uniform Coordination**: For loop-based primitives (like Decoupled Lookback in `DLDFScan`), we restructure the loop to run workgroup-uniformly. All subgroups enter the loop together and participate in the barriers. Subgroup 0 computes the lookback conditions and broadcasts the results (e.g., loop exit states) to the rest of the workgroup using shared workgroup memory. All threads then read the shared variables to exit the loop in unison, maintaining 100% uniform control flow and spec-compliance.
 
 ## Summary
 
 On an Apple M3 with a high-performance scan kernel, the performance difference between hw and emu with the same kernel is ~2.5x.
 
 An open question is whether it is better to write different _kernels_ for hw and emu as opposed to what we did: writing different versions of subgroup functions and keeping the same kernel. The answer probably depends on the nature of the kernels. We did not explore the latter alternative at all.
+
+## Further Discussion
+
+### The Impossibility of Statically Spec-Compliant Emulation with a Single Codebase
+
+If we mandate that the emulated (emu) code and hardware-subgroup (hw) code share the exact same WGSL kernel codebase (without conditional compiler templating or code-generation splits), it is impossible to emulate subgroup operations robustly and remain spec-compliant if subgroup operations are called inside conditional branches.
+
+Under the WebGPU/WGSL specification:
+* **Memory Visibility Requirement**: Any data exchange between threads via workgroup shared memory (`var<workgroup>`) requires a `workgroupBarrier()` to guarantee memory visibility and avoid data races.
+* **Uniformity Restriction**: `workgroupBarrier()` can only be called in control flow that is statically uniform across the entire workgroup.
+
+Under native GPU execution, a subgroup of size \(S_g\) executes instruction-synchronously. Communication via subgroup registers (e.g., shuffling) does not require barriers because the hardware guarantees that all lanes progress in lockstep. In lookback-based chained scans, a thread \(i\) can spin-wait on a memory location to be updated by a preceding tile \(j\):
+$$\text{SpinWait}(T_i) \implies \text{Read}(\text{spine}[j])$$
+
+If we attempt to run the exact same logic under emulation (where subgroups are simulated by sharing workgroup memory across the thread group), the execution model shifts from concurrent SIMD lanes to scheduled workgroup threads. If a thread \(i\) enters a spinning loop:
+$$\text{while} \ (\text{spine}[j] == \text{Pending}) \ \{ \ \dots \ \}$$
+and the thread \(k\) (within the same workgroup) responsible for executing fallback reductions to resolve the stall is scheduled on the same hardware compute unit, the spin-loop of \(i\) will starve \(k\) of execution cycles. Because WebGPU does not guarantee preemption or fair scheduling between threads of a workgroup, the spin-lock becomes permanent, resulting in a GPU hang:
+$$\text{Starve}(T_k) \implies \text{Deadlock}$$
+
+To prevent this under emulation, we must introduce workgroup-uniform synchronization primitives (such as `workgroupBarrier()`) inside the lookback loop. However, adding these barriers to a unified codebase forces native subgroup threads to execute workgroup barriers on every iteration, destroying their register-based, barrier-free performance. Thus, a robust, unified, single-codebase execution path for both hardware subgroups and emulation is mathematically and architecturally impossible without sacrificing either performance or correctness.
+
+Thus, to achieve 100% spec compliance, we are forced to separate the WGSL codebases, or place strict design constraints on the developer.
+
+### Host-Side JS Templating as a Preprocessor
+
+In our codebase, we utilize Javascript string interpolation (e.g., `${this.useSubgroups ? '...' : '...'}`) to dynamically generate the WGSL shader source before passing it to the WebGPU device. This acts as a host-side preprocessor (similar to `#ifdef` in C/C++).
+
+This templating allows us to keep a single **host-side codebase** (a single Javascript class/file per primitive) while branching the actual **device-side WGSL codebase** during runtime compilation. It enables us to implement loop restructures (like Alternative 2) or generate entirely different shader blocks (like Alternative 3) without forcing the user to load different files or manage separate execution classes.
+
+However, while this solves the usability goal for the library user, it still requires the library developer to design, write, and maintain two separate WGSL code flows within the same template string.
+
+### Alternatives for Spec-Compliant Subgroup Emulation
+
+Below are three potential design strategies to achieve full spec compliance, along with their pros and cons.
+
+#### Alternative 1: Out-of-Branch Execution (Hoisting)
+In this approach, the programmer manually restructures the WGSL kernel to hoist all subgroup operations out of conditional control flow. Data is stored in shared memory, processed unconditionally (uniformly) across the entire workgroup, and the result is referenced later inside the branch.
+
+* **Pros**:
+  * Statically spec-compliant and compiles on all standard WGSL compilers.
+  * Allows a single unified kernel codebase.
+* **Cons**:
+  * Significantly increases code complexity and programmer overhead.
+  * Forces the hardware subgroup path to also use temporary variables and barriers, introducing unnecessary register usage and performance penalties.
+
+#### Alternative 2: Workgroup-Uniform Coordination
+Instead of hoisting, we keep the subgroup operations inside the conditional branches but make the branch itself workgroup-uniform. One subgroup computes the branch conditions, writes them to shared memory, and broadcasts them. All subgroups then read the state and enter the branch together.
+
+* **Pros**:
+  * Keeps the subgroup operations logically situated inside their loops or conditional blocks.
+  * Statically spec-compliant.
+* **Cons**:
+  * Introduces overhead to compute, write, and broadcast the branch decisions across the entire workgroup.
+  * Requires writing separate templated code paths (e.g., using JS string interpolation) to split the hardware and emulated loop structures.
+
+#### Alternative 3: Separate Kernels (Emu vs. HW)
+Instead of trying to emulate subgroup built-ins line-by-line in a shared kernel, we write and maintain two completely different shader implementations. The hardware kernel uses native subgroup built-ins, while the emulated kernel uses standard workgroup-level parallel algorithms (such as Kogge-Stone or Hillis-Steele scans) designed natively for uniform workgroup barriers.
+
+* **Pros**:
+  * 100% spec-compliant and extremely robust.
+  * Delivers maximum possible performance for both hardware subgroup paths (no register/barrier overhead) and emulated paths (optimized workgroup-shared algorithms).
+* **Cons**:
+  * Increases codebase maintenance overhead as developers must write, test, and maintain two versions of every primitive.
+
+## Case Study: Control Flow Divergence in subgroupAny (OneSweep Sort)
+
+In the implementation of the OneSweep Radix Sort lookback loop, a deadlock was discovered when running under software subgroup emulation. The original code compiled and ran correctly on native hardware subgroup platforms but hung indefinitely under emulation.
+
+### The Problem: Divergent Control Flow
+
+The lookback loop spins waiting for preceding tiles to publish their histograms. The original kernel structure executed `subgroupAny` inside a thread-divergent conditional block:
+
+```wgsl
+if (!sgLookbackComplete) {
+  if (!lookbackComplete) { // Thread-divergent branch (per-lane status)
+    while (spinCount < MAX_SPIN_COUNT) {
+      flagPayload = atomicLoad(&passHist[...]);
+      if ((flagPayload & FLAG_MASK) > FLAG_NOT_READY) { break; }
+      spinCount++;
+    }
+    // subgroupAny is called ONLY by threads that have NOT completed lookback
+    if (subgroupAny(spinCount == MAX_SPIN_COUNT) && (sgid == 0)) {
+      wg_incomplete = 1;
+    }
+  }
+}
+```
+
+* **On Hardware**: Native hardware subgroups use execution masks to dynamically disable inactive lanes. Threads that have already completed lookback (`lookbackComplete == true`) simply bypass the branch, and the hardware evaluates `subgroupAny` correctly using only the active participating lanes.
+* **On Emulation**: Software emulation simulates subgroup barriers using workgroup shared memory barriers and transaction counters. Every thread in the virtual subgroup must execute the helper function uniformly. Because lanes that completed early bypassed the `if (!lookbackComplete)` block, they never reached the barrier inside the emulated `subgroupAny`, causing the participating threads to deadlock waiting for them.
+
+### The Fix: Uniform Execution
+
+To make the kernel emulation-friendly, the divergent `subgroupAny` call was hoisted out of the thread-divergent block while keeping it within the subgroup-uniform block. A subgroup-uniform variable `didSpinTimeout` is initialized and updated inside the branch, then passed to `subgroupAny` uniformly:
+
+```wgsl
+if (!sgLookbackComplete) { // Subgroup-uniform branch
+  var didSpinTimeout = false;
+  
+  if (!lookbackComplete) { // Thread-divergent branch
+    while (spinCount < MAX_SPIN_COUNT) { ... }
+    didSpinTimeout = (spinCount == MAX_SPIN_COUNT);
+  }
+  
+  // Hoisted: Every thread in the subgroup now executes subgroupAny uniformly
+  if (subgroupAny(didSpinTimeout) && (sgid == 0)) {
+    wg_incomplete = 1;
+  }
+}
+```
+
+Now, all threads in the subgroup execute `subgroupAny` in lockstep. Completed threads participate by passing `didSpinTimeout = false`, and active threads pass their actual spin status. This prevents barrier misalignment and resolves the emulation deadlock.
+
+### Principles for Writing Emulation-Friendly Subgroup Kernels
+
+If you are writing WebGPU kernels intended to be portable to devices without hardware subgroup support (running via a software emulation layer), follow these guidelines:
+
+1. **Treat Subgroup Operations as Collective Barriers**: Always write code under the assumption that subgroup built-ins act as collective operations requiring participation from all threads in the virtual subgroup.
+2. **Never Call Subgroup Built-ins Inside Divergent Branches**: Do not place `subgroupShuffle`, `subgroupReduce`, `subgroupAny`, `subgroupAll`, or `subgroupBallot` inside control flow paths that are evaluated per-lane (e.g., `if (!threadCompleted)` or `if (laneId < activeCount)`).
+3. **Compute Locally, Participate Uniformly**: If a subgroup operation must evaluate a condition computed inside a divergent branch, compute the condition locally, store it in an initialized variable outside the branch, and call the subgroup operation uniformly.
+
