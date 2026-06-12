@@ -288,3 +288,21 @@ fn clear_buffer(@builtin(global_invocation_id) id: vec3<u32>) {
   }
 }
 `;
+
+export function getBrowserName() {
+  if (typeof navigator === "undefined") {
+    return "Browser";
+  }
+  const ua = navigator.userAgent || "";
+  if (ua.includes("Firefox")) {
+    return "Firefox";
+  } else if (ua.includes("Edg/")) {
+    return "Edge";
+  } else if (ua.includes("Chrome") || ua.includes("Chromium")) {
+    return "Chrome";
+  } else if (ua.includes("Safari")) {
+    return "Safari";
+  }
+  return "Browser";
+}
+

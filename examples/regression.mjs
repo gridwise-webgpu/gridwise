@@ -4,7 +4,7 @@ import {
   BinOpMax,
   BinOpMultiply,
 } from "../binop.mjs";
-import { datatypeToTypedArray } from "../util.mjs";
+import { datatypeToTypedArray, getBrowserName } from "../util.mjs";
 import { DLDFScan } from "../scandldf.mjs";
 import { OneSweepSort } from "../onesweep.mjs";
 
@@ -69,7 +69,14 @@ export async function main(navigator) {
     }
     return;
   }
-  const hasSubgroups = adapter.features.has("subgroups");
+  let useEmu = false;
+  if (!isNode) {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("disableSubgroups") === "true") {
+      useEmu = true;
+    }
+  }
+  const hasSubgroups = adapter.features.has("subgroups") && !useEmu;
   const device = await adapter.requestDevice({
     requiredFeatures: [...(hasSubgroups ? ["subgroups"] : [])],
     requiredLimits: {
@@ -84,6 +91,15 @@ export async function main(navigator) {
       summaryEl.className = "summary some-fail";
     }
     return;
+  }
+
+  if (!isNode) {
+    const platformInfo = document.getElementById("platform-info");
+    if (platformInfo) {
+      const browserName = getBrowserName();
+      const mode = hasSubgroups ? "hardware subgroups" : "emulated subgroups";
+      platformInfo.textContent = `(${browserName}, ${mode})`;
+    }
   }
 
   /* ------------------------------------------------------------------ */
