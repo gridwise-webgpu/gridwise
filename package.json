@@ -10,7 +10,8 @@
   },
   "scripts": {
     "test:node": "node examples/regression_node.mjs",
-    "test:node:update-baseline": "UPDATE_BASELINE=true node examples/regression_node.mjs"
+    "test:node:update-baseline": "UPDATE_BASELINE=true node examples/regression_node.mjs",
+    "test:wgsl": "node examples/test_wgsl_functions_node.mjs"
   },
   "files": [
     "index.mjs",
