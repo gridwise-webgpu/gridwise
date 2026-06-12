@@ -24,8 +24,16 @@ jobs:
       with:
         node-version: '22'
 
-    - name: Install Puppeteer
-      run: npm install puppeteer
+    - name: Install dependencies
+      run: |
+        npm install
+        npm install puppeteer
 
     - name: Run Headless WebGPU Tests
       run: node misc/run_headless_tests.js
+
+    - name: Run Node.js WebGPU Regression Tests
+      run: npm run test:node
+
+    - name: Run WGSL Functions Subgroup Emulation Tests
+      run: npm run test:wgsl
