@@ -118,8 +118,32 @@ Recall that WebGPU does not specify a subgroup size (in hw), although it does sp
 
 We choose to emulate virtual subgroups of size **32** (partitioning the workgroup's flat array and tracking thread subgroup IDs via `lidx % 32u`). 
 
-### Why 32-thread virtual subgroups?
-Some key primitives like Radix Sort's warp-level multi-split (`WLMS`) algorithm use `subgroupBallot` and expect the ballot to fit inside a single 32-bit register (`ballot.x`). If we emulated subgroups equal to the workgroup size (e.g., 256), the ballot would be truncated, leading to incorrect sorted output. By emulating virtual subgroups of size 32, we remain compatible with these requirements.
+### Why 32-thread virtual subgroups? (VS Workgroup-sized subgroups)
+
+When choosing an emulated subgroup size, there are two primary designs:
+1. **Workgroup-Sized Subgroups** (where the subgroup size matches the entire workgroup size, e.g. 128 or 256 threads).
+2. **Fixed 32-Thread Virtual Subgroups** (where each workgroup is partitioned into independent 32-thread lanes, matching hardware subgroup widths).
+
+Below is a comparison of the tradeoffs between these two alternatives:
+
+#### Alternative A: Workgroup-Sized Subgroups
+*   **Pros**:
+    *   **Simpler Indexing**: There is a 1-to-1 mapping between the workgroup and the subgroup. Thread lane IDs (`sgid`) are simply equal to local thread indices (`lidx`).
+    *   **Lower Shared Memory Pressure**: Emulation does not need to partition shared memory into multiple steps/subgroups, conserving valuable Local Data Store (LDS) space.
+    *   **Simpler Reductions**: Full workgroup scans/reductions can be implemented with classic, straightforward tree-based reductions.
+*   **Cons**:
+    *   **Incompatible with Advanced Algorithms**: Primitives like Radix Sort's warp-level multi-split (`WLMS`) or high-performance prefix scans are designed around the hardware assumption of a 32-lane subgroup. They pack voting outcomes and predicate masks into a single 32-bit `u32` word (e.g. via `subgroupBallot`). If the subgroup size is 256, a 32-bit mask overflows, requiring complex multi-word array allocations that break compatibility with native GPU code.
+    *   **Coarse-Grained Synchronization**: Operations on a 256-thread subgroup require workgroup barriers that stall all 256 threads, eliminating the independent, lock-free lane progress that subgroups are meant to achieve.
+
+#### Alternative B: Fixed 32-Thread Virtual Subgroups (Chosen Strategy)
+*   **Pros**:
+    *   **Strict Compatibility**: Matches the physical subgroup width (32 lanes) of major desktop and mobile GPU architectures (NVIDIA, AMD, Apple, etc.). This ensures that bit-packing operations, mask logic, and trailing-zero counting behave identically in both native and emulation modes.
+    *   **Fine-Grained Atomic Synchronization**: Because subgroups are limited to 32 threads, we can use local atomic flag step counters to synchronize communication groups of 32 threads. This avoids stalling the entire workgroup with `workgroupBarrier()` and more closely emulates the independent forward progress semantics of native subgroup execution.
+*   **Cons**:
+    *   **Increased Shared Memory Overhead**: To emulate shuffles and ballot steps without full-workgroup barriers, we must allocate multi-step atomic arrays (e.g., `wg_sw_subgroups_u32_steps` of size `[6][workgroupSize]`), which increases LDS usage and can slightly limit occupancy on some GPUs.
+    *   **Complex Subgroup Mapping**: Requires dynamic lane indexing (`lidx % 32u`) and local subgroup boundaries (`lidx & ~31u`).
+
+**Recommendation**: We advocate and implement **32-thread virtual subgroups** because correctness and compatibility with standard subgroup algorithm interfaces (like 32-bit ballot masks and lane shuffles) are paramount. This allows developers to write single-codebase GPU algorithms that function correctly on all devices, with the emulation layer handling subgroup lane partitioning transparently.
 
 ### Challenge: Uniform Control Flow and Emulated Barriers
 WebGPU/WGSL provides no guarantee of lockstep execution and requires explicit synchronization for cross-thread memory visibility. Emulating subgroup operations inside non-uniform control flow (such as subgroup-conditional branches like `if (sg0)`) poses a major dilemma:
@@ -132,7 +156,9 @@ We resolve this dilemma using two different strategies depending on the code pat
 
 ## Summary
 
-On an Apple M3 with a high-performance scan kernel, the performance difference between hw and emu with the same kernel is ~2.5x.
+On an Apple M4 GPU, the performance difference for large inputs (1M to 3M elements) is significant:
+- **Prefix Scans (`DLDFScan`)**: Emulation (EMU) is **11x to 28x slower** than native subgroups (HW).
+- **Radix Sort (`OneSweepSort`)**: Emulation (EMU) is **9x to 37x slower** than native subgroups (HW).
 
 An open question is whether it is better to write different _kernels_ for hw and emu as opposed to what we did: writing different versions of subgroup functions and keeping the same kernel. The answer probably depends on the nature of the kernels. We did not explore the latter alternative at all.
 
