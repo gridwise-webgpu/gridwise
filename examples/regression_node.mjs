@@ -3,6 +3,14 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
+// 0. Filter specific experimental getGPUInfo warnings from dawn.node
+process.on("warning", (warning) => {
+  if (warning.message && warning.message.includes("getGPUInfo")) {
+    return;
+  }
+  console.warn(warning.name + ": " + warning.message);
+});
+
 // 1. Polyfill WebGPU globals (GPUBufferUsage, etc.)
 Object.assign(globalThis, globals);
 
@@ -28,6 +36,26 @@ gpuInstance.requestAdapter = async function (...args) {
     resolveMain();
     return null;
   }
+  const originalFeatures = adapter.features;
+  const mockedFeatures = new Proxy(originalFeatures, {
+    get(target, prop, receiver) {
+      if (prop === "has") {
+        return function(feature) {
+          if (feature === "subgroups" && process.env.DISABLE_SUBGROUPS === "true") {
+            return false;
+          }
+          return originalFeatures.has(feature);
+        };
+      }
+      const val = Reflect.get(target, prop, receiver);
+      return typeof val === "function" ? val.bind(target) : val;
+    }
+  });
+  Object.defineProperty(adapter, "features", {
+    value: mockedFeatures,
+    configurable: true,
+    writable: true,
+  });
   if (adapter.info) {
     const vendor = adapter.info.vendor || "";
     const device = adapter.info.device || "";
