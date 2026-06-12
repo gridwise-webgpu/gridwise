@@ -99,7 +99,7 @@ export class wgslFunctions {
   }
   commonDefinitions(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `
   struct Builtins {
     @builtin(global_invocation_id) gid: vec3u /* 3D thread id in compute shader grid */,
@@ -124,28 +124,31 @@ export class wgslFunctions {
   }
   initializeSubgroupVars(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return "let sgsz: u32 = builtinsUniform.sgsz;\nlet sgid: u32 = builtinsNonuniform.sgid;";
+  }
+  declareSubgroupVarsInsideHelper(uniformName = "builtinsUniform", nonuniformName = "builtinsNonuniform") {
+    return `let sgsz = ${uniformName}.sgsz;\n  let sgid = ${nonuniformName}.sgid;`;
   }
   enableSubgroupsIfAppropriate(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return "enable subgroups;";
   }
   subgroupEmulation(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return "";
   }
   roundUpDivU32(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `fn roundUpDivU32(a : u32, b : u32) -> u32 {
     return (a + b - 1) / b;
   }`;
   }
   computeLinearizedGridParameters(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `
     /* wgid is a linearized (1d) unique ID per wg;
      * gid is a linearized (1d) unique ID per thread */
@@ -160,7 +163,7 @@ export class wgslFunctions {
     var totalThreadCount = workgroupCount * numThreadsPerWorkgroup;`;
   }
   computeLinearizedGridParametersSplit(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /* "split" meaning "split builtin uniforms vs. nonuniforms" */
     return /* wgsl */ `
     /* wgid is a linearized (1d) unique ID per wg;
@@ -176,7 +179,7 @@ export class wgslFunctions {
     var totalThreadCount = workgroupCount * numThreadsPerWorkgroup;`;
   }
   vec4InclusiveScan(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `
     fn vec4InclusiveScan(in: vec4<${env.datatype}>) ->
       vec4<${env.datatype}> {
@@ -189,7 +192,7 @@ export class wgslFunctions {
     }`;
   }
   vec4ExclusiveScan(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `
     fn vec4ExclusiveScan(in: vec4<${env.datatype}>) ->
       vec4<${env.datatype}> {
@@ -203,7 +206,7 @@ export class wgslFunctions {
     }`;
   }
   vec4InclusiveToExclusive(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `
     fn vec4InclusiveToExclusive(in: vec4<${env.datatype}>) ->
       vec4<${env.datatype}> {
@@ -216,7 +219,7 @@ export class wgslFunctions {
     }`;
   }
   vec4Reduce(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     // TODO: Don't special-case this. Worried about polyfilling dot with
     // int arguments, that it'll potentially do four multiplies
     if (env.binop instanceof BinOpAdd) {
@@ -233,7 +236,7 @@ export class wgslFunctions {
     }
   }
   vec4ScalarBinopV4(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /* if binop is +, this still seems just as efficient, unless there's a vec4 +, I guess? */
     // TODO: "WGSL has mixed vector-scalar arithmetic operators, so it's probably best to use those if you can."
     return /* wgsl */ `
@@ -250,7 +253,7 @@ export class wgslFunctions {
   }
   subgroupZero(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `
     fn isSubgroupZero(lidx: u32, sgsz: u32) -> bool {
       return lidx < sgsz;
@@ -258,24 +261,47 @@ export class wgslFunctions {
   }
   subgroupShuffle(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    /* keep builtin */
+    return "";
+  }
+  subgroupShuffleXor(args = {}) {
+    // eslint-disable-next-line no-unused-vars
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /* keep builtin */
     return "";
   }
   subgroupBallot(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /* keep builtin */
     return "";
   }
   subgroupMax(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /* keep builtin */
     return "";
   }
+  subgroupAdd(args = {}) {
+    // eslint-disable-next-line no-unused-vars
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    /* keep builtin */
+    return "";
+  }
+  subgroupAny(args = {}) {
+    // eslint-disable-next-line no-unused-vars
+    const env = Object.assign(Object.create(this.env), args);
+    return "";
+  }
+  subgroupAll(args = {}) {
+    // eslint-disable-next-line no-unused-vars
+    const env = Object.assign(Object.create(this.env), args);
+    return "";
+  }
+
   subgroupInclusiveOpScan(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /* helpful reference from Thomas Smith:
      *   https://github.com/b0nes164/GPUSorting/blob/main/GPUSortingCUDA/Utils.cuh
      */
@@ -313,7 +339,7 @@ export class wgslFunctions {
     }
   }
   subgroupReduce(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /* this will fail if subgroupReduceOp isn't defined; TODO is write it */
     return /* wgsl */ `
     fn subgroupReduce(in: ${env.datatype}) -> ${env.datatype} {
@@ -322,7 +348,7 @@ export class wgslFunctions {
     `;
   }
   wgReduce(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
 
     /** The normal case would be that we only need one function of each type
      * thus we can use the shortFnName for declaration and call, and can do
@@ -367,8 +393,7 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
              builtinsUniform: BuiltinsUniform,
              builtinsNonuniform: BuiltinsNonuniform) -> ${env.datatype} {
   let lidx = builtinsNonuniform.lidx;
-  let sgsz = builtinsUniform.sgsz;
-  let sgid = builtinsNonuniform.sgid;
+  ${env.fnDeclarations.declareSubgroupVarsInsideHelper("builtinsUniform", "builtinsNonuniform")}
   let BLOCK_DIM: u32 = ${env.workgroupSize};
   let sid = lidx / sgsz;
   let lane_log = u32(countTrailingZeros(sgsz)); /* log_2(sgsz) */
@@ -379,7 +404,7 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
   let aligned_size = select(aligned_size_base, BLOCK_DIM, aligned_size_base == 1);
 
   let t_red = in;
-  let s_red = ${env.binop.subgroupReduceOp}(t_red);
+  let s_red = subgroupReduce(t_red);
   if (sgid == 0u) {
     ${wgTemp}[sid] = s_red;
   }
@@ -388,7 +413,7 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
 
   var offset = 0u;
   var top_offset = 0u;
-  let lane_pred = sgid == sgsz - 1u;
+  let lane_pred = sgid == 0u;
   if (sgsz > aligned_size) {
     /* don't enter the loop */
     f_red = ${wgTemp}[lidx + top_offset];
@@ -396,7 +421,7 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
     for (var j = sgsz; j <= aligned_size; j <<= lane_log) {
       let step = local_spine >> offset;
       let pred = lidx < step;
-      f_red = ${env.binop.subgroupReduceOp}(
+      f_red = subgroupReduce(
         select(${env.binop.identity},
         ${wgTemp}[lidx + top_offset],
         pred));
@@ -408,12 +433,13 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
       offset += lane_log;
     }
   }
-  return f_red;
+  workgroupBarrier();
+  return ${wgTemp}[top_offset];
 }`;
     return fn;
   }
   workgroupScan(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /**
      * Supports both inclusive and exclusive scan.
      * Arguments:
@@ -439,15 +465,16 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
     ) -> ${env.datatype} {
       /* TODO: what if there are more threads than subgroup_size * subgroup_size? */
       ${env.fnDeclarations.computeLinearizedGridParameters}
-      var numSubgroups = roundUpDivU32(${env.workgroupSize}, builtins.sgsz);
+      ${env.fnDeclarations.declareSubgroupVarsInsideHelper("builtins", "builtins")}
+      var numSubgroups = roundUpDivU32(${env.workgroupSize}, sgsz);
       var i = gid;
       var in = select(${env.binop.identity}, input[i], i < arrayLength(input));
       workgroupBarrier();
       /* "in" now contains the block of data to scan, padded with the identity */
       /* (1) reduce "in" within our workgroup */
       /* switch to local IDs only. write into wg memory */
-      var sgReduction = ${env.binop.subgroupReduceOp}(in);
-      var mySubgroupID = builtins.lidx / builtins.sgsz;
+      var sgReduction = subgroupReduce(in);
+      var mySubgroupID = builtins.lidx / sgsz;
       if (subgroupElect()) {
         /* I'm the first element in my subgroup */
         wgTemp[mySubgroupID] = sgReduction;
@@ -464,7 +491,7 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
       /* no matter what type of scan we have, we use exclusiveScan here */
       var spineScanOutput = ${env.binop.subgroupExclusiveScanOp}(spineScanInput);
       /** add reduction of previous workgroups, computed in previous kernel */
-      if (builtins.lidx < builtins.sgsz) { /* only activate 0th subgroup */
+      if (builtins.lidx < sgsz) { /* only activate 0th subgroup */
         wgTemp[builtins.lidx] = binop(partials[wgid], spineScanOutput);
       }
       workgroupBarrier();
@@ -475,7 +502,7 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
     };`;
   }
   oneWorkgroupExclusiveScan(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /**
      * Arguments:
      * - inputoutput: Input/output array in global storage memory (in place)
@@ -494,11 +521,12 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
       builtinsNonuniform: BuiltinsNonuniform,
       inputoutput: ptr<storage, array<${env.datatype}>, read_write>,
     ) {
+      ${env.fnDeclarations.declareSubgroupVarsInsideHelper("builtinsUniform", "builtinsNonuniform")}
       var acc : ${env.datatype} = ${env.binop.identity};
       /* making this work under uniform control flow is tricky */
       /* big idea: convert any control dependence to data dependence (i) */
       var ibase : u32 = 0;
-      var sg0 = builtinsNonuniform.lidx < builtinsUniform.sgsz;
+      var sg0 = builtinsNonuniform.lidx < sgsz;
       while (ibase < arrayLength(inputoutput)) {
         /* work still left to be done */
         var i = ibase + builtinsNonuniform.lidx;
@@ -507,13 +535,13 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
                         (i < arrayLength(inputoutput)) && sg0);
 
         var sgEScan = ${env.binop.subgroupExclusiveScanOp}(in);
-        var sgReduction = ${env.binop.subgroupReduceOp}(in);
+        var sgReduction = subgroupReduce(in);
         if (sg0) {
           inputoutput[i] = binop(acc, sgEScan);
           acc = binop(acc, sgReduction);
         }
         var eadd = subgroupExclusiveAdd(in);
-        ibase += builtinsUniform.sgsz;
+        ibase += sgsz;
       }
       return;
     };`;
@@ -537,7 +565,7 @@ export class wgslFunctionsWithoutSubgroupSupport extends wgslFunctions {
   }
   commonDefinitions(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `
     struct Builtins {
       @builtin(global_invocation_id) gid: vec3u /* 3D thread id in compute shader grid */,
@@ -556,143 +584,350 @@ export class wgslFunctionsWithoutSubgroupSupport extends wgslFunctions {
   }
   initializeSubgroupVars(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `
-    sgid = builtinsNonuniform.lidx;`;
+    sgid = builtinsNonuniform.lidx % 32u;
+    lidx_private = builtinsNonuniform.lidx;
+    shuffle_count = 0u;`;
   }
+  declareSubgroupVarsInsideHelper(uniformName, nonuniformName) {
+    return "";
+  }
+
   enableSubgroupsIfAppropriate(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return "/* don't enable subgroups */\n";
   }
   /* if this declaration works for you, put it at the top of your kernel file at module scope */
   subgroupEmulation(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `var<workgroup> wg_sw_subgroups: array<${env.datatype}, ${env.workgroupSize}>;
-    const sgsz: u32 = ${env.workgroupSize};
-    var<private> sgid: u32;`;
+    var<workgroup> wg_sw_subgroups_u32_steps: array<array<atomic<u32>, ${env.workgroupSize}>, 6>;
+    var<workgroup> wg_sw_subgroups_flag_steps: array<array<atomic<u32>, ${env.workgroupSize}>, 6>;
+    var<workgroup> wg_thread_shuffle_count: array<atomic<u32>, ${env.workgroupSize}>;
+    const sgsz: u32 = 32u;
+    const SPIN_TIMEOUT: u32 = 5000u;
+    var<private> sgid: u32;
+    var<private> lidx_private: u32;
+    var<private> shuffle_count: u32;
+ 
+    fn subgroupInclusiveAdd(in: u32) -> u32 {
+      let prev_count = shuffle_count;
+      shuffle_count += 1u;
+      let base = lidx_private & ~31u;
+      
+      if (prev_count > 0u) {
+        for (var i: u32 = 0; i < 32u; i += 1u) {
+          let target_idx = base + i;
+          var spun_fc = 0u;
+          while (atomicLoad(&wg_thread_shuffle_count[target_idx]) < prev_count && spun_fc < SPIN_TIMEOUT) {
+            spun_fc += 1u;
+          }
+        }
+      }
+      
+      var red: u32 = in;
+      var t: u32;
+      
+      var step_idx = 0u;
+      for (var delta: u32 = 1; delta < 32u; delta <<= 1) {
+        atomicStore(&wg_sw_subgroups_u32_steps[step_idx][lidx_private], red);
+        atomicStore(&wg_sw_subgroups_flag_steps[step_idx][lidx_private], shuffle_count);
+        
+        var neighborIdx: i32 = i32(sgid) - i32(delta);
+        if (neighborIdx >= 0) {
+          let target_idx = base + u32(neighborIdx);
+          var spun = 0u;
+          while (atomicLoad(&wg_sw_subgroups_flag_steps[step_idx][target_idx]) < shuffle_count && spun < SPIN_TIMEOUT) {
+            spun += 1u;
+          }
+          t = atomicLoad(&wg_sw_subgroups_u32_steps[step_idx][target_idx]);
+          red = red + t;
+        }
+        step_idx += 1u;
+      }
+      atomicStore(&wg_thread_shuffle_count[lidx_private], shuffle_count);
+      return red;
+    }
+ 
+    fn subgroupExclusiveAdd(in: u32) -> u32 {
+      let inclusive = subgroupInclusiveAdd(in);
+      let step_idx = 5u;
+      atomicStore(&wg_sw_subgroups_u32_steps[step_idx][lidx_private], inclusive);
+      atomicStore(&wg_sw_subgroups_flag_steps[step_idx][lidx_private], shuffle_count);
+      
+      var exclusive: u32 = 0;
+      if (sgid > 0) {
+        let target_idx = lidx_private - 1u;
+        var spun = 0u;
+        while (atomicLoad(&wg_sw_subgroups_flag_steps[step_idx][target_idx]) < shuffle_count && spun < SPIN_TIMEOUT) {
+          spun += 1u;
+        }
+        exclusive = atomicLoad(&wg_sw_subgroups_u32_steps[step_idx][target_idx]);
+      }
+      atomicStore(&wg_thread_shuffle_count[lidx_private], shuffle_count);
+      return exclusive;
+    }
+ 
+    fn subgroupAdd(in: u32) -> u32 {
+      let inclusive = subgroupInclusiveAdd(in);
+      let base = lidx_private & ~31u;
+      let step_idx = 5u;
+      atomicStore(&wg_sw_subgroups_u32_steps[step_idx][lidx_private], inclusive);
+      atomicStore(&wg_sw_subgroups_flag_steps[step_idx][lidx_private], shuffle_count);
+      
+      let target_idx = base + 31u;
+      var spun = 0u;
+      while (atomicLoad(&wg_sw_subgroups_flag_steps[step_idx][target_idx]) < shuffle_count && spun < SPIN_TIMEOUT) {
+        spun += 1u;
+      }
+      let final_val = atomicLoad(&wg_sw_subgroups_u32_steps[step_idx][target_idx]);
+      atomicStore(&wg_thread_shuffle_count[lidx_private], shuffle_count);
+      return final_val;
+    }`;
   }
   subgroupZero(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `
     fn isSubgroupZero(lidx: u32, sgsz: u32) -> bool {
-      return true;
+      return lidx < 32u;
     }`;
   }
+  subgroupAny(args = {}) {
+    // eslint-disable-next-line no-unused-vars
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    return /* wgsl */ `fn subgroupAny(pred: bool) -> bool {
+  let prev_count = shuffle_count;
+  shuffle_count += 1u;
+  let base = lidx_private & ~31u;
+  
+  if (prev_count > 0u) {
+    for (var i: u32 = 0; i < 32u; i += 1u) {
+      let target_idx = base + i;
+      var spun_fc = 0u;
+      while (atomicLoad(&wg_thread_shuffle_count[target_idx]) < prev_count && spun_fc < SPIN_TIMEOUT) {
+        spun_fc += 1u;
+      }
+    }
+  }
+  
+  let step_idx = 0u;
+  atomicStore(&wg_sw_subgroups_u32_steps[step_idx][lidx_private], select(0u, 1u, pred));
+  atomicStore(&wg_sw_subgroups_flag_steps[step_idx][lidx_private], shuffle_count);
+  var anyVal: u32 = 0u;
+  for (var i: u32 = 0; i < 32u; i += 1) {
+    let target_idx = base + i;
+    var spun = 0u;
+    while (atomicLoad(&wg_sw_subgroups_flag_steps[step_idx][target_idx]) < shuffle_count && spun < SPIN_TIMEOUT) {
+      spun += 1u;
+    }
+    anyVal |= atomicLoad(&wg_sw_subgroups_u32_steps[step_idx][target_idx]);
+  }
+  atomicStore(&wg_thread_shuffle_count[lidx_private], shuffle_count);
+  return anyVal != 0u;
+}`;
+  }
+  subgroupAll(args = {}) {
+    // eslint-disable-next-line no-unused-vars
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    return /* wgsl */ `fn subgroupAll(pred: bool) -> bool {
+  let prev_count = shuffle_count;
+  shuffle_count += 1u;
+  let base = lidx_private & ~31u;
+  
+  if (prev_count > 0u) {
+    for (var i: u32 = 0; i < 32u; i += 1u) {
+      let target_idx = base + i;
+      var spun_fc = 0u;
+      while (atomicLoad(&wg_thread_shuffle_count[target_idx]) < prev_count && spun_fc < SPIN_TIMEOUT) {
+        spun_fc += 1u;
+      }
+    }
+  }
+  
+  let step_idx = 0u;
+  atomicStore(&wg_sw_subgroups_u32_steps[step_idx][lidx_private], select(0u, 1u, pred));
+  atomicStore(&wg_sw_subgroups_flag_steps[step_idx][lidx_private], shuffle_count);
+  var allVal: u32 = 1u;
+  for (var i: u32 = 0; i < 32u; i += 1) {
+    let target_idx = base + i;
+    var spun = 0u;
+    while (atomicLoad(&wg_sw_subgroups_flag_steps[step_idx][target_idx]) < shuffle_count && spun < SPIN_TIMEOUT) {
+      spun += 1u;
+    }
+    allVal &= atomicLoad(&wg_sw_subgroups_u32_steps[step_idx][target_idx]);
+  }
+  atomicStore(&wg_thread_shuffle_count[lidx_private], shuffle_count);
+  return allVal != 0u;
+}`;
+  }
   subgroupShuffle(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    // eslint-disable-next-line no-unused-vars
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `fn subgroupShuffle(x: u32, source: u32) -> u32 {
-  /* subgroup emulation must pass through wg_sw_subgroups */
-  /* write my value to workgroup memory */
-  wg_sw_subgroups[sgid] = bitcast<${env.datatype}>(x);
-  workgroupBarrier();
-  var shuffled: u32 = bitcast<u32>(wg_sw_subgroups[source]);
-  workgroupBarrier();
+  let prev_count = shuffle_count;
+  shuffle_count += 1u;
+  let base = lidx_private & ~31u;
+  let target_idx = base + source;
+  
+  if (prev_count > 0u) {
+    for (var i: u32 = 0; i < 32u; i += 1u) {
+      let flow_target_idx = base + i;
+      var spun_fc = 0u;
+      while (atomicLoad(&wg_thread_shuffle_count[flow_target_idx]) < prev_count && spun_fc < SPIN_TIMEOUT) {
+        spun_fc += 1u;
+      }
+    }
+  }
+  
+  let step_idx = 0u;
+  atomicStore(&wg_sw_subgroups_u32_steps[step_idx][lidx_private], x);
+  atomicStore(&wg_sw_subgroups_flag_steps[step_idx][lidx_private], shuffle_count);
+  var spun = 0u;
+  while (atomicLoad(&wg_sw_subgroups_flag_steps[step_idx][target_idx]) < shuffle_count && spun < SPIN_TIMEOUT) {
+    spun += 1u;
+  }
+  var shuffled: u32 = atomicLoad(&wg_sw_subgroups_u32_steps[step_idx][target_idx]);
+  atomicStore(&wg_thread_shuffle_count[lidx_private], shuffle_count);
+  return shuffled;
+}`;
+  }
+  subgroupShuffleXor(args = {}) {
+    // eslint-disable-next-line no-unused-vars
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    return /* wgsl */ `fn subgroupShuffleXor(x: u32, mask: u32) -> u32 {
+  let prev_count = shuffle_count;
+  shuffle_count += 1u;
+  let base = lidx_private & ~31u;
+  let target_idx = base + (sgid ^ mask);
+  
+  if (prev_count > 0u) {
+    for (var i: u32 = 0; i < 32u; i += 1u) {
+      let flow_target_idx = base + i;
+      var spun_fc = 0u;
+      while (atomicLoad(&wg_thread_shuffle_count[flow_target_idx]) < prev_count && spun_fc < SPIN_TIMEOUT) {
+        spun_fc += 1u;
+      }
+    }
+  }
+  
+  let step_idx = 0u;
+  atomicStore(&wg_sw_subgroups_u32_steps[step_idx][lidx_private], x);
+  atomicStore(&wg_sw_subgroups_flag_steps[step_idx][lidx_private], shuffle_count);
+  var spun = 0u;
+  while (atomicLoad(&wg_sw_subgroups_flag_steps[step_idx][target_idx]) < shuffle_count && spun < SPIN_TIMEOUT) {
+    spun += 1u;
+  }
+  var shuffled: u32 = atomicLoad(&wg_sw_subgroups_u32_steps[step_idx][target_idx]);
+  atomicStore(&wg_thread_shuffle_count[lidx_private], shuffle_count);
   return shuffled;
 }`;
   }
   subgroupBallot(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `fn subgroupBallot(pred: bool) -> vec4<u32> {
-  /* this is simple but will have significant bank conflicts,
-   * and that's probably not easily avoidable
-   * we could pad but then we'd have to grow wg_sw_subgroups */
-  /* hardwired to 32b shuffles, because output is in 32b words */
-  /* should work if workgroup size % 32 != 0 */
-  /* trying to not do any work for threads >= 128 */
-  /** note acc is always u32 but wg_sw_subgroups might be another datatype,
-   * so we have to bitcast. Every write to wg_sw_subgroups must be cast
-   * to its datatype; every read from it must be cast to u32. */
   const bitsPerOutput = 32u;
   var acc: u32 = select(0u, 1u, pred) << (sgid & (bitsPerOutput - 1));
-  if (sgid < 128) {
-    wg_sw_subgroups[sgid] = bitcast<${env.datatype}>(acc);
+  let base = lidx_private & ~31u;
+  
+  let prev_count = shuffle_count;
+  shuffle_count += 1u;
+  
+  if (prev_count > 0u) {
+    for (var i: u32 = 0; i < 32u; i += 1u) {
+      let flow_target_idx = base + i;
+      var spun_fc = 0u;
+      while (atomicLoad(&wg_thread_shuffle_count[flow_target_idx]) < prev_count && spun_fc < SPIN_TIMEOUT) {
+        spun_fc += 1u;
+      }
+    }
   }
-  workgroupBarrier();
+  
+  var step_idx = 0u;
+  atomicStore(&wg_sw_subgroups_u32_steps[step_idx][lidx_private], acc);
+  atomicStore(&wg_sw_subgroups_flag_steps[step_idx][lidx_private], shuffle_count);
+  
   for (var i: u32 = 1; i < bitsPerOutput; i <<= 1) {
-    /* and integrate my neighbor, write it back */
-    /* if we're out-of-bounds, just fetch my own value instead */
-    if (sgid < 128) {
-      var sourceID: u32 = select(sgid, sgid ^ i, (sgid ^ i) < ${env.workgroupSize});
-      acc |= bitcast<u32>(wg_sw_subgroups[sourceID]);
+    var sourceID: u32 = select(sgid, sgid ^ i, (sgid ^ i) < 32u);
+    let target_idx = base + sourceID;
+    
+    var spun = 0u;
+    while (atomicLoad(&wg_sw_subgroups_flag_steps[step_idx][target_idx]) < shuffle_count && spun < SPIN_TIMEOUT) {
+      spun += 1u;
     }
-    workgroupBarrier();
-    if (sgid < 128) {
-      wg_sw_subgroups[sgid] = bitcast<${env.datatype}>(acc);
-    }
+    acc |= atomicLoad(&wg_sw_subgroups_u32_steps[step_idx][target_idx]);
+    
+    step_idx += 1u;
+    atomicStore(&wg_sw_subgroups_u32_steps[step_idx][lidx_private], acc);
+    atomicStore(&wg_sw_subgroups_flag_steps[step_idx][lidx_private], shuffle_count);
   }
-  workgroupBarrier();
+  
   var out: vec4u = vec4u(0);
-  /* uniformity analysis requires the next loads be uniform ones */
-  out[0] = bitcast<u32>(workgroupUniformLoad(&wg_sw_subgroups[0]));
-  /** possible bank-conflict avoidance: instead of reading from [0,32,64,96],
-   *  we could read from [3,34,65,96], but then we'd have to check for overflow
-   *  on the first three reads, not sure that's a win
-   */
-  for (var i: u32 = 32; i < min(${env.workgroupSize}, 128); i += 32) {
-    /* write out[i], i in [1,2,3], if the workgroup is big enough */
-    out[i / bitsPerOutput] = bitcast<u32>(workgroupUniformLoad(&wg_sw_subgroups[i]));
+  let target0 = base + 0u;
+  var spun0 = 0u;
+  while (atomicLoad(&wg_sw_subgroups_flag_steps[step_idx][target0]) < shuffle_count && spun0 < SPIN_TIMEOUT) {
+    spun0 += 1u;
   }
+  out[0] = atomicLoad(&wg_sw_subgroups_u32_steps[step_idx][target0]);
+  atomicStore(&wg_thread_shuffle_count[lidx_private], shuffle_count);
   return out;
 }`;
   }
   subgroupReduce(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `
 fn subgroupReduce(in: ${env.datatype}) -> ${env.datatype} {
-  wg_sw_subgroups[sgid] = in;
+  wg_sw_subgroups[lidx_private] = in;
   var red: ${env.datatype} = in;
-  for (var i: u32 = 1; i < ${env.workgroupSize}; i <<= 1) {
+  let base = lidx_private & ~31u;
+  for (var i: u32 = 1; i < 32u; i <<= 1) {
     workgroupBarrier();
     var neighbor: u32 = sgid ^ i;
     var neighborVal: ${env.datatype} =
       select(${env.binop.identity},
-             wg_sw_subgroups[neighbor],
-             neighbor < ${env.workgroupSize});
+             wg_sw_subgroups[base + neighbor],
+             neighbor < 32u);
     red = binop(red, neighborVal);
     workgroupBarrier();
-    wg_sw_subgroups[sgid] = red;
+    wg_sw_subgroups[lidx_private] = red;
   }
-  workgroupBarrier(); // possibly not necessary given the next line?
-  return workgroupUniformLoad(&wg_sw_subgroups[0]);
+  workgroupBarrier();
+  return red;
 }`;
   }
   subgroupBinopIsU32Add(args = {}) {
     // eslint-disable-next-line no-unused-vars
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `fn binop(a : u32, b : u32) -> u32 {return a+b;}`;
   }
   subgroupAdd(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     return /* wgsl */ `fn subgroupAdd(in: ${env.datatype}) -> ${env.datatype} {
   return subgroupReduce(in);
 }`;
   }
   subgroupInclusiveOpScan(args = {}) {
-    const env = { ...this.env, ...args }; // properties in args overwrite this.env
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /* this is almost certainly faster if we double-buffered */
     return /* wgsl */ `
 fn subgroupInclusiveOpScan(in: ${env.datatype}, sgid: u32, sgsz: u32) ->
   ${env.datatype} {
-  /* sgsz is not used, see above */
   var red: ${env.datatype} = in;
   var t: ${env.datatype};
-  /* TODO: Handle case where input size is not a multiple of workgroup size */
-  for (var delta: u32 = 1; delta < ${env.workgroupSize}; delta <<= 1) {
-    /** On pass 0, element i - 1 (if in range) is added into element i, in parallel.
-     * On pass 1, element i - 2 is added into element i.
-     * On pass 2, element i - 4 is added into element i, and so on. */
-    /* delta == how many threads I'm reaching back */
-    wg_sw_subgroups[sgid] = red;
+  let base = lidx_private & ~31u;
+  for (var delta: u32 = 1; delta < 32u; delta <<= 1) {
+    workgroupBarrier();
+    wg_sw_subgroups[lidx_private] = red;
     workgroupBarrier();
     var neighborIdx: i32 = i32(sgid) - i32(delta);
     if (neighborIdx >= 0) {
-      t = wg_sw_subgroups[neighborIdx];
+      t = wg_sw_subgroups[base + u32(neighborIdx)];
       red = binop(t, red);
     }
-    workgroupBarrier();
   }
+  workgroupBarrier();
   return red;
 }`;
   }
