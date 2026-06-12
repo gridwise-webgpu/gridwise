@@ -5,8 +5,8 @@ import { DLDFScan } from "../scandldf.mjs";
 export async function main(navigator) {
     /* set up a WebGPU device */
     const adapter = await navigator.gpu?.requestAdapter();
-    const hasSubgroups = adapter.features.has("subgroups");
-    const hasTimestampQuery = adapter.features.has("timestamp-query");
+    const hasSubgroups = adapter?.features.has("subgroups") ?? false;
+    const hasTimestampQuery = adapter?.features.has("timestamp-query") ?? false;
     const device = await adapter?.requestDevice({
         requiredFeatures: [
             ...(hasTimestampQuery ? ["timestamp-query"] : []),

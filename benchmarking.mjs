@@ -63,6 +63,10 @@ import { BasePrimitive } from "./primitive.mjs";
 
 async function main(navigator) {
   const adapter = await navigator.gpu?.requestAdapter();
+  if (!adapter) {
+    console.error("Fatal error: WebGPU adapter is not available.");
+    return;
+  }
   console.info(adapter, adapter.features);
   const hasSubgroups = adapter.features.has("subgroups");
   const hasTimestampQuery = adapter.features.has("timestamp-query");

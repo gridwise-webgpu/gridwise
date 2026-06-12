@@ -6,8 +6,8 @@ import { OneSweepSort } from "../onesweep.mjs";
 
 /* set up a WebGPU device */
 const adapter = await navigator.gpu?.requestAdapter();
-const hasSubgroups = adapter.features.has("subgroups");
-const hasTimestampQuery = adapter.features.has("timestamp-query");
+const hasSubgroups = adapter?.features.has("subgroups") ?? false;
+const hasTimestampQuery = adapter?.features.has("timestamp-query") ?? false;
 const device = await adapter?.requestDevice({
   requiredLimits: {
     /* this larger-than-default is only necessary for sort */

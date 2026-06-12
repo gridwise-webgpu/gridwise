@@ -11,6 +11,10 @@ if (!navigator.gpu) {
 }
 
 const adapter = await navigator.gpu.requestAdapter();
+if (!adapter) {
+  showError("WebGPU is not available (failed to request adapter).");
+  throw new Error("WebGPU not supported");
+}
 const device = await adapter.requestDevice({
   requiredLimits: {
     maxComputeWorkgroupStorageSize: 32768,
