@@ -14,7 +14,7 @@ When evaluating the performance of highly optimized WebGPU compute primitives (l
 
 ## 1. The GPU-Side Benchmarking Loop & Atomics
 
-To avoid CPU-GPU round-trip latency, Gridwise records a loop of $N$ dispatches directly inside a single command buffer when `trials > 1` (configured via `args.trials`). 
+To avoid CPU-GPU round-trip latency, Gridwise records a loop of *N* dispatches directly inside a single command buffer when `trials > 1` (configured via `args.trials`). 
 
 ### The Problem
 Any buffer allocation and initialization commands (such as `AllocateBuffer` with `clearBufferOnReuse: true`) are recorded and executed **on the CPU before the command buffer is submitted**.

@@ -7,7 +7,7 @@ Below is the prioritized list of remaining tasks for the Gridwise library, inclu
 ## 🚨 Priority 1: Critical Bug Fixes & Compatibility
 
 ### 1. Resolve Memory Limit Exceeded in Key-Value Sort Validation (Issue #14)
-* **Problem**: The JavaScript validation function for key-value sorting throws `RangeError: Invalid array length` when sorting large arrays containing more than $2^{26}$ (~67 million) elements.
+* **Problem**: The JavaScript validation function for key-value sorting throws `RangeError: Invalid array length` when sorting large arrays containing more than `2^26` (~67 million) elements.
 * **Action Item**: Refactor the validation helper code to avoid allocating array sizes that exceed JavaScript engine limits (e.g., utilize chunked verification or typed arrays).
 
 ### 2. Reset Atomic Buffers Between Trials (Issue #13)

@@ -173,31 +173,43 @@ Under the WebGPU/WGSL specification:
 * **Memory Visibility Requirement**: Any data exchange between threads via workgroup shared memory (`var<workgroup>`) requires a `workgroupBarrier()` to guarantee memory visibility and avoid data races.
 * **Uniformity Restriction**: `workgroupBarrier()` can only be called in control flow that is statically uniform across the entire workgroup.
 
-Under native GPU execution, a subgroup of size \(S_g\) executes instruction-synchronously. Communication via subgroup registers (e.g., shuffling) does not require barriers because the hardware guarantees that all lanes progress in lockstep. In lookback-based chained scans, a thread \(i\) can spin-wait on a memory location to be updated by a preceding tile \(j\):
-$$\text{SpinWait}(T_i) \implies \text{Read}(\text{spine}[j])$$
+Under native GPU execution, a subgroup of size _S_g_ executes instruction-synchronously. Communication via subgroup registers (e.g., shuffling) does not require barriers because the hardware guarantees that all lanes progress in lockstep. In lookback-based chained scans, a thread *i* can spin-wait on a memory location to be updated by a preceding tile *j*:
 
-If we attempt to run the exact same logic under emulation (where subgroups are simulated by sharing workgroup memory across the thread group), the execution model shifts from concurrent SIMD lanes to scheduled workgroup threads. If a thread \(i\) enters a spinning loop:
-$$\text{while} \ (\text{spine}[j] == \text{Pending}) \ \{ \ \dots \ \}$$
-and the thread \(k\) (within the same workgroup) responsible for executing fallback reductions to resolve the stall is scheduled on the same hardware compute unit, the spin-loop of \(i\) will starve \(k\) of execution cycles. Because WebGPU does not guarantee preemption or fair scheduling between threads of a workgroup, the spin-lock becomes permanent, resulting in a GPU hang:
-$$\text{Starve}(T_k) \implies \text{Deadlock}$$
+```text
+SpinWait(T_i) => Read(spine[j])
+```
+
+If we attempt to run the exact same logic under emulation (where subgroups are simulated by sharing workgroup memory across the thread group), the execution model shifts from concurrent SIMD lanes to scheduled workgroup threads. If a thread *i* enters a spinning loop:
+
+```javascript
+while (spine[j] == Pending) { ... }
+```
+
+and the thread *k* (within the same workgroup) responsible for executing fallback reductions to resolve the stall is scheduled on the same hardware compute unit, the spin-loop of *i* will starve *k* of execution cycles. Because WebGPU does not guarantee preemption or fair scheduling between threads of a workgroup, the spin-lock becomes permanent, resulting in a GPU hang:
+
+```text
+Starve(T_k) => Deadlock
+```
 
 To prevent this under emulation, we must introduce workgroup-uniform synchronization primitives (such as `workgroupBarrier()`) inside the lookback loop. However, adding these barriers to a unified codebase forces native subgroup threads to execute workgroup barriers on every iteration, destroying their register-based, barrier-free performance. Thus, a robust, unified, single-codebase execution path for both hardware subgroups and emulation is mathematically and architecturally impossible without sacrificing either performance or correctness.
-
-Thus, to achieve 100% spec compliance, we are forced to separate the WGSL codebases, or place strict design constraints on the developer.
 
 ### SwiftShader and CPU Spin-Loop Starvation
 
 A major source of hangs on platforms like GitHub Actions CI is the execution environment itself. Standard cloud CI runners lack physical GPUs and run WebGPU shaders via **SwiftShader** (a CPU-based Vulkan software rasterizer).
 
 Under native GPU execution, even if emulated subgroup helpers (like `subgroupShuffle` or `subgroupBallot` in `wgslFunctions.mjs`) use atomic-based spin-loops:
-$$\text{while} \ (\text{atomicLoad}(\text{flag}) < \text{shuffle\_count}) \ \{ \ \dots \ \}$$
+
+```javascript
+while (atomicLoad(flag) < shuffle_count) { ... }
+```
+
 the GPU's hardware warp scheduler ensures that threads make progress and eventually update their flags, allowing the loop to terminate.
 
 However, on a CPU-based software renderer like SwiftShader:
 1. Workgroups are mapped to standard CPU/OS threads.
 2. The CPU has a very limited number of physical cores/hardware execution threads.
-3. If a thread \(i\) enters an atomic spin loop waiting for another thread \(j\) in the same workgroup to write its data, thread \(i\) will consume $100\%$ CPU time on its core.
-4. Because WebGPU makes no execution progress guarantees and has no concept of thread yielding or OS-level preemption for compute shaders, the spinning thread \(i\) starves thread \(j\) on the CPU core. Thread \(j\) is never scheduled to run, so it can never update the flag, leading to a permanent CPU deadlock/hang.
+3. If a thread i enters an atomic spin loop waiting for another thread j in the same workgroup to write its data, thread i will consume 100% CPU time on its core.
+4. Because WebGPU makes no execution progress guarantees and has no concept of thread yielding or OS-level preemption for compute shaders, the spinning thread i starves thread j on the CPU core. Thread j is never scheduled to run, so it can never update the flag, leading to a permanent CPU deadlock/hang.
 
 To prevent this deadlock on CPU-based emulators, any emulation layer relying on shared-memory synchronization must use explicit `workgroupBarrier()` calls rather than atomic spin-loops. However, introducing `workgroupBarrier()` into the emulation functions forces those functions to be called strictly in statically uniform control flow, which conflicts with standard hardware-subgroup usage where subgroup instructions can run inside divergent conditional branches.
 

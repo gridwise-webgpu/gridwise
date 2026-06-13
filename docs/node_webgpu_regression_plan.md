@@ -29,7 +29,7 @@ npm run test:node:update-baseline
 * **Output File**: Saves timing profiles directly to [examples/perf_baseline.json](../examples/perf_baseline.json) grouped by your GPU model key (e.g., `"apple-m4 (metal-3)"`).
 
 ### 3. Strict Verification Run (Gated Performance CI Checks)
-To run timing comparisons where a significant slowdown in large tests ($\ge 1\text{M}$ elements) will fail the validation and block a PR/build:
+To run timing comparisons where a significant slowdown in large tests (>= 1M elements) will fail the validation and block a PR/build:
 ```bash
 FAIL_ON_REGRESSION=true npm run test:node
 ```
@@ -64,18 +64,18 @@ WebGPU compute shaders are compiled to hardware-specific machine binaries at run
 * **Device Caching**: The WebGPU device context is cached and shared between the warmup run and the timed run. This preserves both the browser-level and driver-level pipeline caches, ensuring subsequent executions measure only execution performance.
 
 ### 2. Microsecond-Scale Driver Quantization & Noise Floor
-Hardware timestamp queries under Metal/WebGPU resolve timings inside discrete clock-ticking intervals. On Apple Silicon, this timing granularity is typically quantized to **$65.536\text{ }\mu\text{s}$ ($0.065536\text{ ms}$)**.
-* Small fluctuations can cause measurements to snap into neighboring quantization bins, falsely reporting a $100\%$ or $200\%$ slowdown on sub-millisecond tests.
-* **Noise Floor Limits**: The test suite ignores regressions where the absolute GPU timing slowdown is under **$3.0\text{ ms}$**, ignoring sub-millisecond noise.
+Hardware timestamp queries under Metal/WebGPU resolve timings inside discrete clock-ticking intervals. On Apple Silicon, this timing granularity is typically quantized to **65.536 μs (0.065536 ms)**.
+* Small fluctuations can cause measurements to snap into neighboring quantization bins, falsely reporting a 100% or 200% slowdown on sub-millisecond tests.
+* **Noise Floor Limits**: The test suite ignores regressions where the absolute GPU timing slowdown is under **3.0 ms**, ignoring sub-millisecond noise.
 
 ### 3. Multi-Trial Min Filter
 GPGPU execution times can spike due to system thread scheduling delays, unified memory bus contention from other active software, and thermal throttling states.
-* **3-Trial Minimums**: For large tests ($\ge 1\text{M}$ elements), the runner runs each benchmark 3 times and records the **minimum** duration. This filters out transient CPU thread submission lag and dynamic clock frequency adjustment delay.
+* **3-Trial Minimums**: For large tests (>= 1M elements), the runner runs each benchmark 3 times and records the **minimum** duration. This filters out transient CPU thread submission lag and dynamic clock frequency adjustment delay.
 * **Single-Trial for Small Tests**: Small tests run exactly 1 trial to keep the suite run-time under a few seconds.
 
 ### 4. Large-Scale Gating only
 Dynamic memory bandwidth sharing and CPU-to-GPU command submission queue overhead make performance metrics highly volatile on small data workloads.
-* Performance validation failures (exit code `2`) are strictly gated on **large tests ($\ge 1\text{M}$ elements)**.
+* Performance validation failures (exit code `2`) are strictly gated on **large tests (>= 1M elements)**.
 * Small workload performance changes are logged as warnings (`[REGRESSION]`) for visibility but do not break builds or CI loops.
 
 ### 5. Advisory default mode
