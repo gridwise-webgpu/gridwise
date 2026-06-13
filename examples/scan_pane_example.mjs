@@ -19,8 +19,13 @@ const device = await adapter?.requestDevice({
   ],
 });
 
+const resultsEl = document.getElementById("webgpu-results");
 if (!device) {
-  console.error("Fatal error: Device does not support WebGPU.");
+  const msg = "Fatal error: Device does not support WebGPU.";
+  console.error(msg);
+  if (resultsEl) {
+    resultsEl.innerHTML = `<p style="color: red; font-weight: bold;">${msg}</p>`;
+  }
 }
 
 function isScan(primitive) {
@@ -102,6 +107,9 @@ const button = pane.addButton({
 });
 
 button.on("click", async () => {
+  if (!device) {
+    return;
+  }
   if (params.inputLength % 4 !== 0) {
     params.inputLength = Math.floor(params.inputLength / 4) * 4;
   }
