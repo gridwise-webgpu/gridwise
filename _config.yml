@@ -27,9 +27,8 @@ exclude:
   - _site/
 
 markdown: kramdown
-highlighter: rouge
 kramdown:
-  syntax_highlighter: rouge
+  syntax_highlighter: null
 
 plugins:
   - jekyll-feed
