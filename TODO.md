@@ -58,22 +58,18 @@ Below is the prioritized list of remaining tasks for the Gridwise library, inclu
 * **Files to modify**:
   * [primitive.mjs](file:///Users/jdowens/Documents/working/gridwise/primitive.mjs)
 
-### 9. Better Formatting of Documentation (Issue #8)
-* **Feedback**: Currently Gridwise documentation is done with default Jekyll templates. Propose a cleaner documentation layout that does not treat documentation pages as blog posts (no dates or chronological ordering).
-* **Action Item**: Improve Jekyll layouts for Gridwise documentation.
-
 ---
 
 ## 🚀 Priority 4: Future Research & Performance Benchmarking
 
-### 10. Add GPU vs. CPU Performance Comparison Chart on Front Page
+### 9. Add GPU vs. CPU Performance Comparison Chart on Front Page
 * **Feedback**: "maybe even a small chart on the front page showing off sort on the gpu vs. cpu?"
 * **Action Item**: Once stable baselines are recorded, generate a comparison plot and embed it in `docs/index.md` or a dedicated performance summary.
 
-### 11. Create Educational Subpage
+### 10. Create Educational Subpage
 * **Feedback**: "consider noting briefly why gpu programmers will come to need scan, reduce and sort. Many casual viewers will see the site and not know yet."
 * **Action Item**: Add an educational guide page linked from the home page.
 
-### 12. Verify Sort Performance & Data Volume (Issue #31)
+### 11. Verify Sort Performance & Data Volume (Issue #31)
 * **Problem**: Plotted sort bandwidth in `scan_sort_perf.html` is modest.
 * **Action Item**: Double check data volume calculations for sort operations and perform lower-level benchmarking to verify bandwidth accuracy.
