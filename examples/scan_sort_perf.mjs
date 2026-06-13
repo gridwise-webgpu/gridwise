@@ -51,9 +51,19 @@ function getGPUNameFallback(webgpuDescription) {
   return "";
 }
 
-const gpuName = getGPUNameFallback(adapter.info.description || adapter.info.device);
+function getCleanGPUName(rawName) {
+  if (!rawName) return "";
+  const match = rawName.match(/ANGLE \([^,]+, ([^,]+),.*\)/);
+  if (match) {
+    return match[1].trim();
+  }
+  return rawName.trim();
+}
+
+const rawGpuName = getGPUNameFallback(adapter.info.description || adapter.info.device);
+const gpuName = getCleanGPUName(rawGpuName);
 console.log(`WebGPU adapter info: description='${adapter.info.description}', device='${adapter.info.device}', vendor='${adapter.info.vendor}', architecture='${adapter.info.architecture}'`);
-console.log(`Fallback GPU Name: '${gpuName}'`);
+console.log(`Fallback GPU Name: '${rawGpuName}', Cleaned: '${gpuName}'`);
 if (resultsEl) {
   resultsEl.innerHTML = `<p style="color: #4f46e5; font-weight: bold;">GPU: ${gpuName || 'unknown'}</p>`;
 }
@@ -522,16 +532,15 @@ async function buildAndRun() {
 function plotResults(results, adapterDescription) {
   const container = document.querySelector("#plot");
 
-  const gpuName = getGPUNameFallback(adapterDescription);
-  let matchedBW = undefined;
-  if (gpuName) {
-    const lower = gpuName.toLowerCase();
-    if (lower.includes("m1 max")) {
-      matchedBW = 400;
-    } else if (lower.includes("m4")) {
-      matchedBW = 120;
-    }
-  }
+  const rawGpuName = getGPUNameFallback(adapterDescription);
+  const gpuName = getCleanGPUName(rawGpuName);
+  console.log("Matched GPU Name:", gpuName);
+
+  const maxBWs = {
+    "apple m1 max": 400,
+    "apple m4": 120,
+  };
+  const matchedBW = maxBWs[gpuName.toLowerCase()];
 
   if (!results || results.length === 0) return;
 
