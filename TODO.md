@@ -22,17 +22,13 @@ Below is the prioritized list of remaining tasks for the Gridwise library, inclu
 
 ## 🌐 Priority 2: Landing Page & UX Improvements
 
-### 3. Upgrade Intro Page with Performance Claims & Snippet
+### 4. Upgrade Intro Page with Performance Claims & Snippet
 * **Feedback**: "consider an eye catching claim about performance... worlds fastest implementation, based on just-published state of the art research... consider putting a code snippet on the home page."
 * **Action Item**: Update `docs/index.md` to:
   * Highlight that Gridwise is the fastest WebGPU primitive implementation, based on decoupled fallback/lookback state-of-the-art research.
   * Add a code snippet demonstrating how simple it is to import and run a sort/scan operation (e.g., `await OneSweepSort({ ... }).execute();`).
 * **Files to modify**:
   * [docs/index.md](file:///Users/jdowens/Documents/working/gridwise/docs/index.md)
-
-### 4. Setup Redirection for `https://gridwise-webgpu.github.io/` 404
-* **Feedback**: "https://gridwise-webgpu.github.io/ is a 404, should be https://gridwise-webgpu.github.io/gridwise/"
-* **Action Item**: Setup a landing/redirect page at the root level of the GitHub Pages user/org page. This is usually done by creating a repository named `gridwise-webgpu.github.io` with an `index.html` that performs a redirect to `/gridwise/`.
 
 ---
 
