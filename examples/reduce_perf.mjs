@@ -32,6 +32,11 @@ if (!device) {
   throw new Error(msg);
 }
 
+console.log(`WebGPU adapter info: description='${adapter.info.description}', device='${adapter.info.device}', vendor='${adapter.info.vendor}', architecture='${adapter.info.architecture}'`);
+if (resultsEl) {
+  resultsEl.innerHTML = `<p style="color: #4f46e5; font-weight: bold;">GPU: ${adapter.info.description || adapter.info.device || 'unknown'}</p>`;
+}
+
 /* set up the UI, with parameters stored in the "params" object */
 const pane = new Pane();
 const params = {

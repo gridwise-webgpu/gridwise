@@ -36,6 +36,11 @@ if (!device) {
   throw new Error(msg);
 }
 
+console.log(`WebGPU adapter info: description='${adapter.info.description}', device='${adapter.info.device}', vendor='${adapter.info.vendor}', architecture='${adapter.info.architecture}'`);
+if (resultsEl) {
+  resultsEl.innerHTML = `<p style="color: #4f46e5; font-weight: bold;">GPU: ${adapter.info.description || adapter.info.device || 'unknown'}</p>`;
+}
+
 function isScan(primitive) {
   return primitive === "exclusive" || primitive === "inclusive";
 }
