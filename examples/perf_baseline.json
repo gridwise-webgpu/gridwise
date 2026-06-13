@@ -2,219 +2,435 @@
   "apple-m4 (metal-3)": {
     "DLDFScan [ type: exclusive datatype: i32 binop: BinOpAdd useSubgroups: true ]_exclusive_i32_size_256": {
       "gpuTimeMs": 0,
-      "cpuTimeMs": 3.827750000000378
+      "cpuTimeMs": 1.632459000000381
     },
     "DLDFScan [ type: exclusive datatype: u32 binop: BinOpAdd useSubgroups: true ]_exclusive_u32_size_256": {
       "gpuTimeMs": 0,
-      "cpuTimeMs": 1.777208999999857
+      "cpuTimeMs": 4.109083000001192
     },
     "DLDFScan [ type: exclusive datatype: f32 binop: BinOpAdd useSubgroups: true ]_exclusive_f32_size_256": {
-      "gpuTimeMs": 0,
-      "cpuTimeMs": 0.5242080000007263
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.6393330000009882
     },
     "DLDFScan [ type: inclusive datatype: i32 binop: BinOpAdd useSubgroups: true ]_inclusive_i32_size_256": {
-      "gpuTimeMs": 0,
-      "cpuTimeMs": 0.5252920000002632
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 3.9243749999986908
     },
     "DLDFScan [ type: inclusive datatype: u32 binop: BinOpAdd useSubgroups: true ]_inclusive_u32_size_256": {
-      "gpuTimeMs": 0,
-      "cpuTimeMs": 0.3726249999999709
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.6979579999988346
     },
     "DLDFScan [ type: inclusive datatype: f32 binop: BinOpAdd useSubgroups: true ]_inclusive_f32_size_256": {
       "gpuTimeMs": 0,
-      "cpuTimeMs": 1.08245800000077
+      "cpuTimeMs": 2.0481669999990118
     },
     "DLDFScan [ type: reduce datatype: i32 binop: BinOpAdd useSubgroups: true ]_reduce_i32_size_256": {
       "gpuTimeMs": 0,
-      "cpuTimeMs": 0.4190419999995356
+      "cpuTimeMs": 6.327416000000085
     },
     "DLDFScan [ type: reduce datatype: u32 binop: BinOpAdd useSubgroups: true ]_reduce_u32_size_256": {
-      "gpuTimeMs": 0,
-      "cpuTimeMs": 1.822541999999885
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.37779200000113633
     },
     "DLDFScan [ type: reduce datatype: f32 binop: BinOpAdd useSubgroups: true ]_reduce_f32_size_256": {
       "gpuTimeMs": 0,
-      "cpuTimeMs": 0.5392079999983252
+      "cpuTimeMs": 0.8945409999996627
     },
     "DLDFScan [ type: exclusive datatype: i32 binop: BinOpMin useSubgroups: true ]_exclusive_i32_size_256": {
-      "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.4775000000008731
+      "gpuTimeMs": 0,
+      "cpuTimeMs": 0.35275000000001455
     },
     "DLDFScan [ type: exclusive datatype: i32 binop: BinOpMax useSubgroups: true ]_exclusive_i32_size_256": {
       "gpuTimeMs": 0,
-      "cpuTimeMs": 0.40870799999902374
+      "cpuTimeMs": 0.3334580000009737
     },
     "DLDFScan [ type: exclusive datatype: i32 binop: BinOpMultiply useSubgroups: true ]_exclusive_i32_size_16": {
       "gpuTimeMs": 0,
-      "cpuTimeMs": 0.44487500000104774
+      "cpuTimeMs": 0.5036660000005213
     },
     "DLDFScan [ type: inclusive datatype: u32 binop: BinOpMin useSubgroups: true ]_inclusive_u32_size_256": {
       "gpuTimeMs": 0,
-      "cpuTimeMs": 3.442417000000205
+      "cpuTimeMs": 0.4933340000006865
     },
     "DLDFScan [ type: inclusive datatype: u32 binop: BinOpMax useSubgroups: true ]_inclusive_u32_size_256": {
-      "gpuTimeMs": 0,
-      "cpuTimeMs": 0.3234169999996084
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.33025000000088767
     },
     "DLDFScan [ type: reduce datatype: i32 binop: BinOpMin useSubgroups: true ]_reduce_i32_size_256": {
       "gpuTimeMs": 0,
-      "cpuTimeMs": 0.5594170000003942
+      "cpuTimeMs": 0.35649999999986903
     },
     "DLDFScan [ type: reduce datatype: i32 binop: BinOpMax useSubgroups: true ]_reduce_i32_size_256": {
-      "gpuTimeMs": 0,
-      "cpuTimeMs": 0.565375000000131
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.47229200000037963
     },
     "DLDFScan [ type: exclusive datatype: i32 binop: BinOpAdd useSubgroups: true ]_exclusive_i32_size_4": {
       "gpuTimeMs": 0,
-      "cpuTimeMs": 0.3495839999995951
+      "cpuTimeMs": 0.5762910000012198
     },
     "DLDFScan [ type: exclusive datatype: i32 binop: BinOpAdd useSubgroups: true ]_exclusive_i32_size_65536": {
       "gpuTimeMs": 0,
-      "cpuTimeMs": 0.35675000000082946
+      "cpuTimeMs": 0.4050409999999829
     },
     "DLDFScan [ type: reduce datatype: u32 binop: BinOpAdd useSubgroups: true ]_reduce_u32_size_65536": {
       "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.3470839999990858
+      "cpuTimeMs": 0.7434589999993477
     },
     "OneSweepSort [ direction: ascending type: keysonly datatype: u32 useSubgroups: true ]_keysonly_u32_size_256": {
-      "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.5577089999987948
+      "gpuTimeMs": 0.196608,
+      "cpuTimeMs": 0.7029580000016722
     },
     "OneSweepSort [ direction: ascending type: keysonly datatype: i32 useSubgroups: true ]_keysonly_i32_size_256": {
-      "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.581583999999566
+      "gpuTimeMs": 0.196608,
+      "cpuTimeMs": 3.377875000000131
     },
     "OneSweepSort [ direction: ascending type: keysonly datatype: f32 useSubgroups: true ]_keysonly_f32_size_256": {
-      "gpuTimeMs": 0.131072,
-      "cpuTimeMs": 0.8868340000008175
+      "gpuTimeMs": 0.196608,
+      "cpuTimeMs": 0.7761250000003201
     },
     "OneSweepSort [ direction: descending type: keysonly datatype: u32 useSubgroups: true ]_keysonly_u32_size_256": {
-      "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.44666700000016135
+      "gpuTimeMs": 0.262144,
+      "cpuTimeMs": 1.513875000000553
     },
     "OneSweepSort [ direction: descending type: keysonly datatype: i32 useSubgroups: true ]_keysonly_i32_size_256": {
-      "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.4702500000003056
+      "gpuTimeMs": 0.262144,
+      "cpuTimeMs": 0.7979159999995318
     },
     "OneSweepSort [ direction: descending type: keysonly datatype: f32 useSubgroups: true ]_keysonly_f32_size_256": {
-      "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.5667920000014419
+      "gpuTimeMs": 0.262144,
+      "cpuTimeMs": 1.7934580000001006
     },
     "OneSweepSort [ direction: ascending type: keysonly datatype: u32 useSubgroups: true ]_keysonly_u32_size_32": {
-      "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 4.08337500000016
+      "gpuTimeMs": 0.262144,
+      "cpuTimeMs": 0.7491660000014235
     },
     "OneSweepSort [ direction: ascending type: keysonly datatype: u32 useSubgroups: true ]_keysonly_u32_size_4096": {
-      "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.44995899999958056
+      "gpuTimeMs": 0.262144,
+      "cpuTimeMs": 0.9564160000008997
     },
     "OneSweepSort [ direction: ascending type: keyvalue datatype: u32 useSubgroups: true ]_keyvalue_u32_size_256": {
-      "gpuTimeMs": 0.131072,
-      "cpuTimeMs": 0.9537079999990965
+      "gpuTimeMs": 0.262144,
+      "cpuTimeMs": 0.8042080000013812
     },
     "OneSweepSort [ direction: ascending type: keyvalue datatype: i32 useSubgroups: true ]_keyvalue_i32_size_256": {
-      "gpuTimeMs": 0.131072,
-      "cpuTimeMs": 0.5684579999997368
+      "gpuTimeMs": 0.196608,
+      "cpuTimeMs": 0.8137500000011642
     },
     "OneSweepSort [ direction: descending type: keyvalue datatype: u32 useSubgroups: true ]_keyvalue_u32_size_256": {
-      "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.5003749999996217
+      "gpuTimeMs": 0.262144,
+      "cpuTimeMs": 0.7667920000003505
     },
     "OneSweepSort [ direction: descending type: keyvalue datatype: i32 useSubgroups: true ]_keyvalue_i32_size_256": {
-      "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.454874999999447
+      "gpuTimeMs": 0.262144,
+      "cpuTimeMs": 0.7513749999998254
     },
     "DLDFScan [ type: exclusive datatype: i32 binop: BinOpAdd useSubgroups: true ]_exclusive_i32_size_1000000": {
-      "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.3624999999992724
+      "gpuTimeMs": 0.131072,
+      "cpuTimeMs": 0.5442079999993439
     },
     "DLDFScan [ type: exclusive datatype: u32 binop: BinOpAdd useSubgroups: true ]_exclusive_u32_size_1000000": {
-      "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.5099580000005517
+      "gpuTimeMs": 0.131072,
+      "cpuTimeMs": 0.5852080000004207
     },
     "DLDFScan [ type: exclusive datatype: f32 binop: BinOpAdd useSubgroups: true ]_exclusive_f32_size_1000000": {
       "gpuTimeMs": 0.131072,
-      "cpuTimeMs": 0.5678330000009737
+      "cpuTimeMs": 0.5585419999988517
     },
     "DLDFScan [ type: inclusive datatype: i32 binop: BinOpAdd useSubgroups: true ]_inclusive_i32_size_3000000": {
-      "gpuTimeMs": 0.262144,
-      "cpuTimeMs": 1.1640000000006694
+      "gpuTimeMs": 0.393216,
+      "cpuTimeMs": 0.8146669999987353
     },
     "DLDFScan [ type: inclusive datatype: u32 binop: BinOpAdd useSubgroups: true ]_inclusive_u32_size_3000000": {
-      "gpuTimeMs": 0.32768,
-      "cpuTimeMs": 0.7698330000002898
+      "gpuTimeMs": 0.393216,
+      "cpuTimeMs": 0.8299580000002607
     },
     "DLDFScan [ type: inclusive datatype: f32 binop: BinOpAdd useSubgroups: true ]_inclusive_f32_size_3000000": {
-      "gpuTimeMs": 0.262144,
-      "cpuTimeMs": 0.6214169999984733
+      "gpuTimeMs": 0.393216,
+      "cpuTimeMs": 0.8199580000000424
     },
     "DLDFScan [ type: reduce datatype: i32 binop: BinOpAdd useSubgroups: true ]_reduce_i32_size_1000000": {
       "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.45766599999842583
+      "cpuTimeMs": 0.6773749999993015
     },
     "DLDFScan [ type: reduce datatype: u32 binop: BinOpAdd useSubgroups: true ]_reduce_u32_size_1000000": {
       "gpuTimeMs": 0.065536,
-      "cpuTimeMs": 0.7694589999991877
+      "cpuTimeMs": 0.5205829999995331
     },
     "DLDFScan [ type: reduce datatype: f32 binop: BinOpAdd useSubgroups: true ]_reduce_f32_size_1000000": {
-      "gpuTimeMs": 0,
-      "cpuTimeMs": 0.4500000000007276
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.6460409999999683
     },
     "DLDFScan [ type: exclusive datatype: i32 binop: BinOpMin useSubgroups: true ]_exclusive_i32_size_2000000": {
-      "gpuTimeMs": 0.131072,
-      "cpuTimeMs": 0.8886249999995925
+      "gpuTimeMs": 0.32768,
+      "cpuTimeMs": 0.7795420000002196
     },
     "DLDFScan [ type: exclusive datatype: i32 binop: BinOpMax useSubgroups: true ]_exclusive_i32_size_2000000": {
-      "gpuTimeMs": 0.32768,
-      "cpuTimeMs": 0.6723750000001019
+      "gpuTimeMs": 0.262144,
+      "cpuTimeMs": 0.7323749999995925
     },
     "DLDFScan [ type: reduce datatype: u32 binop: BinOpMin useSubgroups: true ]_reduce_u32_size_3000000": {
-      "gpuTimeMs": 0.131072,
-      "cpuTimeMs": 0.6236250000001746
+      "gpuTimeMs": 0.196608,
+      "cpuTimeMs": 0.6571249999997235
     },
     "DLDFScan [ type: reduce datatype: u32 binop: BinOpMax useSubgroups: true ]_reduce_u32_size_3000000": {
-      "gpuTimeMs": 0.131072,
-      "cpuTimeMs": 0.6856659999994008
+      "gpuTimeMs": 0.196608,
+      "cpuTimeMs": 0.6160409999993135
     },
     "OneSweepSort [ direction: ascending type: keysonly datatype: u32 useSubgroups: true ]_keysonly_u32_size_1000000": {
-      "gpuTimeMs": 1.441792,
-      "cpuTimeMs": 3.3156659999986
+      "gpuTimeMs": 2.752512,
+      "cpuTimeMs": 3.799750000000131
     },
     "OneSweepSort [ direction: ascending type: keysonly datatype: i32 useSubgroups: true ]_keysonly_i32_size_1000000": {
-      "gpuTimeMs": 2.162688,
-      "cpuTimeMs": 3.0254169999989244
+      "gpuTimeMs": 2.752512,
+      "cpuTimeMs": 3.658332999999402
     },
     "OneSweepSort [ direction: ascending type: keysonly datatype: f32 useSubgroups: true ]_keysonly_f32_size_1000000": {
-      "gpuTimeMs": 1.441792,
-      "cpuTimeMs": 2.8782500000015716
+      "gpuTimeMs": 2.818048,
+      "cpuTimeMs": 3.9057080000002316
     },
     "OneSweepSort [ direction: descending type: keysonly datatype: u32 useSubgroups: true ]_keysonly_u32_size_3000000": {
-      "gpuTimeMs": 3.735552,
-      "cpuTimeMs": 5.73083300000144
+      "gpuTimeMs": 4.849664,
+      "cpuTimeMs": 5.893957999998747
     },
     "OneSweepSort [ direction: descending type: keysonly datatype: i32 useSubgroups: true ]_keysonly_i32_size_3000000": {
-      "gpuTimeMs": 3.670016,
-      "cpuTimeMs": 5.720957999999882
+      "gpuTimeMs": 8.978432,
+      "cpuTimeMs": 10.57549999999901
     },
     "OneSweepSort [ direction: descending type: keysonly datatype: f32 useSubgroups: true ]_keysonly_f32_size_3000000": {
-      "gpuTimeMs": 6.5536,
-      "cpuTimeMs": 8.99595799999952
+      "gpuTimeMs": 2.752512,
+      "cpuTimeMs": 3.4955829999998964
     },
     "OneSweepSort [ direction: ascending type: keyvalue datatype: u32 useSubgroups: true ]_keyvalue_u32_size_2000000": {
-      "gpuTimeMs": 3.60448,
-      "cpuTimeMs": 4.866167000000132
+      "gpuTimeMs": 6.488064,
+      "cpuTimeMs": 8.32654199999888
     },
     "OneSweepSort [ direction: ascending type: keyvalue datatype: i32 useSubgroups: true ]_keyvalue_i32_size_2000000": {
-      "gpuTimeMs": 3.801088,
-      "cpuTimeMs": 5.227791999999681
+      "gpuTimeMs": 7.077888,
+      "cpuTimeMs": 8.50525000000016
     },
     "OneSweepSort [ direction: descending type: keyvalue datatype: u32 useSubgroups: true ]_keyvalue_u32_size_2000000": {
-      "gpuTimeMs": 3.145728,
-      "cpuTimeMs": 4.948792000001049
+      "gpuTimeMs": 6.5536,
+      "cpuTimeMs": 8.285416999999143
     },
     "OneSweepSort [ direction: descending type: keyvalue datatype: i32 useSubgroups: true ]_keyvalue_i32_size_2000000": {
+      "gpuTimeMs": 6.815744,
+      "cpuTimeMs": 8.744582999999693
+    },
+    "DLDFScan [ type: exclusive datatype: i32 binop: BinOpAdd useSubgroups: false ]_exclusive_i32_size_256": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.6182079999998678
+    },
+    "DLDFScan [ type: exclusive datatype: u32 binop: BinOpAdd useSubgroups: false ]_exclusive_u32_size_256": {
+      "gpuTimeMs": 0.131072,
+      "cpuTimeMs": 0.6161250000004657
+    },
+    "DLDFScan [ type: exclusive datatype: f32 binop: BinOpAdd useSubgroups: false ]_exclusive_f32_size_256": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.683458999999857
+    },
+    "DLDFScan [ type: inclusive datatype: i32 binop: BinOpAdd useSubgroups: false ]_inclusive_i32_size_256": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.6499170000006416
+    },
+    "DLDFScan [ type: inclusive datatype: u32 binop: BinOpAdd useSubgroups: false ]_inclusive_u32_size_256": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.6148750000011205
+    },
+    "DLDFScan [ type: inclusive datatype: f32 binop: BinOpAdd useSubgroups: false ]_inclusive_f32_size_256": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.47645899999952235
+    },
+    "DLDFScan [ type: reduce datatype: i32 binop: BinOpAdd useSubgroups: false ]_reduce_i32_size_256": {
+      "gpuTimeMs": 0,
+      "cpuTimeMs": 0.5882500000006985
+    },
+    "DLDFScan [ type: reduce datatype: u32 binop: BinOpAdd useSubgroups: false ]_reduce_u32_size_256": {
+      "gpuTimeMs": 0,
+      "cpuTimeMs": 0.5660420000003796
+    },
+    "DLDFScan [ type: reduce datatype: f32 binop: BinOpAdd useSubgroups: false ]_reduce_f32_size_256": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.50983400000041
+    },
+    "DLDFScan [ type: exclusive datatype: i32 binop: BinOpMin useSubgroups: false ]_exclusive_i32_size_256": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.6297500000000582
+    },
+    "DLDFScan [ type: exclusive datatype: i32 binop: BinOpMax useSubgroups: false ]_exclusive_i32_size_256": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.4470839999994496
+    },
+    "DLDFScan [ type: exclusive datatype: i32 binop: BinOpMultiply useSubgroups: false ]_exclusive_i32_size_16": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.5479159999995318
+    },
+    "DLDFScan [ type: inclusive datatype: u32 binop: BinOpMin useSubgroups: false ]_inclusive_u32_size_256": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.52545900000041
+    },
+    "DLDFScan [ type: inclusive datatype: u32 binop: BinOpMax useSubgroups: false ]_inclusive_u32_size_256": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.6205420000005688
+    },
+    "DLDFScan [ type: reduce datatype: i32 binop: BinOpMin useSubgroups: false ]_reduce_i32_size_256": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.5254999999997381
+    },
+    "DLDFScan [ type: reduce datatype: i32 binop: BinOpMax useSubgroups: false ]_reduce_i32_size_256": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.35483299999941664
+    },
+    "DLDFScan [ type: exclusive datatype: i32 binop: BinOpAdd useSubgroups: false ]_exclusive_i32_size_4": {
+      "gpuTimeMs": 0.065536,
+      "cpuTimeMs": 0.48579200000131095
+    },
+    "DLDFScan [ type: exclusive datatype: i32 binop: BinOpAdd useSubgroups: false ]_exclusive_i32_size_65536": {
+      "gpuTimeMs": 0.393216,
+      "cpuTimeMs": 0.8309589999989839
+    },
+    "DLDFScan [ type: reduce datatype: u32 binop: BinOpAdd useSubgroups: false ]_reduce_u32_size_65536": {
+      "gpuTimeMs": 0.32768,
+      "cpuTimeMs": 0.9320000000006985
+    },
+    "OneSweepSort [ direction: ascending type: keysonly datatype: u32 useSubgroups: false ]_keysonly_u32_size_256": {
+      "gpuTimeMs": 8.650752,
+      "cpuTimeMs": 9.25616700000137
+    },
+    "OneSweepSort [ direction: ascending type: keysonly datatype: i32 useSubgroups: false ]_keysonly_i32_size_256": {
+      "gpuTimeMs": 8.650752,
+      "cpuTimeMs": 9.119249999999738
+    },
+    "OneSweepSort [ direction: ascending type: keysonly datatype: f32 useSubgroups: false ]_keysonly_f32_size_256": {
+      "gpuTimeMs": 8.716288,
+      "cpuTimeMs": 9.194084000000657
+    },
+    "OneSweepSort [ direction: descending type: keysonly datatype: u32 useSubgroups: false ]_keysonly_u32_size_256": {
+      "gpuTimeMs": 4.521984,
+      "cpuTimeMs": 4.981250000000728
+    },
+    "OneSweepSort [ direction: descending type: keysonly datatype: i32 useSubgroups: false ]_keysonly_i32_size_256": {
+      "gpuTimeMs": 3.670016,
+      "cpuTimeMs": 4.227166999999099
+    },
+    "OneSweepSort [ direction: descending type: keysonly datatype: f32 useSubgroups: false ]_keysonly_f32_size_256": {
+      "gpuTimeMs": 3.670016,
+      "cpuTimeMs": 4.121957999999722
+    },
+    "OneSweepSort [ direction: ascending type: keysonly datatype: u32 useSubgroups: false ]_keysonly_u32_size_32": {
+      "gpuTimeMs": 4.063232,
+      "cpuTimeMs": 4.456541999999899
+    },
+    "OneSweepSort [ direction: ascending type: keysonly datatype: u32 useSubgroups: false ]_keysonly_u32_size_4096": {
       "gpuTimeMs": 4.849664,
-      "cpuTimeMs": 7.055540999997902
+      "cpuTimeMs": 5.557416999999987
+    },
+    "OneSweepSort [ direction: ascending type: keyvalue datatype: u32 useSubgroups: false ]_keyvalue_u32_size_256": {
+      "gpuTimeMs": 3.735552,
+      "cpuTimeMs": 4.176250000000437
+    },
+    "OneSweepSort [ direction: ascending type: keyvalue datatype: i32 useSubgroups: false ]_keyvalue_i32_size_256": {
+      "gpuTimeMs": 7.20896,
+      "cpuTimeMs": 7.778458000000683
+    },
+    "OneSweepSort [ direction: descending type: keyvalue datatype: u32 useSubgroups: false ]_keyvalue_u32_size_256": {
+      "gpuTimeMs": 4.718592,
+      "cpuTimeMs": 5.18762500000048
+    },
+    "OneSweepSort [ direction: descending type: keyvalue datatype: i32 useSubgroups: false ]_keyvalue_i32_size_256": {
+      "gpuTimeMs": 8.650752,
+      "cpuTimeMs": 9.379666000000725
+    },
+    "DLDFScan [ type: exclusive datatype: i32 binop: BinOpAdd useSubgroups: false ]_exclusive_i32_size_1000000": {
+      "gpuTimeMs": 3.145728,
+      "cpuTimeMs": 3.6228329999994457
+    },
+    "DLDFScan [ type: exclusive datatype: u32 binop: BinOpAdd useSubgroups: false ]_exclusive_u32_size_1000000": {
+      "gpuTimeMs": 3.145728,
+      "cpuTimeMs": 3.678417000000991
+    },
+    "DLDFScan [ type: exclusive datatype: f32 binop: BinOpAdd useSubgroups: false ]_exclusive_f32_size_1000000": {
+      "gpuTimeMs": 3.080192,
+      "cpuTimeMs": 3.5730000000003206
+    },
+    "DLDFScan [ type: inclusive datatype: i32 binop: BinOpAdd useSubgroups: false ]_inclusive_i32_size_3000000": {
+      "gpuTimeMs": 9.17504,
+      "cpuTimeMs": 9.797375000000102
+    },
+    "DLDFScan [ type: inclusive datatype: u32 binop: BinOpAdd useSubgroups: false ]_inclusive_u32_size_3000000": {
+      "gpuTimeMs": 9.17504,
+      "cpuTimeMs": 9.779709000000366
+    },
+    "DLDFScan [ type: inclusive datatype: f32 binop: BinOpAdd useSubgroups: false ]_inclusive_f32_size_3000000": {
+      "gpuTimeMs": 7.471104,
+      "cpuTimeMs": 7.887500000000728
+    },
+    "DLDFScan [ type: reduce datatype: i32 binop: BinOpAdd useSubgroups: false ]_reduce_i32_size_1000000": {
+      "gpuTimeMs": 0.917504,
+      "cpuTimeMs": 1.3236250000009022
+    },
+    "DLDFScan [ type: reduce datatype: u32 binop: BinOpAdd useSubgroups: false ]_reduce_u32_size_1000000": {
+      "gpuTimeMs": 0.917504,
+      "cpuTimeMs": 1.3155420000002778
+    },
+    "DLDFScan [ type: reduce datatype: f32 binop: BinOpAdd useSubgroups: false ]_reduce_f32_size_1000000": {
+      "gpuTimeMs": 0.917504,
+      "cpuTimeMs": 1.4084999999995487
+    },
+    "DLDFScan [ type: exclusive datatype: i32 binop: BinOpMin useSubgroups: false ]_exclusive_i32_size_2000000": {
+      "gpuTimeMs": 3.342336,
+      "cpuTimeMs": 3.7834160000002157
+    },
+    "DLDFScan [ type: exclusive datatype: i32 binop: BinOpMax useSubgroups: false ]_exclusive_i32_size_2000000": {
+      "gpuTimeMs": 5.373952,
+      "cpuTimeMs": 6.217166999998881
+    },
+    "DLDFScan [ type: reduce datatype: u32 binop: BinOpMin useSubgroups: false ]_reduce_u32_size_3000000": {
+      "gpuTimeMs": 6.22592,
+      "cpuTimeMs": 6.71729200000118
+    },
+    "DLDFScan [ type: reduce datatype: u32 binop: BinOpMax useSubgroups: false ]_reduce_u32_size_3000000": {
+      "gpuTimeMs": 6.22592,
+      "cpuTimeMs": 6.716167000000496
+    },
+    "OneSweepSort [ direction: ascending type: keysonly datatype: u32 useSubgroups: false ]_keysonly_u32_size_1000000": {
+      "gpuTimeMs": 29.556736,
+      "cpuTimeMs": 30.048249999999825
+    },
+    "OneSweepSort [ direction: ascending type: keysonly datatype: i32 useSubgroups: false ]_keysonly_i32_size_1000000": {
+      "gpuTimeMs": 29.4912,
+      "cpuTimeMs": 30.029749999999694
+    },
+    "OneSweepSort [ direction: ascending type: keysonly datatype: f32 useSubgroups: false ]_keysonly_f32_size_1000000": {
+      "gpuTimeMs": 29.556736,
+      "cpuTimeMs": 30.16204199999993
+    },
+    "OneSweepSort [ direction: descending type: keysonly datatype: u32 useSubgroups: false ]_keysonly_u32_size_3000000": {
+      "gpuTimeMs": 87.16288,
+      "cpuTimeMs": 87.96504200000163
+    },
+    "OneSweepSort [ direction: descending type: keysonly datatype: i32 useSubgroups: false ]_keysonly_i32_size_3000000": {
+      "gpuTimeMs": 86.966272,
+      "cpuTimeMs": 87.79312500000015
+    },
+    "OneSweepSort [ direction: descending type: keysonly datatype: f32 useSubgroups: false ]_keysonly_f32_size_3000000": {
+      "gpuTimeMs": 85.590016,
+      "cpuTimeMs": 86.4002500000006
+    },
+    "OneSweepSort [ direction: ascending type: keyvalue datatype: u32 useSubgroups: false ]_keyvalue_u32_size_2000000": {
+      "gpuTimeMs": 57.99936,
+      "cpuTimeMs": 58.893750000001084
+    },
+    "OneSweepSort [ direction: ascending type: keyvalue datatype: i32 useSubgroups: false ]_keyvalue_i32_size_2000000": {
+      "gpuTimeMs": 57.606144,
+      "cpuTimeMs": 58.61295799999971
+    },
+    "OneSweepSort [ direction: descending type: keyvalue datatype: u32 useSubgroups: false ]_keyvalue_u32_size_2000000": {
+      "gpuTimeMs": 56.950784,
+      "cpuTimeMs": 57.81245800000033
+    },
+    "OneSweepSort [ direction: descending type: keyvalue datatype: i32 useSubgroups: false ]_keyvalue_i32_size_2000000": {
+      "gpuTimeMs": 57.606144,
+      "cpuTimeMs": 58.4943749999984
     }
   }
 }

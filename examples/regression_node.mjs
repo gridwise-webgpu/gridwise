@@ -291,7 +291,7 @@ for (const res of perfResults) {
 }
 
 if (updateBaseline) {
-  baselineData[adapterDescription] = newGpuBaseline;
+  baselineData[adapterDescription] = { ...gpuBaseline, ...newGpuBaseline };
   fs.writeFileSync(baselinePath, JSON.stringify(baselineData, null, 2), "utf8");
   console.log(`\nBaseline performance data for "${adapterDescription}" written to: ${baselinePath}`);
 }
