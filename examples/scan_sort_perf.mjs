@@ -36,9 +36,26 @@ if (!device) {
   throw new Error(msg);
 }
 
+function getGPUNameFallback(webgpuDescription) {
+  if (webgpuDescription) return webgpuDescription;
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    if (gl) {
+      const ext = gl.getExtension("WEBGL_debug_renderer_info");
+      if (ext) {
+        return gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || "";
+      }
+    }
+  } catch (e) {}
+  return "";
+}
+
+const gpuName = getGPUNameFallback(adapter.info.description || adapter.info.device);
 console.log(`WebGPU adapter info: description='${adapter.info.description}', device='${adapter.info.device}', vendor='${adapter.info.vendor}', architecture='${adapter.info.architecture}'`);
+console.log(`Fallback GPU Name: '${gpuName}'`);
 if (resultsEl) {
-  resultsEl.innerHTML = `<p style="color: #4f46e5; font-weight: bold;">GPU: ${adapter.info.description || adapter.info.device || 'unknown'}</p>`;
+  resultsEl.innerHTML = `<p style="color: #4f46e5; font-weight: bold;">GPU: ${gpuName || 'unknown'}</p>`;
 }
 
 function isScan(primitive) {
@@ -505,10 +522,16 @@ async function buildAndRun() {
 function plotResults(results, adapterDescription) {
   const container = document.querySelector("#plot");
 
-  const maxBWs = {
-    "Apple M1 Max": 400,
-    "Apple M4": 120,
-  };
+  const gpuName = getGPUNameFallback(adapterDescription);
+  let matchedBW = undefined;
+  if (gpuName) {
+    const lower = gpuName.toLowerCase();
+    if (lower.includes("m1 max")) {
+      matchedBW = 400;
+    } else if (lower.includes("m4")) {
+      matchedBW = 120;
+    }
+  }
 
   if (!results || results.length === 0) return;
 
@@ -519,7 +542,7 @@ function plotResults(results, adapterDescription) {
       stroke: { field: "timing" },
       caption:
         "BANDWIDTH | CPU timing (performance.now), GPU timing (timestamps)",
-      maxBW: maxBWs[adapterDescription],
+      maxBW: matchedBW,
     },
     {
       x: { field: "inputBytes", label: "Input array size (B)" },
