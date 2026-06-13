@@ -2,6 +2,7 @@
 # encoding: utf-8
 """Use instead of `python3 -m http.server` when you need CORS"""
 
+import os
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 
@@ -15,5 +16,10 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
         return super(CORSRequestHandler, self).end_headers()
 
 
-httpd = HTTPServer(("localhost", 8000), CORSRequestHandler)
+class ReuseAddrHTTPServer(HTTPServer):
+    allow_reuse_address = True
+
+
+port = int(os.environ.get("PORT", 8002))
+httpd = ReuseAddrHTTPServer(("127.0.0.1", port), CORSRequestHandler)
 httpd.serve_forever()
