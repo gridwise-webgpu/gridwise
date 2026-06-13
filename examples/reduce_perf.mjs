@@ -29,7 +29,7 @@ if (!device) {
   if (resultsEl) {
     resultsEl.innerHTML = `<p style="color: red; font-weight: bold;">${msg}</p>`;
   }
-  return;
+  throw new Error(msg);
 }
 
 /* set up the UI, with parameters stored in the "params" object */
