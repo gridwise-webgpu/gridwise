@@ -36,19 +36,13 @@ Below is the prioritized list of remaining tasks for the Gridwise library, inclu
 * **Files to modify**:
   * [docs/scan-and-reduce.md](file:///Users/jdowens/Documents/working/gridwise/docs/scan-and-reduce.md#L34)
 
-### 5. Mark Gridwise's Choices in "Design Choice" Sections
-* **Feedback**: "The 'design choice' sections - unclear which one gridwise has chosen. maybe put a green checkmark on the gridwise approach."
-* **Action Item**: Edit `docs/primitive-design.md` to clearly indicate (e.g., via checkmarks ✅) the choices that Gridwise implements (e.g., "Use subgroups + emulation" and "Always use chained algorithms").
-* **Files to modify**:
-  * [docs/primitive-design.md](file:///Users/jdowens/Documents/working/gridwise/docs/primitive-design.md#L37)
-
-### 6. Replace "emu" Abbreviation with "Emulated" or "Emulation"
+### 5. Replace "emu" Abbreviation with "Emulated" or "Emulation"
 * **Feedback**: "'emu' sounds like a bird... write out emulated?"
 * **Action Item**: Conduct a thorough replace in the documentation to spell out "emulated" or "emulation" instead of the shorthand "emu".
 * **Files to modify**:
   * [docs/subgroup-strategy.md](file:///Users/jdowens/Documents/working/gridwise/docs/subgroup-strategy.md)
 
-### 7. Accurate CPU Timing Measurement (Issue #9)
+### 6. Accurate CPU Timing Measurement (Issue #9)
 * **Feedback**: When CPU timing is active, `t0` could be set during a previous asynchronous GPU submission.
 * **Action Item**: Ensure the GPU queue is idle/cleared before timing starts (e.g. flush the queue or run onSubmittedWorkDone() first).
 * **Files to modify**:
@@ -58,15 +52,15 @@ Below is the prioritized list of remaining tasks for the Gridwise library, inclu
 
 ## 🚀 Priority 4: Future Research & Performance Benchmarking
 
-### 8. Add GPU vs. CPU Performance Comparison Chart on Front Page
+### 7. Add GPU vs. CPU Performance Comparison Chart on Front Page
 * **Feedback**: "maybe even a small chart on the front page showing off sort on the gpu vs. cpu?"
 * **Action Item**: Once stable baselines are recorded, generate a comparison plot and embed it in `docs/index.md` or a dedicated performance summary.
 
-### 9. Create Educational Subpage
+### 8. Create Educational Subpage
 * **Feedback**: "consider noting briefly why gpu programmers will come to need scan, reduce and sort. Many casual viewers will see the site and not know yet."
 * **Action Item**: Add an educational guide page linked from the home page.
 
-### 10. Verify Sort Performance & Data Volume (Issue #31)
+### 9. Verify Sort Performance & Data Volume (Issue #31)
 * **Problem**: Plotted sort bandwidth in `scan_sort_perf.html` is modest.
 * **Action Item**: Double check data volume calculations for sort operations and perform lower-level benchmarking to verify bandwidth accuracy.
 
@@ -75,4 +69,4 @@ Below is the prioritized list of remaining tasks for the Gridwise library, inclu
 ## ✅ Completed Tasks
 
 * **Reset Atomic Buffers Between Trials (Issue #13)**: Applied the lookback `spine` and `passHist` buffer resets in [onesweep.mjs](file:///Users/jdowens/Documents/working/gridwise/onesweep.mjs) and [scandldf.mjs](file:///Users/jdowens/Documents/working/gridwise/scandldf.mjs) to guarantee correct lookback progression and timing reliability.
-
+* **Mark Gridwise's Choices in "Design Choice" Sections**: Edited [docs/primitive-design.md](file:///Users/jdowens/Documents/working/gridwise/docs/primitive-design.md) to clearly indicate Gridwise's architectural choices (subgroups with emulation fallback, and always using chained algorithms) and cleaned up formatting backslashes.

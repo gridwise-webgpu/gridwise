@@ -34,37 +34,37 @@ The most important implementation focus in these algorithms is to ensure that th
 
 Specifically, it appears likely that kernels must take advantage of subgroup instructions to achieve sufficient throughput. Without these primitives, kernels require numerous workgroup barriers that inhibit performance. Subgroup instructions are particularly challenging because different hardware has different subgroup sizes; writing subgroup-size-agnostic kernels is complex.
 
-## Design choice: Use subgroups \+ emulation vs. no-subgroups
+## Design choice: Use subgroups + emulation vs. no-subgroups
 
-### Use subgroup instructions everywhere, emulate subgroup instructions in software where not available
+### ✅ [Gridwise's Choice] Use subgroup instructions everywhere, emulate subgroup instructions in software where not available
 
-- \+: One code base (easier maintenance)
+- +: One code base (easier maintenance)
 - –: Emulated code is not likely to be performance-competitive
 - –: Current subgroup support is fragile
 
 ### Never use subgroups anywhere
 
-- \+: Most portable
+- +: Most portable
 - –: Unlikely to deliver top performance
 
 ## Design choice: Use chained algorithms vs. hybrid vs. not
 
-### Always use chained algorithms
+### ✅ [Gridwise's Choice] Always use chained algorithms
 
-- \+: Likely to be highest-performance option
-- \+: Maintain only one code base
+- +: Likely to be highest-performance option
+- +: Maintain only one code base
 - –: Most complex implementation
 - –: Unlikely to deliver good performance without subgroups, which present definite fragility challenges in the chained context
 
 ### Hybrid approach: sometimes use chained algorithms, sometimes don’t
 
-- \+: Allows most flexible performance tradeoffs between performance and capabilities
+- +: Allows most flexible performance tradeoffs between performance and capabilities
 - –: Must maintain two different code bases (little overlap)
 - –: Little ability to specialize beyond “has subgroups vs. no subgroups”
 
 ### Never use chained algorithms
 
-- \+: Well-known and \-tested implementation strategy
-- \+: Maintain one code base
-- \+: Simplest code
+- +: Well-known and -tested implementation strategy
+- +: Maintain one code base
+- +: Simplest code
 - –: Will not achieve top performance (theoretically, ⅔ the performance of chained approaches)
