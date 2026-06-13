@@ -259,6 +259,7 @@ function plotResults(results, adapterDescription) {
 
   const maxBWs = {
     "Apple M1 Max": 400,
+    "Apple M4": 120,
   };
 
   if (!results || results.length === 0) return;
