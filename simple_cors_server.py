@@ -20,6 +20,6 @@ class ReuseAddrHTTPServer(HTTPServer):
     allow_reuse_address = True
 
 
-port = int(os.environ.get("PORT", 8002))
+port = int(os.environ.get("PORT", 8000))
 httpd = ReuseAddrHTTPServer(("127.0.0.1", port), CORSRequestHandler)
 httpd.serve_forever()
