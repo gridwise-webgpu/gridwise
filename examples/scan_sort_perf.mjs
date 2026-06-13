@@ -597,13 +597,13 @@ function plotResults(results, adapterDescription) {
         // CASE A: Clamped (Off Scale) -> Line at top
         yDomain = [validMin, clampThreshold];
         ruleValue = clampThreshold;
-        ruleLabel = `Max DRAM BW for ${adapterDescription}: ${plot.maxBW} GB/s (Off Scale)`;
+        ruleLabel = `Max DRAM BW for ${gpuName}: ${plot.maxBW} GB/s (Off Scale)`;
         labelPosition = "below";
       } else {
         // CASE B: Normal View
         yDomain = [validMin, Math.max(dataMax, plot.maxBW)];
         ruleValue = plot.maxBW;
-        ruleLabel = `Max DRAM BW for ${adapterDescription}: ${plot.maxBW} GB/s`;
+        ruleLabel = `Max DRAM BW for ${gpuName}: ${plot.maxBW} GB/s`;
 
         // If line is effectively at the ceiling, put text below
         labelPosition = plot.maxBW >= dataMax ? "below" : "above";
