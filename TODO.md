@@ -12,7 +12,7 @@ Below is the prioritized list of remaining tasks for the Gridwise library, inclu
 
 ### 2. Reset Atomic Buffers Between Trials (Issue #13)
 * **Problem**: Helper atomic buffers (like `spineBuffer` and `scanBump`) are not cleared between consecutive execution trials. Atomics can accumulate values over multiple trials, potentially degrading performance or yielding incorrect results.
-* **Action Item**: Reset/clear atomic buffers before each trial run to ensure clean starting conditions.
+* **Action Item**: Apply the lookback spine and `passHist` buffer resets in `onesweep.mjs` and `scandldf.mjs` (per the design outlined in [docs/benchmarking-issues.md](file:///Users/jdowens/Documents/working/gridwise/docs/benchmarking-issues.md)) to guarantee correct lookback progression and accurate timing results during benchmarking trials.
 
 ### 3. CI WebGPU Regression Testing & SwiftShader Deadlock Mitigation (Issue #39)
 * **Problem**: Running WebGPU tests in headless CI environments relies on SwiftShader (a CPU software Vulkan rasterizer). Emulated subgroup helpers using atomic spin-loops consume 100% CPU on compute threads and starve target threads, causing permanent deadlocks. WebGPU tests are currently disabled in CI to avoid hangs (commit `3066b08`).
