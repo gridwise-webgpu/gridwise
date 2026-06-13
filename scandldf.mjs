@@ -356,6 +356,10 @@ fn main(builtinsUniform: BuiltinsUniform,
   /* Post my local reduction to the spine; now visible to the whole device */
   if (builtinsNonuniform.lidx < SPLIT_MEMBERS /* && (tile_id & params.simulate_mask) != 0u */) {
     let t = split(wg_partials[local_spine - 1u], builtinsNonuniform.lidx) | select(FLAG_READY, FLAG_INCLUSIVE, tile_id == 0u);
+    /* does this atomicStore completely clear the spine before any reads to it? It does 
+     * for this tile. But a subsequent workgroup (e.g. a downstream tile looking back) 
+     * might have tried to read it before we get here. Thus we need to clear it before 
+     * using it if we're doing back to back scans. */ 
     atomicStore(&spine[tile_id][builtinsNonuniform.lidx], t);
   }
 
@@ -574,7 +578,7 @@ fn main(builtinsUniform: BuiltinsUniform,
       new AllocateBuffer({
         label: "spine",
         size: this.spineSize,
-        clearBufferOnReuse: false,
+        clearBufferOnReuse: true,
       }),
       new AllocateBuffer({
         label: "misc",
@@ -604,6 +608,7 @@ fn main(builtinsUniform: BuiltinsUniform,
           ],
         ],
         label: `Thomas Smith's scan (${this.type}) with decoupled lookback/decoupled fallback [subgroups: ${this.useSubgroups}]`,
+        resetBuffersForBenchmarkingOnly: ["spine"],
         logKernelCodeToConsole: false,
         getDispatchGeometry: () => {
           return this.getSimpleDispatchGeometry();
