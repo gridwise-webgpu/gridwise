@@ -49,11 +49,15 @@ function getGPUNameFallback(webgpuDescription) {
 
 function getCleanGPUName(rawName) {
   if (!rawName) return "";
-  const match = rawName.match(/ANGLE \([^,]+, ([^,]+),.*\)/);
+  let name = rawName.trim();
+  const match = name.match(/ANGLE \([^,]+, ([^,]+),.*\)/);
   if (match) {
-    return match[1].trim();
+    name = match[1].trim();
   }
-  return rawName.trim();
+  if (name.startsWith("ANGLE Metal Renderer: ")) {
+    name = name.substring("ANGLE Metal Renderer: ".length).trim();
+  }
+  return name;
 }
 
 const rawGpuName = getGPUNameFallback(adapter.info.description || adapter.info.device);
