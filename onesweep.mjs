@@ -819,7 +819,10 @@ export class OneSweepSort extends BaseSort {
             builtinsUniform.nwg.x * (sortParameters.shift >> 3u) * RADIX + /* which digit */
             (partid + 1u) * RADIX + /* which thread-block-local histogram within that digit */
             builtinsNonuniform.lidx; /* which of the RADIX buckets within that t-b-l histogram */
-          /* this next RADIX-sized store is what is being chain-scanned in this kernel */
+          /* does this atomicStore completely clear the passHist before any reads to it? It does
+           * for this tile. But a subsequent workgroup (e.g. a downstream tile looking back)
+           * might have tried to read it before we get here. Thus we need to clear it before
+           * using it if we're doing back to back sorts. */
           atomicStore(&passHist[pass_index], (local_reduction & ~FLAG_MASK) | FLAG_REDUCTION);
         }
         /**
@@ -1346,7 +1349,7 @@ export class OneSweepSort extends BaseSort {
         bufferTypes,
         bindings: [bindings0Even, [sortParameterBinding[0]]],
         label: `OneSweep sort (${this.type}, ${this.direction}) global_hist [subgroups: ${this.useSubgroups}]`,
-        resetBuffersForBenchmarkingOnly: ["hist"],
+        resetBuffersForBenchmarkingOnly: ["hist", "passHist"],
         logKernelCodeToConsole: false,
         getDispatchGeometry: () => {
           return [this.reduceWorkgroupCount];
