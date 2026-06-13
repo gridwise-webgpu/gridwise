@@ -52,21 +52,13 @@ Below is the prioritized list of remaining tasks for the Gridwise library, inclu
 * **Files to modify**:
   * [docs/subgroup-strategy.md](file:///Users/jdowens/Documents/working/gridwise/docs/subgroup-strategy.md)
 
-### 8. Polish the BinOp Example Description and Order (Issues #36, #35)
-* **Feedback**: "in the binop example, : `{ datatype = "..." }` is a little confusing... in binop example, consider putting the gpu stuff first, and the cpu stuff at the end with a comment that it's the cpu stuff."
-* **Action Item**: 
-  * Ensure the placeholder text in the examples is easy to read (using `{ datatype: "f32" }` rather than the confusing `{ datatype = "..." }` syntax).
-  * Ensure `docs/binop.md` displays the GPU WGSL code generation first, and lists the CPU JavaScript validation method at the end of the constructor with clear comments.
-* **Files to modify**:
-  * [docs/binop.md](file:///Users/jdowens/Documents/working/gridwise/docs/binop.md)
-
-### 9. Accurate CPU Timing Measurement (Issue #9)
+### 8. Accurate CPU Timing Measurement (Issue #9)
 * **Feedback**: When CPU timing is active, `t0` could be set during a previous asynchronous GPU submission.
 * **Action Item**: Ensure the GPU queue is idle/cleared before timing starts (e.g. flush the queue or run onSubmittedWorkDone() first).
 * **Files to modify**:
   * [primitive.mjs](file:///Users/jdowens/Documents/working/gridwise/primitive.mjs)
 
-### 10. Better Formatting of Documentation (Issue #8)
+### 9. Better Formatting of Documentation (Issue #8)
 * **Feedback**: Currently Gridwise documentation is done with default Jekyll templates. Propose a cleaner documentation layout that does not treat documentation pages as blog posts (no dates or chronological ordering).
 * **Action Item**: Improve Jekyll layouts for Gridwise documentation.
 
@@ -74,14 +66,14 @@ Below is the prioritized list of remaining tasks for the Gridwise library, inclu
 
 ## 🚀 Priority 4: Future Research & Performance Benchmarking
 
-### 11. Add GPU vs. CPU Performance Comparison Chart on Front Page
+### 10. Add GPU vs. CPU Performance Comparison Chart on Front Page
 * **Feedback**: "maybe even a small chart on the front page showing off sort on the gpu vs. cpu?"
 * **Action Item**: Once stable baselines are recorded, generate a comparison plot and embed it in `docs/index.md` or a dedicated performance summary.
 
-### 12. Create Educational Subpage
+### 11. Create Educational Subpage
 * **Feedback**: "consider noting briefly why gpu programmers will come to need scan, reduce and sort. Many casual viewers will see the site and not know yet."
 * **Action Item**: Add an educational guide page linked from the home page.
 
-### 13. Verify Sort Performance & Data Volume (Issue #31)
+### 12. Verify Sort Performance & Data Volume (Issue #31)
 * **Problem**: Plotted sort bandwidth in `scan_sort_perf.html` is modest.
 * **Action Item**: Double check data volume calculations for sort operations and perform lower-level benchmarking to verify bandwidth accuracy.
