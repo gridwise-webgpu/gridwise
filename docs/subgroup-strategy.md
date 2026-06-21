@@ -116,7 +116,7 @@ First, we know that using hw subgroup operations will deliver better performance
 
 Recall that WebGPU does not specify a subgroup size (in hw), although it does specify a minimum and maximum subgroup size. (In fact, some WebGPU-capable hardware may use different subgroup sizes across different kernels in the same application.) WebGPU developers must thus write their code assuming any subgroup size between the minimum and the maximum. Since our kernels already have to handle a range of subgroup sizes, we have some flexibility to choose a subgroup size in emu.
 
-We choose to emulate virtual subgroups of size **32** (partitioning the workgroup's flat array and tracking thread subgroup IDs via `lidx % 32u`). 
+We choose to emulate virtual subgroups of size **32** (partitioning the workgroup's flat array and tracking thread subgroup IDs via `lidx % 32u`).
 
 ### Why 32-thread virtual subgroups? (VS Workgroup-sized subgroups)
 
@@ -253,55 +253,6 @@ Instead of trying to emulate subgroup built-ins line-by-line in a shared kernel,
   * Delivers maximum possible performance for both hardware subgroup paths (no register/barrier overhead) and emulated paths (optimized workgroup-shared algorithms).
 * **Cons**:
   * Increases codebase maintenance overhead as developers must write, test, and maintain two versions of every primitive.
-
-## Case Study: Control Flow Divergence in subgroupAny (OneSweep Sort)
-
-In the implementation of the OneSweep Radix Sort lookback loop, a deadlock was discovered when running under software subgroup emulation. The original code compiled and ran correctly on native hardware subgroup platforms but hung indefinitely under emulation.
-
-### The Problem: Divergent Control Flow
-
-The lookback loop spins waiting for preceding tiles to publish their histograms. The original kernel structure executed `subgroupAny` inside a thread-divergent conditional block:
-
-```wgsl
-if (!sgLookbackComplete) {
-  if (!lookbackComplete) { // Thread-divergent branch (per-lane status)
-    while (spinCount < MAX_SPIN_COUNT) {
-      flagPayload = atomicLoad(&passHist[...]);
-      if ((flagPayload & FLAG_MASK) > FLAG_NOT_READY) { break; }
-      spinCount++;
-    }
-    // subgroupAny is called ONLY by threads that have NOT completed lookback
-    if (subgroupAny(spinCount == MAX_SPIN_COUNT) && (sgid == 0)) {
-      wg_incomplete = 1;
-    }
-  }
-}
-```
-
-* **On Hardware**: Native hardware subgroups use execution masks to dynamically disable inactive lanes. Threads that have already completed lookback (`lookbackComplete == true`) simply bypass the branch, and the hardware evaluates `subgroupAny` correctly using only the active participating lanes.
-* **On Emulation**: Software emulation simulates subgroup barriers using workgroup shared memory barriers and transaction counters. Every thread in the virtual subgroup must execute the helper function uniformly. Because lanes that completed early bypassed the `if (!lookbackComplete)` block, they never reached the barrier inside the emulated `subgroupAny`, causing the participating threads to deadlock waiting for them.
-
-### The Fix: Uniform Execution
-
-To make the kernel emulation-friendly, the divergent `subgroupAny` call was hoisted out of the thread-divergent block while keeping it within the subgroup-uniform block. A subgroup-uniform variable `didSpinTimeout` is initialized and updated inside the branch, then passed to `subgroupAny` uniformly:
-
-```wgsl
-if (!sgLookbackComplete) { // Subgroup-uniform branch
-  var didSpinTimeout = false;
-  
-  if (!lookbackComplete) { // Thread-divergent branch
-    while (spinCount < MAX_SPIN_COUNT) { ... }
-    didSpinTimeout = (spinCount == MAX_SPIN_COUNT);
-  }
-  
-  // Hoisted: Every thread in the subgroup now executes subgroupAny uniformly
-  if (subgroupAny(didSpinTimeout) && (sgid == 0)) {
-    wg_incomplete = 1;
-  }
-}
-```
-
-Now, all threads in the subgroup execute `subgroupAny` in lockstep. Completed threads participate by passing `didSpinTimeout = false`, and active threads pass their actual spin status. This prevents barrier misalignment and resolves the emulation deadlock.
 
 ### Principles for Writing Emulation-Friendly Subgroup Kernels
 
