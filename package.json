@@ -36,6 +36,7 @@
     "datatype.mjs",
     "LICENSE.txt"
   ],
+  "sideEffects": false,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gridwise-js/gridwise.git"
