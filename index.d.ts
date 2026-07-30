@@ -24,6 +24,42 @@ export class BasePrimitive {
   registerBuffer(args: { label: string; buffer: any; device?: GPUDevice }): void;
 }
 
+export class Kernel {
+  label: string;
+  kernel: string | ((args?: { [key: string]: any }) => string);
+
+  constructor(
+    args:
+      | ((args?: { [key: string]: any }) => string)
+      | {
+          kernel: string | ((args?: { [key: string]: any }) => string);
+          label?: string;
+          [key: string]: any;
+        }
+  );
+
+  enabled(): boolean;
+}
+
+export class AllocateBuffer {
+  label: string;
+  size: number;
+
+  constructor(args: {
+    label: string;
+    size: number;
+    usage?: number;
+    [key: string]: any;
+  });
+}
+
+export class WriteGPUBuffer {
+  label: string;
+  cpuSource: any;
+
+  constructor(args: { label: string; cpuSource: any; [key: string]: any });
+}
+
 export class Buffer {
   label: string;
   device: GPUDevice;
