@@ -6,7 +6,10 @@
   "main": "./index.mjs",
   "types": "./index.d.ts",
   "exports": {
-    ".": "./index.mjs"
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs"
+    }
   },
   "scripts": {
     "test:node": "node examples/regression_node.mjs",
