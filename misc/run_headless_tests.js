@@ -25,8 +25,7 @@ async function main() {
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--enable-unsafe-webgpu',
-        '--use-webgpu-adapter=swiftshader'
+        '--enable-unsafe-webgpu'
       ]
     });
 

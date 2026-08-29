@@ -10,10 +10,6 @@ Below is the prioritized list of remaining tasks for the Gridwise library, inclu
 * **Problem**: The JavaScript validation function for key-value sorting throws `RangeError: Invalid array length` when sorting large arrays containing more than `2^26` (~67 million) elements.
 * **Action Item**: Refactor the validation helper code to avoid allocating array sizes that exceed JavaScript engine limits (e.g., utilize chunked verification or typed arrays).
 
-### 2. CI WebGPU Regression Testing & SwiftShader Deadlock Mitigation (Issue #39)
-* **Problem**: Running WebGPU tests in headless CI environments relies on SwiftShader (a CPU software Vulkan rasterizer). Emulated subgroup helpers using atomic spin-loops consume 100% CPU on compute threads and starve target threads, causing permanent deadlocks. WebGPU tests are currently disabled in CI to avoid hangs (commit `3066b08`).
-* **Action Item**: Determine how to safely run automated WebGPU regression tests in PR workflows (e.g., using specialized GPU-enabled self-hosted runners or modifying subgroup emulation helpers to yield/synchronize without CPU starvation).
-
 ---
 
 ## 🌐 Priority 2: Landing Page & UX Improvements
@@ -68,5 +64,6 @@ Below is the prioritized list of remaining tasks for the Gridwise library, inclu
 
 ## ✅ Completed Tasks
 
+* **Automated WebGPU CI Testing on macOS (Issue #39)**: Re-enabled automated CI WebGPU testing by switching the runner to `macos-latest` to obtain virtualized Metal GPU acceleration, avoiding SwiftShader CPU thread starvation deadlocks.
 * **Reset Atomic Buffers Between Trials (Issue #13)**: Applied the lookback `spine` and `passHist` buffer resets in [onesweep.mjs](file:///Users/jdowens/Documents/working/gridwise/onesweep.mjs) and [scandldf.mjs](file:///Users/jdowens/Documents/working/gridwise/scandldf.mjs) to guarantee correct lookback progression and timing reliability.
 * **Mark Gridwise's Choices in "Design Choice" Sections**: Edited [docs/primitive-design.md](file:///Users/jdowens/Documents/working/gridwise/docs/primitive-design.md) to clearly indicate Gridwise's architectural choices (subgroups with emulation fallback, and always using chained algorithms) and cleaned up formatting backslashes.
