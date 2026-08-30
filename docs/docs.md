@@ -50,5 +50,8 @@ Detailed documentation of how Gridwise caches and reuses WebGPU objects (compute
 ### [Package Development & Publishing Guide]({{ "/package-development/" | relative_url }})
 Developer guide covering npm package structure, development/verification scripts, CI workflows, and workflows for modifying or publishing Gridwise.
 
+### [npm Publishing Instructions]({{ "/npm-instructions/" | relative_url }})
+Step-by-step guide for first-time and subsequent npm package releases, account login, dry runs, and semantic versioning.
+
 ### [Writing a WebGPU WGSL Workgroup Reduce Function]({{ "/writing-a-webgpu-wgsl-workgroup-reduce-function/" | relative_url }})
 In-depth educational tutorial on implementing custom workgroup-level reduce functions in WGSL, covering reduction patterns, workgroup barriers, synchronization, and subgroup utilization.
