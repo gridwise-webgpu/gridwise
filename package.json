@@ -6,7 +6,10 @@
   "main": "./index.mjs",
   "types": "./index.d.ts",
   "exports": {
-    ".": "./index.mjs"
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs"
+    }
   },
   "scripts": {
     "test:node": "node examples/regression_node.mjs",
@@ -33,6 +36,7 @@
     "datatype.mjs",
     "LICENSE.txt"
   ],
+  "sideEffects": false,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gridwise-js/gridwise.git"
@@ -48,7 +52,6 @@
     "reduce",
     "gpgpu"
   ],
-  "author": "",
   "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/gridwise-js/gridwise/issues"

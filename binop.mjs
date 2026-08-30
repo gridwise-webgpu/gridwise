@@ -13,7 +13,7 @@
  *   {inclusive, exclusive}-scans across a subgroup
  */
 
-class BinOp {
+export class BinOp {
   constructor(args) {
     // no defaults! if something is undefined, go with it
     Object.assign(this, args);
