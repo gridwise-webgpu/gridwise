@@ -36,7 +36,7 @@ async function main() {
 
     console.log("Navigating to regression tests page...");
     await page.goto('http://localhost:8000/examples/regression.html', {
-      waitUntil: 'networkidle0',
+      waitUntil: 'domcontentloaded',
       timeout: 30000
     });
 
