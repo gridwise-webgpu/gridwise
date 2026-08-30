@@ -1,21 +1,67 @@
 import puppeteer from 'puppeteer';
-import { spawn } from 'child_process';
+import http from 'http';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
 
+const mimeTypes = {
+  '.html': 'text/html',
+  '.js': 'text/javascript',
+  '.mjs': 'text/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.wasm': 'application/wasm',
+};
+
+function startServer(root, port = 8000) {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      const parsedUrl = new URL(req.url, `http://127.0.0.1:${port}`);
+      const safePath = path.normalize(parsedUrl.pathname).replace(/^(\.\.[\/\\])+/, '');
+      let filePath = path.join(root, safePath);
+
+      if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+        filePath = path.join(filePath, 'index.html');
+      }
+
+      if (!fs.existsSync(filePath)) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('404 Not Found');
+        return;
+      }
+
+      const ext = path.extname(filePath).toLowerCase();
+      const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+      });
+
+      fs.createReadStream(filePath).pipe(res);
+    });
+
+    server.listen(port, '127.0.0.1', () => {
+      console.log(`Server listening on http://127.0.0.1:${port}`);
+      resolve(server);
+    });
+
+    server.on('error', (err) => reject(err));
+  });
+}
+
 async function main() {
   console.log("Starting local HTTP server...");
-  // Start simple_cors_server.py in the project root
-  const server = spawn('python3', ['simple_cors_server.py'], {
-    cwd: projectRoot,
-    stdio: 'inherit'
-  });
-
-  // Wait 2 seconds for server to start
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  const server = await startServer(projectRoot, 8000);
 
   let browser;
   try {
@@ -76,8 +122,7 @@ async function main() {
     if (browser) {
       await browser.close();
     }
-    // Terminate server process
-    server.kill();
+    server.close();
   }
 }
 
