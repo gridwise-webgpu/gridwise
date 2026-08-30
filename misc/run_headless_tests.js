@@ -35,7 +35,7 @@ async function main() {
     page.on('console', msg => console.log(`[Browser Console] ${msg.text()}`));
 
     console.log("Navigating to regression tests page...");
-    await page.goto('http://localhost:8000/examples/regression.html', {
+    await page.goto('http://127.0.0.1:8000/examples/regression.html', {
       waitUntil: 'domcontentloaded',
       timeout: 30000
     });
