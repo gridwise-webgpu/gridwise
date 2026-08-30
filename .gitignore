@@ -9,3 +9,7 @@ Gemfile.lock
 .backup_*/
 vendor/bundle/
 node_modules/
+scratch/
+*.log
+*.tgz
+

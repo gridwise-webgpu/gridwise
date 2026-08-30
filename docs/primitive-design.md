@@ -68,3 +68,31 @@ Specifically, it appears likely that kernels must take advantage of subgroup ins
 - +: Maintain one code base
 - +: Simplest code
 - –: Will not achieve top performance (theoretically, ⅔ the performance of chained approaches)
+
+---
+
+## Further Discussion: Subgroup Emulation Limits and Codebase Bifurcation
+
+### The Deadlock Paradox of Lockstep SIMD Emulation
+
+When emulating hardware subgroup operations (which operate concurrently at the SIMD lane level) using workgroup-shared memory on devices lacking native subgroup hardware, maintaining the exact same codebase for both execution modes introduces a fundamental scheduling deadlock.
+
+Under native GPU execution, a subgroup of size \(S_g\) executes instruction-synchronously. Communication via subgroup registers (e.g., shuffling) does not require barriers because the hardware guarantees that all lanes progress in lockstep. In lookback-based chained scans, a thread \(i\) can spin-wait on a memory location to be updated by a preceding tile \(j\):
+$$\text{SpinWait}(T_i) \implies \text{Read}(\text{spine}[j])$$
+
+If we attempt to run the exact same logic under emulation (where subgroups are simulated by sharing workgroup memory across the thread group), the execution model shifts from concurrent SIMD lanes to scheduled workgroup threads. If a thread \(i\) enters a spinning loop:
+$$\text{while} \ (\text{spine}[j] == \text{Pending}) \ \{ \ \dots \ \}$$
+and the thread \(k\) (within the same workgroup) responsible for executing fallback reductions to resolve the stall is scheduled on the same hardware compute unit, the spin-loop of \(i\) will starve \(k\) of execution cycles. Because WebGPU does not guarantee preemption or fair scheduling between threads of a workgroup, the spin-lock becomes permanent, resulting in a GPU hang:
+$$\text{Starve}(T_k) \implies \text{Deadlock}$$
+
+To prevent this under emulation, we must introduce workgroup-uniform synchronization primitives (such as `workgroupBarrier()`) inside the lookback loop. However, adding these barriers to a unified codebase forces native subgroup threads to execute workgroup barriers on every iteration, destroying their register-based, barrier-free performance. Thus, a robust, unified, single-codebase execution path for both hardware subgroups and emulation is mathematically and architecturally impossible without sacrificing either performance or correctness.
+
+### Design Alternatives: Pros and Cons
+
+To resolve this bottleneck, we evaluate three primary JIT architectural alternatives:
+
+| Alternative | Pros | Cons |
+| :--- | :--- | :--- |
+| **A: Unified Source with Compile-Time Templating (Implemented)** | <ul><li>Single maintainable `.mjs` file for JIT generation.</li><li>Common setup, data loading, and final scattering code are shared.</li><li>Maximum performance on hardware; correct cooperative fallbacks on emulation.</li></ul> | <ul><li>Complex JIT template conditionals (`${this.useSubgroups ? ... : ...}`) reduce source readability.</li></ul> |
+| **B: Pure Subgroup-Only Shaders** | <ul><li>Zero JIT complexity or templating overhead.</li><li>Cleanest, most readable WGSL code.</li></ul> | <ul><li>Zero portability; fails on all devices without `subgroups` feature support.</li></ul> |
+| **C: Two Separate Shaders (Native vs. Emulated)** | <ul><li>Clean separation of concerns.</li><li>No JIT template nesting; each WGSL shader is easy to write and audit.</li></ul> | <ul><li>High maintenance overhead; any algorithm or input/output bindings change must be manually duplicated across both files.</li></ul> |
