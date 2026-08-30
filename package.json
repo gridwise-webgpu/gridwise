@@ -14,27 +14,16 @@
   "scripts": {
     "test:node": "node examples/regression_node.mjs",
     "test:node:update-baseline": "UPDATE_BASELINE=true node examples/regression_node.mjs",
-    "test:wgsl": "node examples/test_wgsl_functions_node.mjs"
+    "test:wgsl": "node examples/test_wgsl_functions_node.mjs",
+    "test:package": "node misc/test_package.mjs",
+    "prepublishOnly": "npm run test:package"
   },
   "files": [
+    "src/",
     "index.mjs",
     "index.d.ts",
-    "primitive.mjs",
-    "buffer.mjs",
-    "binop.mjs",
-    "scandldf.mjs",
-    "onesweep.mjs",
-    "scan.mjs",
-    "sort.mjs",
-    "reduce.mjs",
-    "util.mjs",
-    "mapvariants.mjs",
-    "webgpufundamentals-timing.mjs",
-    "wgslFunctions.mjs",
-    "testbuffer.mjs",
-    "testsuite.mjs",
-    "datatype.mjs",
-    "LICENSE.txt"
+    "LICENSE.txt",
+    "README.md"
   ],
   "sideEffects": false,
   "repository": {
@@ -58,6 +47,7 @@
   },
   "homepage": "https://github.com/gridwise-js/gridwise#readme",
   "devDependencies": {
+    "puppeteer": "^25.9.0",
     "webgpu": "^0.4.0"
   }
 }

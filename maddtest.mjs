@@ -1,5 +1,5 @@
-import { range } from "./util.mjs";
-import { BasePrimitive } from "./primitive.mjs";
+import { range } from "./src/util.mjs";
+import { BasePrimitive } from "./src/primitive.mjs";
 
 const MaddTestParams = {
   workgroupSize: range(0, 7).map((i) => 2 ** i),

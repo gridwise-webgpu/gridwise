@@ -47,5 +47,8 @@ Exploration of WebGPU WGSL built-in functions and how Gridwise strategically sel
 ### [WebGPU Object Caching Strategy]({{ "/webgpu-object-caching-strategy/" | relative_url }})
 Detailed documentation of how Gridwise caches and reuses WebGPU objects (compute pipelines, bind groups, shader modules) to eliminate startup overhead and improve throughput.
 
+### [Package Development & Publishing Guide]({{ "/package-development/" | relative_url }})
+Developer guide covering npm package structure, development/verification scripts, CI workflows, and workflows for modifying or publishing Gridwise.
+
 ### [Writing a WebGPU WGSL Workgroup Reduce Function]({{ "/writing-a-webgpu-wgsl-workgroup-reduce-function/" | relative_url }})
 In-depth educational tutorial on implementing custom workgroup-level reduce functions in WGSL, covering reduction patterns, workgroup barriers, synchronization, and subgroup utilization.

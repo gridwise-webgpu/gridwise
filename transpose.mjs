@@ -1,6 +1,6 @@
-import { BasePrimitive } from "./primitive.mjs";
-import { Kernel, AllocateBuffer, WriteGPUBuffer } from "./primitive.mjs";
-import { BaseTestSuite } from "./testsuite.mjs";
+import { BasePrimitive } from "./src/primitive.mjs";
+import { Kernel, AllocateBuffer, WriteGPUBuffer } from "./src/primitive.mjs";
+import { BaseTestSuite } from "./src/testsuite.mjs";
 
 export class BaseMatrixTranspose extends BasePrimitive {
   constructor(args) {

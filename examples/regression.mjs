@@ -3,10 +3,10 @@ import {
   BinOpMin,
   BinOpMax,
   BinOpMultiply,
-} from "../binop.mjs";
-import { datatypeToTypedArray, getBrowserName } from "../util.mjs";
-import { DLDFScan } from "../scandldf.mjs";
-import { OneSweepSort } from "../onesweep.mjs";
+} from "../src/binop.mjs";
+import { datatypeToTypedArray, getBrowserName } from "../src/util.mjs";
+import { DLDFScan } from "../src/scandldf.mjs";
+import { OneSweepSort } from "../src/onesweep.mjs";
 
 export async function main(navigator) {
   const isNode = typeof window === "undefined";

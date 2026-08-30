@@ -1,8 +1,8 @@
-import { range } from "./util.mjs";
-import { BasePrimitive, Kernel } from "./primitive.mjs";
-import { BaseTestSuite } from "./testsuite.mjs";
-import { BinOpAdd, BinOpMax, BinOpMin } from "./binop.mjs";
-import { datatypeToTypedArray } from "./util.mjs";
+import { range } from "./src/util.mjs";
+import { BasePrimitive, Kernel } from "./src/primitive.mjs";
+import { BaseTestSuite } from "./src/testsuite.mjs";
+import { BinOpAdd, BinOpMax, BinOpMin } from "./src/binop.mjs";
+import { datatypeToTypedArray } from "./src/util.mjs";
 
 export class SubgroupRegression extends BasePrimitive {
   constructor(args) {

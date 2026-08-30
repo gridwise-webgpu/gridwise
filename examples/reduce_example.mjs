@@ -1,6 +1,6 @@
-import { BinOpAdd, BinOpMax, BinOpMin } from "../binop.mjs";
-import { datatypeToTypedArray } from "../util.mjs";
-import { DLDFScan } from "../scandldf.mjs";
+import { BinOpAdd, BinOpMax, BinOpMin } from "../src/binop.mjs";
+import { datatypeToTypedArray } from "../src/util.mjs";
+import { DLDFScan } from "../src/scandldf.mjs";
 
 export async function main(navigator) {
     /* set up a WebGPU device */

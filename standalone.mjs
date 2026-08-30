@@ -1,5 +1,5 @@
-import { BinOpAdd } from "./binop.mjs";
-import { datatypeToTypedArray } from "./util.mjs";
+import { BinOpAdd } from "./src/binop.mjs";
+import { datatypeToTypedArray } from "./src/util.mjs";
 
 let webgpuCreate;
 
@@ -27,9 +27,9 @@ if (isNode) {
 }
 
 // import primitive only, no test suite
-import { NoAtomicPKReduce } from "./reduce.mjs";
-import { HierarchicalScan } from "./scan.mjs";
-import { DLDFScan } from "./scandldf.mjs";
+import { NoAtomicPKReduce } from "./src/reduce.mjs";
+import { HierarchicalScan } from "./src/scan.mjs";
+import { DLDFScan } from "./src/scandldf.mjs";
 
 export async function main(navigator) {
   const adapter = await navigator.gpu?.requestAdapter();

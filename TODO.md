@@ -64,6 +64,7 @@ Below is the prioritized list of remaining tasks for the Gridwise library, inclu
 
 ## ✅ Completed Tasks
 
+* **NPM Package Configuration & Developer Infrastructure (Issue #43)**: Organized source code into `src/`, added root `README.md`, set up deterministic CI with `npm ci`, created `misc/test_package.mjs` tarball verification script with `prepublishOnly` hook, and wrote the developer package guide.
 * **Automated WebGPU CI Testing on macOS (Issue #39)**: Re-enabled automated CI WebGPU testing by switching the runner to `macos-latest` to obtain virtualized Metal GPU acceleration, avoiding SwiftShader CPU thread starvation deadlocks.
 * **Reset Atomic Buffers Between Trials (Issue #13)**: Applied the lookback `spine` and `passHist` buffer resets in [onesweep.mjs](file:///Users/jdowens/Documents/working/gridwise/onesweep.mjs) and [scandldf.mjs](file:///Users/jdowens/Documents/working/gridwise/scandldf.mjs) to guarantee correct lookback progression and timing reliability.
 * **Mark Gridwise's Choices in "Design Choice" Sections**: Edited [docs/primitive-design.md](file:///Users/jdowens/Documents/working/gridwise/docs/primitive-design.md) to clearly indicate Gridwise's architectural choices (subgroups with emulation fallback, and always using chained algorithms) and cleaned up formatting backslashes.

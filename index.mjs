@@ -1,7 +1,7 @@
-export { BasePrimitive, Kernel, AllocateBuffer, WriteGPUBuffer } from "./primitive.mjs";
-export { Buffer } from "./buffer.mjs";
-export { DLDFScan } from "./scandldf.mjs";
-export { OneSweepSort } from "./onesweep.mjs";
+export { BasePrimitive, Kernel, AllocateBuffer, WriteGPUBuffer } from "./src/primitive.mjs";
+export { Buffer } from "./src/buffer.mjs";
+export { DLDFScan } from "./src/scandldf.mjs";
+export { OneSweepSort } from "./src/onesweep.mjs";
 export {
   BinOp,
   BinOpNop,
@@ -23,4 +23,4 @@ export {
   BinOpMultiplyF32,
   BinOpMultiplyI32,
   makeBinOp,
-} from "./binop.mjs";
+} from "./src/binop.mjs";

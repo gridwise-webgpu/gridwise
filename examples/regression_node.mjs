@@ -124,7 +124,7 @@ globalThis.document = {
 };
 
 // 4. Import BasePrimitive to intercept execution
-import { BasePrimitive } from "../primitive.mjs";
+import { BasePrimitive } from "../src/primitive.mjs";
 
 const perfResults = [];
 const originalExecute = BasePrimitive.prototype.execute;

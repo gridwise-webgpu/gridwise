@@ -1,5 +1,5 @@
-import { range } from "./util.mjs";
-import { BasePrimitive } from "./primitive.mjs";
+import { range } from "./src/util.mjs";
+import { BasePrimitive } from "./src/primitive.mjs";
 
 const StridedReadTestParams = {
   workgroupSize: [32, 64, 96, 128, 160, 192, 224, 256], // range(0, 8).map((i) => 2 ** i),

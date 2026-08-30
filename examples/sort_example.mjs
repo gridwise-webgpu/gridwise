@@ -1,6 +1,6 @@
-import { BinOpAdd, BinOpMax, BinOpMin } from "../binop.mjs";
-import { datatypeToTypedArray } from "../util.mjs";
-import { OneSweepSort } from "../onesweep.mjs";
+import { BinOpAdd, BinOpMax, BinOpMin } from "../src/binop.mjs";
+import { datatypeToTypedArray } from "../src/util.mjs";
+import { OneSweepSort } from "../src/onesweep.mjs";
 
 export async function main(navigator) {
   /* set up a WebGPU device */

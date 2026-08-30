@@ -1,8 +1,8 @@
 import { Pane } from "https://cdn.jsdelivr.net/npm/tweakpane@4.0.5/dist/tweakpane.min.js";
-import { BinOpAdd, BinOpMax, BinOpMin, makeBinOp } from "../binop.mjs";
-import { datatypeToTypedArray } from "../util.mjs";
-import { DLDFScan } from "../scandldf.mjs";
-import { OneSweepSort } from "../onesweep.mjs";
+import { BinOpAdd, BinOpMax, BinOpMin, makeBinOp } from "../src/binop.mjs";
+import { datatypeToTypedArray } from "../src/util.mjs";
+import { DLDFScan } from "../src/scandldf.mjs";
+import { OneSweepSort } from "../src/onesweep.mjs";
 
 /* set up a WebGPU device */
 const adapter = await navigator.gpu?.requestAdapter();

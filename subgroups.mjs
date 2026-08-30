@@ -1,5 +1,5 @@
-import { range } from "./util.mjs";
-import { BasePrimitive } from "./primitive.mjs";
+import { range } from "./src/util.mjs";
+import { BasePrimitive } from "./src/primitive.mjs";
 
 class SubgroupIDBaseTest extends BasePrimitive {
   constructor(params) {

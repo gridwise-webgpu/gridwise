@@ -4,8 +4,8 @@ import {
   delay,
   download,
   datatypeToBytes,
-} from "./util.mjs";
-import { Buffer } from "./buffer.mjs";
+} from "./src/util.mjs";
+import { Buffer } from "./src/buffer.mjs";
 
 let Plot, JSDOM;
 let saveJSON = false;
@@ -37,8 +37,8 @@ if (typeof process !== "undefined" && process.release.name === "node") {
 }
 
 // tests
-// import { NoAtomicPKReduceTestSuite } from "./reduce.mjs";
-// import { HierarchicalScanTestSuite } from "./scan.mjs";
+// import { NoAtomicPKReduceTestSuite } from "./src/reduce.mjs";
+// import { HierarchicalScanTestSuite } from "./src/scan.mjs";
 import {
   // DLDFScanTestSuite,
   // DLDFReduceTestSuite,
@@ -50,7 +50,7 @@ import {
   DLDFFailureSuite,
   DLDFSingletonWithTimingSuite,
   DLDFPerfSuite,
-} from "./scandldf.mjs";
+} from "./src/scandldf.mjs";
 // import { StoneberryScanMiniSuite } from "./stoneberry-scan.mjs";
 import { subgroupAccuracyRegressionSuites } from "./subgroupRegression.mjs";
 import {
@@ -58,8 +58,8 @@ import {
   SortOneSweepFunctionalRegressionSuite,
   SortOneSweep64v32Suite,
   SortOneSweep64v321MNoPlotSuite,
-} from "./onesweep.mjs";
-import { BasePrimitive } from "./primitive.mjs";
+} from "./src/onesweep.mjs";
+import { BasePrimitive } from "./src/primitive.mjs";
 
 async function main(navigator) {
   const adapter = await navigator.gpu?.requestAdapter();

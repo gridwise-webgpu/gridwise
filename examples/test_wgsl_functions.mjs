@@ -1,6 +1,6 @@
-import { BasePrimitive, Kernel, AllocateBuffer, WriteGPUBuffer } from "../primitive.mjs";
-import { BinOpAdd } from "../binop.mjs";
-import { datatypeToTypedArray } from "../util.mjs";
+import { BasePrimitive, Kernel, AllocateBuffer, WriteGPUBuffer } from "../src/primitive.mjs";
+import { BinOpAdd } from "../src/binop.mjs";
+import { datatypeToTypedArray } from "../src/util.mjs";
 
 class TestWGSLFunctionsPrimitive extends BasePrimitive {
   constructor(args) {

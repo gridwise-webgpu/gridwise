@@ -1,6 +1,6 @@
-import { OneSweepSort } from "../onesweep.mjs";
-import { DLDFScan } from "../scandldf.mjs";
-import { BinOpAdd } from "../binop.mjs";
+import { OneSweepSort } from "../src/onesweep.mjs";
+import { DLDFScan } from "../src/scandldf.mjs";
+import { BinOpAdd } from "../src/binop.mjs";
 
 console.clear();
 

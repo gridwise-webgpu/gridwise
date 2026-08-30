@@ -1,5 +1,5 @@
-import { range } from "./util.mjs";
-import { BasePrimitive } from "./primitive.mjs";
+import { range } from "./src/util.mjs";
+import { BasePrimitive } from "./src/primitive.mjs";
 class BaseMembwTest extends BasePrimitive {
   constructor(params) {
     super(params); // writes parameters into this class

@@ -1,12 +1,12 @@
 import { Pane } from "https://cdn.jsdelivr.net/npm/tweakpane@4.0.5/dist/tweakpane.min.js";
-import { BinOpAdd, BinOpMax, BinOpMin, makeBinOp } from "../binop.mjs";
+import { BinOpAdd, BinOpMax, BinOpMin, makeBinOp } from "../src/binop.mjs";
 import {
   datatypeToTypedArray,
   logspaceRounded,
   datatypeToBytes,
-} from "../util.mjs";
-import { DLDFScan } from "../scandldf.mjs";
-import { OneSweepSort } from "../onesweep.mjs";
+} from "../src/util.mjs";
+import { DLDFScan } from "../src/scandldf.mjs";
+import { OneSweepSort } from "../src/onesweep.mjs";
 
 let Plot =
   await import("https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm");
