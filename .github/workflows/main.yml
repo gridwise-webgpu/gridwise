@@ -1,7 +1,11 @@
 name: Test Jekyll Build
 
 on:
+  # `pull_request` covers branches with an open PR; `push` on main covers
+  # everything that lands. Previously this ran on every push AND every
+  # pull_request, so a same-repo PR branch built twice per commit.
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -14,10 +18,22 @@ jobs:
     - name: Setup Ruby
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: '3.2'
+        # Matches the deploy workflow, so this check runs against the same
+        # Ruby the published site is built with.
+        ruby-version: '3.3'
         bundler-cache: true
 
+    # Build from the repo root, exactly as the deploy workflow does.
+    # This previously passed `--source docs`, which is not how the site is
+    # assembled: _config.yml treats the repo root as the source and only
+    # points layouts_dir/includes_dir into docs/. Building with
+    # `--source docs` skipped the root-level assets/ directory entirely, so
+    # assets/css/style.scss was never compiled and assets/css/style.css was
+    # never emitted - while every generated page still linked to it. That
+    # made this check incapable of catching a broken stylesheet: a
+    # deliberate syntax error in style.scss still exited 0 here, and 1 when
+    # built from the root.
     - name: Build site
-      run: bundle exec jekyll build --source docs --baseurl "/gridwise"
+      run: bundle exec jekyll build --baseurl "/gridwise"
       env:
         JEKYLL_ENV: production

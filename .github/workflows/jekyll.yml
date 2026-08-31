@@ -1,7 +1,12 @@
 name: Deploy Jekyll site to Pages
 
 on:
+  # Only main. GitHub Pages accepts deployments from the configured source
+  # branch only, so running this anywhere else guarantees a failed `deploy`
+  # job and parks the run in the shared "pages" concurrency group below.
+  # Branch and PR builds are covered by the Test Jekyll Build workflow.
   push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
