@@ -1064,51 +1064,6 @@ reduceBtn.addEventListener("click", performReduce);
 initGPUResources(particleCount);
 render();
 
-// Automated benchmark runner for Antigravity agent
-async function runAutomatedBenchmark() {
-  try {
-    console.log("=== STARTING AUTOMATED BENCHMARK ===");
-    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-    
-    await sleep(3000);
-    console.log("--- 10K Baseline Complete ---");
-    console.log("Triggering 10K Sort...");
-    await performSort();
-    await sleep(9000);
-    console.log("--- 10K Sort Complete ---");
-    
-    console.log("Changing to 50K particles...");
-    particleCount = 50000;
-    starSlider.value = 50000;
-    starCountDisplay.textContent = formatStarCount(50000);
-    initGPUResources(50000);
-    await sleep(3000);
-    console.log("--- 50K Baseline Complete ---");
-    console.log("Triggering 50K Sort...");
-    await performSort();
-    await sleep(9000);
-    console.log("--- 50K Sort Complete ---");
-    
-    console.log("Changing to 100K particles...");
-    particleCount = 100000;
-    starSlider.value = 100000;
-    starCountDisplay.textContent = formatStarCount(100000);
-    initGPUResources(100000);
-    await sleep(3000);
-    console.log("--- 100K Baseline Complete ---");
-    console.log("Triggering 100K Sort...");
-    await performSort();
-    await sleep(9000);
-    console.log("--- 100K Sort Complete ---");
-    
-    console.log("=== AUTOMATED BENCHMARK FINISHED ===");
-  } catch (err) {
-    console.error("BENCHMARK RUNNER CRASHED:", err);
-    console.error(err.stack);
-  }
-}
-setTimeout(runAutomatedBenchmark, 1000);
-
 } catch (error) {
   console.error("CRITICAL RUNTIME ERROR IN OPTIMAL PATH SCRIPT:", error);
   console.error(error.stack);
