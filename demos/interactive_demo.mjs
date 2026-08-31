@@ -47,9 +47,23 @@ let renderUniformBuffer = null;
 let dpr = 1;
 
 function resizeCanvas() {
-  dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = Math.round(window.innerWidth * dpr);
-  canvas.height = Math.round(window.innerHeight * dpr);
+  /* Neither dimension of the backing store may exceed the device's
+     maxTextureDimension2D (8192 by default, and this demo does not raise
+     it). Past that the swap-chain texture is invalid and nothing renders
+     at all - a black canvas with the controls still drawn on top. Since
+     the DPR scaling below multiplies the CSS size, a window wider than
+     maxTextureDimension2D / 2 would otherwise cross the limit on any
+     Retina display. */
+  const maxDim = device?.limits?.maxTextureDimension2D ?? 8192;
+  const cssWidth = Math.max(1, window.innerWidth);
+  const cssHeight = Math.max(1, window.innerHeight);
+  const fit = Math.min(maxDim / cssWidth, maxDim / cssHeight);
+
+  /* dpr stays the true CSS-to-backing-store scale after clamping, because
+     pointer coordinates and the influence radius are converted with it. */
+  dpr = Math.min(window.devicePixelRatio || 1, 2, fit);
+  canvas.width = Math.round(cssWidth * dpr);
+  canvas.height = Math.round(cssHeight * dpr);
   if (device && renderUniformBuffer) {
     device.queue.writeBuffer(renderUniformBuffer, 0, new Float32Array([canvas.width, canvas.height, 0, 0]));
   }
