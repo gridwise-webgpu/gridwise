@@ -20,8 +20,6 @@ html {
 body {
     margin: 0;
     padding: 0;
-    overflow-x: hidden;
-    zoom: 1;
     font-size: 16px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     line-height: 1.5;
@@ -64,7 +62,6 @@ body {
 }
 
 .site-nav {
-    float: right;
     line-height: 54px;
 }
 
@@ -174,14 +171,6 @@ body {
     position: relative;
     z-index: 1000;
     background-color: #fff;
-}
-
-/* Ensure footer displays correctly */
-.site-footer {
-    margin-left: 280px;
-    /* Same as sidebar width */
-    width: calc(100% - 280px);
-    clear: both;
 }
 
 /* Documentation Layout with Sidebar */
@@ -334,8 +323,12 @@ body {
     margin-left: 280px;
     /* Same as sidebar width */
     padding: 30px 60px 30px 60px;
-    max-width: calc(100vw - 280px);
+    max-width: calc(100% - 280px);
     width: 100%;
+    /* Flex items default to min-width:auto, which lets a long unbreakable
+       line (e.g. inside a <pre>) push the column wider than its container.
+       min-width:0 lets it shrink so the <pre>'s own overflow:auto kicks in. */
+    min-width: 0;
 }
 
 /* Override minima wrapper inside docs-content */
@@ -407,6 +400,37 @@ body {
     font-size: inherit;
 }
 
+/* Wide tables scroll inside their own box rather than widening the page.
+   display:block is what makes overflow-x apply to a <table>. */
+.docs-content table {
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin-bottom: 1.1rem;
+}
+
+.docs-content th,
+.docs-content td {
+    padding: 0.4rem 0.75rem;
+    border: 1px solid #e1e4e8;
+    text-align: left;
+}
+
+.docs-content th {
+    background-color: #f6f8fa;
+    font-weight: 600;
+}
+
+/* Keep images and embedded content inside the column on narrow screens */
+.docs-content img,
+.docs-content iframe,
+.docs-content video {
+    max-width: 100%;
+    height: auto;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
     .docs-sidebar {
@@ -416,31 +440,79 @@ body {
     .docs-content {
         margin-left: 250px;
         padding: 25px 40px;
-    }
-
-    .site-footer {
-        margin-left: 250px;
-        width: calc(100% - 250px);
+        max-width: calc(100% - 250px);
     }
 }
 
 @media (max-width: 768px) {
+    /* Stack sidebar and content. Without this the sidebar keeps
+       flex-shrink:0 at width:100% and the content column is laid out
+       beside it, entirely off-screen. */
+    .docs-container {
+        flex-direction: column;
+    }
+
     .docs-sidebar {
         width: 100%;
         position: static;
         height: auto;
         border-right: none;
-        border-bottom: 1px solid #e1e4e8;
+        border-top: 1px solid #e1e4e8;
+        border-bottom: none;
+        /* Nav goes after the article: the header menu is the primary
+           navigation on mobile, so this is the secondary path. */
+        order: 2;
     }
 
     .docs-content {
+        order: 1;
         margin-left: 0;
         padding: 20px;
+        max-width: 100%;
     }
 
-    .site-footer {
-        margin-left: 0;
-        width: 100%;
+    /* The sidebar's own scroll containers are only meaningful when it is
+       a fixed full-height column. */
+    .docs-nav {
+        overflow-y: visible;
+        padding-bottom: 0;
+    }
+}
+
+/* Phone-sized screens */
+@media (max-width: 480px) {
+    .docs-content {
+        padding: 16px;
+    }
+
+    .docs-content h1 {
+        font-size: 1.75rem;
+    }
+
+    .docs-content h2 {
+        font-size: 1.4rem;
+    }
+
+    .docs-content h3 {
+        font-size: 1.2rem;
+    }
+
+    .docs-content pre {
+        padding: 12px;
+        font-size: 13px;
+    }
+
+    .splash-content {
+        margin: 32px auto;
+        padding: 0 20px;
+    }
+
+    .splash-content h1 {
+        font-size: 2rem;
+    }
+
+    .splash-content p {
+        font-size: 1rem;
     }
 }
 
@@ -540,6 +612,92 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
+/* Mobile header nav                                                    */
+/*                                                                      */
+/* Must come after the .nav-dropdown rules above: these override        */
+/* `display: none` on .nav-dropdown-content at equal specificity, so    */
+/* source order decides. Touch devices have no :hover, so the           */
+/* hover-triggered dropdowns are replaced by an always-expanded list    */
+/* inside the checkbox-toggled hamburger menu.                          */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 768px) {
+    .site-header .wrapper {
+        padding: 0 20px;
+        position: relative;
+    }
+
+    .site-nav {
+        line-height: normal;
+    }
+
+    .site-nav .menu-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        /* 44x44 tap target per Apple HIG */
+        width: 44px;
+        height: 44px;
+        cursor: pointer;
+    }
+
+    .site-nav .menu-icon svg {
+        fill: #424242;
+    }
+
+    .site-nav .trigger {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: #fff;
+        border-top: 1px solid #e8e8e8;
+        border-bottom: 1px solid #e8e8e8;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+        padding: 8px 0 12px;
+        max-height: calc(100dvh - 56px);
+        overflow-y: auto;
+    }
+
+    .site-nav .nav-trigger:checked ~ .trigger {
+        display: block;
+    }
+
+    .nav-dropdown {
+        display: block;
+        line-height: normal;
+        position: static;
+    }
+
+    .nav-dropdown-content {
+        display: block;
+        position: static;
+        border: none;
+        box-shadow: none;
+        min-width: 0;
+        padding: 0 0 6px;
+    }
+
+    .site-nav .page-link {
+        display: block;
+        margin-left: 0;
+        padding: 12px 20px;
+        font-weight: 600;
+    }
+
+    .nav-dropdown-content a {
+        padding: 12px 20px 12px 36px;
+        font-size: 15px;
+        white-space: normal;
+    }
+
+    .nav-dropdown-heading {
+        padding: 10px 20px 3px 36px;
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Splash / home page layout                                            */
 /* ------------------------------------------------------------------ */
 
@@ -576,7 +734,7 @@ body {
 
 .doc-btn {
     display: inline-block;
-    padding: 7px 14px;
+    padding: 11px 16px;
     background: #39bda7;
     color: white;
     text-decoration: none;
