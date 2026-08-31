@@ -55,6 +55,16 @@ hr {
 
 #plot {
   margin-top: 1em;
+  /* Safety net: if a chart still ends up wider than the page (a long
+     legend, a narrow phone), it scrolls inside this box rather than
+     making the whole page scroll sideways. */
+  overflow-x: auto;
+}
+
+#plot figure {
+  margin-left: 0;
+  margin-right: 0;
+  max-width: 100%;
 }
 
 #webgpu-results {

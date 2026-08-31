@@ -39,9 +39,17 @@ context.configure({
 
 let renderUniformBuffer = null;
 
+/* Backing-store pixels per CSS pixel. Capped at 2 so a 3x phone screen
+   doesn't cost 9x the fill rate for a barely visible gain. Everything in
+   the simulation (particle positions, pointer position, influence radius)
+   lives in backing-store pixels, so this is the one factor that converts
+   between CSS/event coordinates and simulation coordinates. */
+let dpr = 1;
+
 function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(window.innerWidth * dpr);
+  canvas.height = Math.round(window.innerHeight * dpr);
   if (device && renderUniformBuffer) {
     device.queue.writeBuffer(renderUniformBuffer, 0, new Float32Array([canvas.width, canvas.height, 0, 0]));
   }
@@ -57,12 +65,16 @@ let mouseX = -1000;
 let mouseY = -1000;
 let mouseDown = false;
 let attractMode = true;
+/* The mode the toggle button selects. attractMode is what the shader
+   reads for the current gesture; shift-drag inverts it for mouse users. */
+let attractDefault = true;
 
 const starSlider = document.getElementById("starSlider");
 const starCountDisplay = document.getElementById("starCount");
 const sortBtn = document.getElementById("sortBtn");
 const scanBtn = document.getElementById("scanBtn");
 const reduceBtn = document.getElementById("reduceBtn");
+const modeBtn = document.getElementById("modeBtn");
 
 // Colors (HSL to RGB conversion for shader)
 const COLORS = [
@@ -176,7 +188,10 @@ function initGPUResources(count) {
 
   // Simulation Uniform Buffer
   simulationUniformBuffer = device.createBuffer({
-    size: 32, // mousePos (vec2f), canvasSize (vec2f), mouseDown (u32), attractMode (u32), isOperating (u32), padding (f32) = 32 bytes
+    // mousePos (vec2f), canvasSize (vec2f), mouseDown (u32), attractMode (u32),
+    // isOperating (u32), padding (f32), pointerRadius (f32) = 36 bytes,
+    // rounded up to the 16-byte uniform stride.
+    size: 48,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
 
@@ -271,6 +286,10 @@ const simulationWGSL = `
     attractMode: u32,
     isOperating: u32,
     padding: f32,
+    pointerRadius: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
   }
 
   @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
@@ -288,8 +307,9 @@ const simulationWGSL = `
       let dy = params.mouseY - p.pos.y;
       let dist = sqrt(dx * dx + dy * dy);
 
-      if (params.mouseDown == 1u && dist < 150.0 && dist > 0.1) {
-        let force = ((150.0 - dist) / 150.0) * select(-0.4, 0.4, params.attractMode == 1u);
+      let radius = params.pointerRadius;
+      if (params.mouseDown == 1u && dist < radius && dist > 0.1) {
+        let force = ((radius - dist) / radius) * select(-0.4, 0.4, params.attractMode == 1u);
         p.vel.x += (dx / dist) * force;
         p.vel.y += (dy / dist) * force;
       }
@@ -356,6 +376,10 @@ const applySortedWGSL = `
     attractMode: u32,
     isOperating: u32,
     padding: f32,
+    pointerRadius: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
   }
 
   @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
@@ -429,6 +453,10 @@ const applyScanWGSL = `
     attractMode: u32,
     isOperating: u32,
     padding: f32,
+    pointerRadius: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
   }
 
   @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
@@ -477,6 +505,10 @@ const applyReduceWGSL = `
     attractMode: u32,
     isOperating: u32,
     padding: f32,
+    pointerRadius: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
   }
 
   @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
@@ -746,7 +778,7 @@ function buildBindGroups() {
 }
 
 function updateUniforms() {
-  const uniformData = new ArrayBuffer(32);
+  const uniformData = new ArrayBuffer(48);
   const f32 = new Float32Array(uniformData);
   const u32 = new Uint32Array(uniformData);
   
@@ -757,7 +789,12 @@ function updateUniforms() {
   u32[4] = mouseDown ? 1 : 0;
   u32[5] = attractMode ? 1 : 0;
   u32[6] = isOperating ? 1 : 0;
-  f32[7] = 100.0; // padding
+  // Layout inset for the sort/scan arrangements, in backing-store pixels.
+  f32[7] = 100.0 * dpr;
+  // Influence radius, also in backing-store pixels. Scaling by dpr keeps the
+  // felt radius constant in CSS pixels across displays; the extra bump on
+  // coarse pointers accounts for a fingertip being blunter than a cursor.
+  f32[8] = 150.0 * dpr * (matchMedia("(pointer: coarse)").matches ? 1.5 : 1.0);
   
   device.queue.writeBuffer(simulationUniformBuffer, 0, uniformData);
 }
@@ -976,13 +1013,39 @@ function render() {
 }
 
 // Event Listeners
-canvas.addEventListener("mousemove", (e) => {
-  mouseX = e.clientX;
-  mouseY = e.clientY;
-});
-canvas.addEventListener("mouseleave", () => {
+//
+// Pointer events rather than mouse events: mobile browsers synthesize a
+// click from a tap but never a mousemove stream from a drag, so the
+// mouse-only version was inert on touch. clientX/Y are CSS pixels and the
+// simulation works in backing-store pixels, hence the dpr scaling.
+function setPointer(e) {
+  mouseX = e.clientX * dpr;
+  mouseY = e.clientY * dpr;
+}
+function clearPointer() {
   mouseX = -1000;
   mouseY = -1000;
+  mouseDown = false;
+}
+
+canvas.addEventListener("pointermove", setPointer);
+canvas.addEventListener("pointerdown", (e) => {
+  setPointer(e);
+  mouseDown = true;
+  // Shift still works for mouse users; the toggle button drives touch.
+  attractMode = e.shiftKey ? !attractDefault : attractDefault;
+  // Keep receiving moves even if the finger slides off the canvas.
+  canvas.setPointerCapture?.(e.pointerId);
+});
+canvas.addEventListener("pointerup", (e) => {
+  mouseDown = false;
+  canvas.releasePointerCapture?.(e.pointerId);
+  // A finger has no hover state, so drop the influence point on release.
+  if (e.pointerType !== "mouse") clearPointer();
+});
+canvas.addEventListener("pointercancel", clearPointer);
+canvas.addEventListener("pointerleave", (e) => {
+  if (e.pointerType === "mouse") clearPointer();
 });
 starSlider.addEventListener("input", (e) => {
   particleCount = parseInt(e.target.value);
@@ -999,12 +1062,12 @@ starSlider.addEventListener("change", (e) => {
     initGPUResources(particleCount);
   }, 100);
 });
-canvas.addEventListener("mousedown", (e) => {
-  mouseDown = true;
-  attractMode = !e.shiftKey;
-});
-canvas.addEventListener("mouseup", () => {
-  mouseDown = false;
+// Mode toggle: the only way to reach repel without a keyboard.
+modeBtn.addEventListener("click", () => {
+  attractDefault = !attractDefault;
+  attractMode = attractDefault;
+  modeBtn.textContent = attractDefault ? "Mode: Attract" : "Mode: Repel";
+  modeBtn.setAttribute("aria-pressed", String(!attractDefault));
 });
 
 function formatStarCount(count) {
