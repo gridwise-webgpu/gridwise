@@ -150,6 +150,43 @@ async function runDemoSmokeTest(browser) {
     failures.push(`canvas has no backing store (${canvas.w}x${canvas.h})`);
   }
 
+  /*
+   * Regression guard: the canvas backing store must never exceed the
+   * device's maxTextureDimension2D. Past that the swap-chain texture is
+   * invalid and the demo renders nothing - a black canvas with the
+   * controls still drawn on top, and no thrown error to notice.
+   *
+   * This is easy to reintroduce because resizeCanvas() multiplies the CSS
+   * size by devicePixelRatio, so on a Retina display any window wider
+   * than half the limit crosses it. A wide viewport is used here because
+   * the default test window is nowhere near large enough to catch it.
+   */
+  const wide = await browser.newPage();
+  try {
+    await wide.setViewport({ width: 5000, height: 1000, deviceScaleFactor: 2 });
+    await wide.goto('http://127.0.0.1:8000/demos/interactive_demo.html', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000
+    });
+    await new Promise(r => setTimeout(r, 5000));
+    const big = await wide.evaluate(async () => {
+      const c = document.getElementById('canvas');
+      const adapter = await navigator.gpu.requestAdapter();
+      const device = await adapter.requestDevice();
+      return { w: c.width, h: c.height, max: device.limits.maxTextureDimension2D };
+    });
+    if (big.w > big.max || big.h > big.max) {
+      failures.push(
+        `canvas ${big.w}x${big.h} exceeds maxTextureDimension2D ${big.max} ` +
+        `at a 5000x1000 viewport; the demo will render black`
+      );
+    } else {
+      console.log(`  wide viewport: canvas ${big.w}x${big.h} within limit ${big.max}`);
+    }
+  } finally {
+    await wide.close();
+  }
+
   // Every control the demo wires up must exist, or an addEventListener
   // call threw and the rest of the module never ran.
   const missing = await page.evaluate(() => {
