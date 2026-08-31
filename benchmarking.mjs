@@ -488,7 +488,17 @@ async function main(navigator) {
         }),
         ...(("fx" in plot || "fy" in plot) && { grid: true }),
         color: { type: "ordinal", legend: true },
-        width: 1280,
+        /* Fit the plot to its container so a phone gets a readable chart
+           instead of a page that scrolls sideways. Falls back to the fixed
+           1280 wherever there is no laid-out container to measure (no DOM,
+           or a container reporting 0 width). */
+        width: (() => {
+          const avail =
+            typeof document === "undefined"
+              ? 0
+              : document.querySelector("#plot")?.clientWidth ?? 0;
+          return avail > 0 ? Math.min(1280, avail) : 1280;
+        })(),
         title: plot?.title,
         subtitle: plot?.subtitle,
         caption: plot?.caption,

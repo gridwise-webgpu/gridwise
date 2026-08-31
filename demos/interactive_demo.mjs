@@ -39,9 +39,17 @@ context.configure({
 
 let renderUniformBuffer = null;
 
+/* Backing-store pixels per CSS pixel. Capped at 2 so a 3x phone screen
+   doesn't cost 9x the fill rate for a barely visible gain. Everything in
+   the simulation (particle positions, pointer position, influence radius)
+   lives in backing-store pixels, so this is the one factor that converts
+   between CSS/event coordinates and simulation coordinates. */
+let dpr = 1;
+
 function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(window.innerWidth * dpr);
+  canvas.height = Math.round(window.innerHeight * dpr);
   if (device && renderUniformBuffer) {
     device.queue.writeBuffer(renderUniformBuffer, 0, new Float32Array([canvas.width, canvas.height, 0, 0]));
   }
@@ -57,12 +65,16 @@ let mouseX = -1000;
 let mouseY = -1000;
 let mouseDown = false;
 let attractMode = true;
+/* The mode the toggle button selects. attractMode is what the shader
+   reads for the current gesture; shift-drag inverts it for mouse users. */
+let attractDefault = true;
 
 const starSlider = document.getElementById("starSlider");
 const starCountDisplay = document.getElementById("starCount");
 const sortBtn = document.getElementById("sortBtn");
 const scanBtn = document.getElementById("scanBtn");
 const reduceBtn = document.getElementById("reduceBtn");
+const modeBtn = document.getElementById("modeBtn");
 
 // Colors (HSL to RGB conversion for shader)
 const COLORS = [
@@ -176,7 +188,8 @@ function initGPUResources(count) {
 
   // Simulation Uniform Buffer
   simulationUniformBuffer = device.createBuffer({
-    size: 32, // mousePos (vec2f), canvasSize (vec2f), mouseDown (u32), attractMode (u32), isOperating (u32), padding (f32) = 32 bytes
+    // Layout is defined once by PARAMS_STRUCT_WGSL / P, below.
+    size: PARAMS_BYTE_LENGTH,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
 
@@ -252,17 +265,38 @@ function initGPUResources(count) {
 }
 
 // Shader Declarations
-const simulationWGSL = `
-  struct Particle {
+
+/* Shared struct declarations.
+ *
+ * Both structs describe memory that every pipeline in this demo reads:
+ * Particle is the layout of the particle storage buffer, Params the
+ * layout of simulationUniformBuffer. WGSL has no include mechanism, so
+ * each shader has to declare them in full, and all the copies must agree
+ * byte for byte with each other and with updateUniforms() below.
+ *
+ * They used to be written out by hand in each shader - 7 copies of
+ * Particle and 4 of Params. That is a live hazard: editing one copy and
+ * missing another is either a compile error or, worse, silently misread
+ * memory, and it has already caused one bug here (a field renamed in the
+ * declarations but not in the shader bodies that used it). Declaring them
+ * once and interpolating means the copies cannot drift.
+ */
+const PARTICLE_STRUCT_WGSL = `  struct Particle {
     pos: vec2f,
     origPos: vec2f,
     vel: vec2f,
     destination: vec2f,
     colorIndex: u32,
     size: f32,
-  }
+  }`;
 
-  struct Params {
+/* layoutInset is the margin, in backing-store pixels, that the sort and
+ * scan arrangements keep clear around the edge of the canvas. It was
+ * called `padding` and was mistaken for struct alignment padding, hence
+ * the rename - the trailing _pad* fields are the actual alignment padding,
+ * rounding the struct up to the 16-byte uniform stride.
+ */
+const PARAMS_STRUCT_WGSL = `  struct Params {
     mouseX: f32,
     mouseY: f32,
     canvasWidth: f32,
@@ -270,8 +304,35 @@ const simulationWGSL = `
     mouseDown: u32,
     attractMode: u32,
     isOperating: u32,
-    padding: f32,
-  }
+    layoutInset: f32,
+    pointerRadius: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
+  }`;
+
+/* Slot indices into simulationUniformBuffer, in the field order of
+   PARAMS_STRUCT_WGSL. The shaders read this buffer by field name and
+   updateUniforms() writes it by offset; nothing checks that the two agree,
+   so the names here exist to make a mismatch visible at the call site. */
+const P = {
+  mouseX: 0,
+  mouseY: 1,
+  canvasWidth: 2,
+  canvasHeight: 3,
+  mouseDown: 4,
+  attractMode: 5,
+  isOperating: 6,
+  layoutInset: 7,
+  pointerRadius: 8,
+};
+// 9 x 4 bytes = 36, rounded up to the 16-byte uniform stride.
+const PARAMS_BYTE_LENGTH = 48;
+
+const simulationWGSL = `
+${PARTICLE_STRUCT_WGSL}
+
+${PARAMS_STRUCT_WGSL}
 
   @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
   @group(0) @binding(1) var<uniform> params: Params;
@@ -288,8 +349,9 @@ const simulationWGSL = `
       let dy = params.mouseY - p.pos.y;
       let dist = sqrt(dx * dx + dy * dy);
 
-      if (params.mouseDown == 1u && dist < 150.0 && dist > 0.1) {
-        let force = ((150.0 - dist) / 150.0) * select(-0.4, 0.4, params.attractMode == 1u);
+      let radius = params.pointerRadius;
+      if (params.mouseDown == 1u && dist < radius && dist > 0.1) {
+        let force = ((radius - dist) / radius) * select(-0.4, 0.4, params.attractMode == 1u);
         p.vel.x += (dx / dist) * force;
         p.vel.y += (dy / dist) * force;
       }
@@ -314,14 +376,7 @@ const simulationWGSL = `
 `;
 
 const extractKeysWGSL = `
-  struct Particle {
-    pos: vec2f,
-    origPos: vec2f,
-    vel: vec2f,
-    destination: vec2f,
-    colorIndex: u32,
-    size: f32,
-  }
+${PARTICLE_STRUCT_WGSL}
 
   @group(0) @binding(0) var<storage, read> particles: array<Particle>;
   @group(0) @binding(1) var<storage, read_write> keys: array<u32>;
@@ -338,25 +393,9 @@ const extractKeysWGSL = `
 `;
 
 const applySortedWGSL = `
-  struct Particle {
-    pos: vec2f,
-    origPos: vec2f,
-    vel: vec2f,
-    destination: vec2f,
-    colorIndex: u32,
-    size: f32,
-  }
+${PARTICLE_STRUCT_WGSL}
 
-  struct Params {
-    mouseX: f32,
-    mouseY: f32,
-    canvasWidth: f32,
-    canvasHeight: f32,
-    mouseDown: u32,
-    attractMode: u32,
-    isOperating: u32,
-    padding: f32,
-  }
+${PARAMS_STRUCT_WGSL}
 
   @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
   @group(0) @binding(1) var<storage, read> sortedIndices: array<u32>;
@@ -382,24 +421,17 @@ const applySortedWGSL = `
     let origIdx = sortedIndices[rank];
     let progress = f32(rank) / f32(count);
     
-    let usableWidth = params.canvasWidth - params.padding * 2.0;
-    let usableHeight = params.canvasHeight - params.padding * 2.0;
+    let usableWidth = params.canvasWidth - params.layoutInset * 2.0;
+    let usableHeight = params.canvasHeight - params.layoutInset * 2.0;
 
-    particles[origIdx].destination.x = params.padding + progress * usableWidth;
-    particles[origIdx].destination.y = params.padding + (hash(rank) * 0.5 + 0.25) * usableHeight;
+    particles[origIdx].destination.x = params.layoutInset + progress * usableWidth;
+    particles[origIdx].destination.y = params.layoutInset + (hash(rank) * 0.5 + 0.25) * usableHeight;
     particles[origIdx].vel = vec2f(0.0, 0.0);
   }
 `;
 
 const resetTargetsWGSL = `
-  struct Particle {
-    pos: vec2f,
-    origPos: vec2f,
-    vel: vec2f,
-    destination: vec2f,
-    colorIndex: u32,
-    size: f32,
-  }
+${PARTICLE_STRUCT_WGSL}
   @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
 
   @compute @workgroup_size(256)
@@ -411,25 +443,9 @@ const resetTargetsWGSL = `
 `;
 
 const applyScanWGSL = `
-  struct Particle {
-    pos: vec2f,
-    origPos: vec2f,
-    vel: vec2f,
-    destination: vec2f,
-    colorIndex: u32,
-    size: f32,
-  }
+${PARTICLE_STRUCT_WGSL}
 
-  struct Params {
-    mouseX: f32,
-    mouseY: f32,
-    canvasWidth: f32,
-    canvasHeight: f32,
-    mouseDown: u32,
-    attractMode: u32,
-    isOperating: u32,
-    padding: f32,
-  }
+${PARAMS_STRUCT_WGSL}
 
   @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
   @group(0) @binding(1) var<storage, read> scannedValues: array<vec4<u32>>;
@@ -450,34 +466,18 @@ const applyScanWGSL = `
     let normalized = f32(val) / f32(maxValue);
     let wavePhase = normalized * 3.14159265 * 12.0;
     
-    let usableWidth = params.canvasWidth - params.padding * 2.0;
+    let usableWidth = params.canvasWidth - params.layoutInset * 2.0;
     
-    particles[idx].destination.x = params.padding + normalized * usableWidth;
+    particles[idx].destination.x = params.layoutInset + normalized * usableWidth;
     particles[idx].destination.y = params.canvasHeight / 2.0 + sin(wavePhase) * (params.canvasHeight * 0.3);
     particles[idx].vel = vec2f(0.0, 0.0);
   }
 `;
 
 const applyReduceWGSL = `
-  struct Particle {
-    pos: vec2f,
-    origPos: vec2f,
-    vel: vec2f,
-    destination: vec2f,
-    colorIndex: u32,
-    size: f32,
-  }
+${PARTICLE_STRUCT_WGSL}
 
-  struct Params {
-    mouseX: f32,
-    mouseY: f32,
-    canvasWidth: f32,
-    canvasHeight: f32,
-    mouseDown: u32,
-    attractMode: u32,
-    isOperating: u32,
-    padding: f32,
-  }
+${PARAMS_STRUCT_WGSL}
 
   @group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
   @group(0) @binding(1) var<storage, read> reduceResult: array<u32>;
@@ -519,14 +519,7 @@ const applyReduceWGSL = `
 `;
 
 const renderWGSL = `
-  struct Particle {
-    pos: vec2f,
-    origPos: vec2f,
-    vel: vec2f,
-    destination: vec2f,
-    colorIndex: u32,
-    size: f32,
-  }
+${PARTICLE_STRUCT_WGSL}
 
   struct VertexOutput {
     @builtin(position) pos: vec4f,
@@ -746,19 +739,25 @@ function buildBindGroups() {
 }
 
 function updateUniforms() {
-  const uniformData = new ArrayBuffer(32);
+  const uniformData = new ArrayBuffer(PARAMS_BYTE_LENGTH);
   const f32 = new Float32Array(uniformData);
   const u32 = new Uint32Array(uniformData);
-  
-  f32[0] = mouseX;
-  f32[1] = mouseY;
-  f32[2] = canvas.width;
-  f32[3] = canvas.height;
-  u32[4] = mouseDown ? 1 : 0;
-  u32[5] = attractMode ? 1 : 0;
-  u32[6] = isOperating ? 1 : 0;
-  f32[7] = 100.0; // padding
-  
+
+  f32[P.mouseX] = mouseX;
+  f32[P.mouseY] = mouseY;
+  f32[P.canvasWidth] = canvas.width;
+  f32[P.canvasHeight] = canvas.height;
+  u32[P.mouseDown] = mouseDown ? 1 : 0;
+  u32[P.attractMode] = attractMode ? 1 : 0;
+  u32[P.isOperating] = isOperating ? 1 : 0;
+  // Margin the sort/scan arrangements keep clear, in backing-store pixels.
+  f32[P.layoutInset] = 100.0 * dpr;
+  // Influence radius, also in backing-store pixels. Scaling by dpr keeps the
+  // felt radius constant in CSS pixels across displays; the extra bump on
+  // coarse pointers accounts for a fingertip being blunter than a cursor.
+  f32[P.pointerRadius] =
+    150.0 * dpr * (matchMedia("(pointer: coarse)").matches ? 1.5 : 1.0);
+
   device.queue.writeBuffer(simulationUniformBuffer, 0, uniformData);
 }
 
@@ -976,13 +975,39 @@ function render() {
 }
 
 // Event Listeners
-canvas.addEventListener("mousemove", (e) => {
-  mouseX = e.clientX;
-  mouseY = e.clientY;
-});
-canvas.addEventListener("mouseleave", () => {
+//
+// Pointer events rather than mouse events: mobile browsers synthesize a
+// click from a tap but never a mousemove stream from a drag, so the
+// mouse-only version was inert on touch. clientX/Y are CSS pixels and the
+// simulation works in backing-store pixels, hence the dpr scaling.
+function setPointer(e) {
+  mouseX = e.clientX * dpr;
+  mouseY = e.clientY * dpr;
+}
+function clearPointer() {
   mouseX = -1000;
   mouseY = -1000;
+  mouseDown = false;
+}
+
+canvas.addEventListener("pointermove", setPointer);
+canvas.addEventListener("pointerdown", (e) => {
+  setPointer(e);
+  mouseDown = true;
+  // Shift still works for mouse users; the toggle button drives touch.
+  attractMode = e.shiftKey ? !attractDefault : attractDefault;
+  // Keep receiving moves even if the finger slides off the canvas.
+  canvas.setPointerCapture?.(e.pointerId);
+});
+canvas.addEventListener("pointerup", (e) => {
+  mouseDown = false;
+  canvas.releasePointerCapture?.(e.pointerId);
+  // A finger has no hover state, so drop the influence point on release.
+  if (e.pointerType !== "mouse") clearPointer();
+});
+canvas.addEventListener("pointercancel", clearPointer);
+canvas.addEventListener("pointerleave", (e) => {
+  if (e.pointerType === "mouse") clearPointer();
 });
 starSlider.addEventListener("input", (e) => {
   particleCount = parseInt(e.target.value);
@@ -999,12 +1024,12 @@ starSlider.addEventListener("change", (e) => {
     initGPUResources(particleCount);
   }, 100);
 });
-canvas.addEventListener("mousedown", (e) => {
-  mouseDown = true;
-  attractMode = !e.shiftKey;
-});
-canvas.addEventListener("mouseup", () => {
-  mouseDown = false;
+// Mode toggle: the only way to reach repel without a keyboard.
+modeBtn.addEventListener("click", () => {
+  attractDefault = !attractDefault;
+  attractMode = attractDefault;
+  modeBtn.textContent = attractDefault ? "Mode: Attract" : "Mode: Repel";
+  modeBtn.setAttribute("aria-pressed", String(!attractDefault));
 });
 
 function formatStarCount(count) {
