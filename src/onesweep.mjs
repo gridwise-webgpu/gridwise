@@ -266,6 +266,10 @@ export class OneSweepSort extends BaseSort {
      * out of sync.
      */
     const SORT_PASSES = ${this.SORT_PASSES}u;
+    /* global_hist always builds one histogram per RADIX_LOG-bit digit of the
+     * full key (4 for 32b keys, 8 for 64b keys), even when KEY_BITS is smaller
+     * and SORT_PASSES < DIGITS_PER_KEY */
+    const DIGITS_PER_KEY = ${this.DIGITS_PER_KEY}u;
     const BLOCK_DIM = ${this.BLOCK_DIM}u;
     const SUBGROUP_MIN_SIZE = ${this.SUBGROUP_MIN_SIZE}u;
 
@@ -290,7 +294,7 @@ export class OneSweepSort extends BaseSort {
      *    value."
      */
     const RADIX = ${this.RADIX}u;
-    const ALL_RADIX = RADIX * SORT_PASSES;
+    const ALL_RADIX = RADIX * DIGITS_PER_KEY; /* NOT SORT_PASSES: see DIGITS_PER_KEY */
     const RADIX_MASK = RADIX - 1u;
     const RADIX_LOG = ${this.RADIX_LOG}u;
 
@@ -1204,6 +1208,13 @@ export class OneSweepSort extends BaseSort {
     this.RADIX_LOG = Math.log2(this.RADIX);
     this.KEY_BITS = this.KEY_BITS ?? this.keyDatatype.bitsPerElement;
     this.SORT_PASSES = divRoundUp(this.KEY_BITS, this.RADIX_LOG);
+    /* global_hist histograms every digit of the full key regardless of
+     * KEY_BITS, so hist[] and its workgroup-memory staging are sized by
+     * DIGITS_PER_KEY; passHist[] only needs SORT_PASSES segments. */
+    this.DIGITS_PER_KEY = divRoundUp(
+      this.keyDatatype.bitsPerElement,
+      this.RADIX_LOG,
+    );
 
     /* the following better match what's in the shader! */
     this.SUBGROUP_MIN_SIZE =
@@ -1263,8 +1274,8 @@ export class OneSweepSort extends BaseSort {
     }
     // these three all hold u32s no matter what the datatype is
     this.sortBumpSize = this.SORT_PASSES * 4; // 1 x u32 per pass
-    this.histSize = this.SORT_PASSES * this.RADIX * 4; // (((SORT_PASSES * RADIX) as usize) * std::mem::size_of::<u32>())
-    this.passHistSize = this.passWorkgroupCount * this.histSize; // ((pass_thread_blocks * (RADIX * SORT_PASSES) as usize) * std::mem::size_of::<u32>())
+    this.histSize = this.DIGITS_PER_KEY * this.RADIX * 4; // (((DIGITS_PER_KEY * RADIX) as usize) * std::mem::size_of::<u32>())
+    this.passHistSize = this.passWorkgroupCount * this.SORT_PASSES * this.RADIX * 4; // ((pass_thread_blocks * (RADIX * SORT_PASSES) as usize) * std::mem::size_of::<u32>())
     if (this.keyDatatype.is64Bit) {
       this.passHistDelta = this.passHistDelta ?? 0;
       this.passHistSize += this.passHistDelta;
@@ -1589,7 +1600,8 @@ export class OneSweepSort extends BaseSort {
           this.histSize / Uint32Array.BYTES_PER_ELEMENT,
         );
         for (let i = 0; i < memsrc.length; i++) {
-          for (let j = 0; j < this.SORT_PASSES; j++) {
+          /* global_hist builds a histogram for every digit of the key */
+          for (let j = 0; j < this.DIGITS_PER_KEY; j++) {
             const histOffset = j * this.RADIX;
             const bucket =
               (memsrc[i] >>> (j * this.RADIX_LOG)) & (this.RADIX - 1);
