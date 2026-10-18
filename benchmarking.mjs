@@ -311,13 +311,21 @@ async function main(navigator) {
         if (testSuite.validate && primitive.validate) {
           // submit ONE run just for correctness
           await primitive.execute();
-          await testOutputBuffer.copyGPUToCPU();
           if (
             testSuite.category === "sort" &&
-            testSuite.testSuite === "onesweep" &&
-            primitive.type === "keyvalue"
+            testSuite.testSuite === "onesweep"
           ) {
-            await testValuesBuffer.copyGPUToCPU();
+            /* output is in keysInOut or keysTemp depending on pass parity */
+            await primitive
+              .getBuffer(primitive.outputKeysBufferName)
+              .copyGPUToCPU();
+            if (primitive.type === "keyvalue") {
+              await primitive
+                .getBuffer(primitive.outputPayloadBufferName)
+                .copyGPUToCPU();
+            }
+          } else {
+            await testOutputBuffer.copyGPUToCPU();
           }
           if (testDebugBuffer) {
             await testDebugBuffer.copyGPUToCPU();
@@ -336,11 +344,13 @@ async function main(navigator) {
           ) {
             validateArgs = {
               inputKeys: testInputBuffer.cpuBufferBackup,
-              outputKeys: primitive.getBuffer("keysInOut"),
+              outputKeys: primitive.getBuffer(primitive.outputKeysBufferName),
             };
             if (usesPayloadBuffers) {
               validateArgs.inputPayload = testValuesBuffer.cpuBufferBackup;
-              validateArgs.outputPayload = primitive.getBuffer("payloadInOut");
+              validateArgs.outputPayload = primitive.getBuffer(
+                primitive.outputPayloadBufferName,
+              );
             }
           }
           const errorstr = primitive.validate(validateArgs);

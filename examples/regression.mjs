@@ -201,7 +201,7 @@ export async function main(navigator) {
     return data;
   }
 
-  async function runSortTest({ type, datatype, direction, size, keyBits }) {
+  async function runSortTest({ type, datatype, direction, size, keyBits, copyOutputToTemp = true }) {
     const TypedArray = datatypeToTypedArray(datatype);
     const memsrcKeys = generateSortInput(datatype, size);
     const isKeyValue = type === "keyvalue";
@@ -218,7 +218,9 @@ export async function main(navigator) {
       inputLength: size,
       type: isKeyValue ? "keyvalue" : "keysonly",
       direction,
-      copyOutputToTemp: true /* sorted output lands in keysTemp */,
+      /* true: output guaranteed in keysTemp. false: output stays wherever
+       * the last pass wrote it; read primitive.outputKeysBufferName. */
+      copyOutputToTemp,
       ...(keyBits !== undefined ? { KEY_BITS: keyBits } : {}),
     });
 
@@ -276,15 +278,19 @@ export async function main(navigator) {
 
     await primitive.execute(executeArgs);
 
+    const outKeys = { keysInOut, keysTemp }[primitive.outputKeysBufferName];
     const encoder = device.createCommandEncoder();
-    encoder.copyBufferToBuffer(keysTemp, 0, mappableKeys, 0, keysTemp.size);
+    encoder.copyBufferToBuffer(outKeys, 0, mappableKeys, 0, outKeys.size);
     if (isKeyValue) {
+      const outPayload = { payloadInOut, payloadTemp }[
+        primitive.outputPayloadBufferName
+      ];
       encoder.copyBufferToBuffer(
-        payloadTemp,
+        outPayload,
         0,
         mappablePayload,
         0,
-        payloadTemp.size
+        outPayload.size
       );
     }
     device.queue.submit([encoder.finish()]);
@@ -417,6 +423,17 @@ export async function main(navigator) {
     ["keyvalue", "u32", "ascending", 4096, 20],
   ];
 
+  /* No copyOutputToTemp: the output stays in whichever buffer the last pass
+   * wrote (keysTemp for an odd pass count, keysInOut for even), and the test
+   * reads the buffer that outputKeysBufferName names.
+   * [type, datatype, direction, size, keyBits] */
+  const sortNoCopyTests = [
+    ["keysonly", "u32", "ascending", 4096, 8] /* 1 pass: keysTemp */,
+    ["keysonly", "u32", "ascending", 4096, 16] /* 2 passes: keysInOut */,
+    ["keyvalue", "u32", "ascending", 4096, 24] /* 3 passes: keysTemp */,
+    ["keyvalue", "u32", "ascending", 4096] /* 4 passes: keysInOut */,
+  ];
+
   /* Large tests: MB-sized buffers (4 bytes/element), sizes divisible by 4,
    * not powers of 2. BinOpMultiply omitted (overflow at large sizes). */
   const largeScanTests = [
@@ -471,6 +488,13 @@ export async function main(navigator) {
   for (const [type, datatype, direction, size, keyBits] of sortTests) {
     const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}${keyBits !== undefined ? ` keyBits=${keyBits}` : ""}`;
     await runTest(name, () => runSortTest({ type, datatype, direction, size, keyBits }));
+  }
+
+  for (const [type, datatype, direction, size, keyBits] of sortNoCopyTests) {
+    const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}${keyBits !== undefined ? ` keyBits=${keyBits}` : ""} no-copy`;
+    await runTest(name, () =>
+      runSortTest({ type, datatype, direction, size, keyBits, copyOutputToTemp: false })
+    );
   }
 
   summarize();

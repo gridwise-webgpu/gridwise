@@ -34,11 +34,20 @@ export class OneSweepSort extends BaseSort {
     this.keyDatatype = new Datatype(this.datatype);
     /* can now use this.keyDatatype.{wgslDatatype, is64Bit} */
 
-    /** OneSweep overwrites its input with its output
-     * This option copies the output into the temp buffer
-     * This is extra work that probably isn't necessary in production
-     * But it is useful if we're just trying to make sort look like
-     *   any other primitive that has separate input and output buffers
+    /** OneSweep ping-pongs between keysInOut and keysTemp (and
+     * payloadInOut/payloadTemp), one pass per RADIX_LOG bits of KEY_BITS.
+     * Like CUB's DoubleBuffer interface, the sorted output lands in
+     * whichever buffer the last pass wrote: keysInOut after an even
+     * number of passes, keysTemp after an odd number (e.g., KEY_BITS 8 or
+     * 17-24 with RADIX 256). Both buffers may be overwritten. After the
+     * primitive is configured, `outputKeysBufferName` and
+     * `outputPayloadBufferName` name the buffer that holds the result.
+     *
+     * copyOutputToTemp: guarantee the output is in keysTemp (and
+     * payloadTemp). This copies keysInOut -> keysTemp only when the pass
+     * count is even; with an odd pass count the output is already there
+     * and no copy is issued. Useful to make sort look like any other
+     * primitive with separate input and output buffers.
      */
     this.copyOutputToTemp = args.copyOutputToTemp ? true : false;
 
@@ -1194,6 +1203,24 @@ export class OneSweepSort extends BaseSort {
     return kernel;
   };
 
+  /** Which buffer holds the sorted output after execute(): "keysInOut" or
+   * "keysTemp" (CUB DoubleBuffer-style "current" indicator). Valid once
+   * runtime parameters are finalized (i.e., after the first execute()),
+   * or earlier if SORT_PASSES can be computed from KEY_BITS/RADIX. */
+  get outputIsInTemp() {
+    if (this.copyOutputToTemp) return true;
+    const radixLog = Math.log2(this.RADIX ?? 256);
+    const keyBits = this.KEY_BITS ?? this.keyDatatype.bitsPerElement;
+    const passes = this.SORT_PASSES ?? divRoundUp(keyBits, radixLog);
+    return passes % 2 === 1;
+  }
+  get outputKeysBufferName() {
+    return this.outputIsInTemp ? "keysTemp" : "keysInOut";
+  }
+  get outputPayloadBufferName() {
+    return this.outputIsInTemp ? "payloadTemp" : "payloadInOut";
+  }
+
   finalizeRuntimeParameters() {
     /** Constant factors below can be overriden by constructor; anything
      * marked as `this.FOO = this.FOO ?? val` uses 'val' as the default */
@@ -1397,10 +1424,12 @@ export class OneSweepSort extends BaseSort {
         }),
       );
     }
-    if (this.copyOutputToTemp) {
-      /* This is probably NOT what anyone wants to do in production
-       * but it is useful for simple-example purposes. It copies
-       * the input/output buffer(s) into the temp buffer(s) */
+    if (this.copyOutputToTemp && this.SORT_PASSES % 2 === 0) {
+      /* An even number of passes leaves the output in keysInOut; copy it
+       * to keysTemp so callers that asked for copyOutputToTemp find it
+       * there. With an odd number of passes the output is already in
+       * keysTemp, so no copy is needed (and copying would overwrite it
+       * with an intermediate pass's result). */
       actions.push(
         new CopyBufferToBuffer({
           source: "keysInOut",
@@ -1436,7 +1465,7 @@ export class OneSweepSort extends BaseSort {
     const memdest =
       args.outputKeys?.cpuBuffer ??
       args.outputKeys ??
-      this.getBuffer("keysInOut").cpuBuffer;
+      this.getBuffer(this.outputKeysBufferName).cpuBuffer;
     if (memsrc === memdest) {
       console.warn(
         "Warning: source and destination for OneSweep::validate are the same buffer",
@@ -1457,7 +1486,7 @@ export class OneSweepSort extends BaseSort {
       memdestpayload =
         args.outputPayload?.cpuBuffer ??
         args.outputPayload ??
-        this.getBuffer("payloadInOut").cpuBuffer;
+        this.getBuffer(this.outputPayloadBufferName).cpuBuffer;
       if (memsrcpayload === memdestpayload) {
         console.warn(
           "Warning: source and destination payload for OneSweep::validate are the same buffer",
