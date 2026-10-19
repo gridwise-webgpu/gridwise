@@ -665,6 +665,52 @@ ${randomBitsWGSL(this.rng)}
     [1 << 24, {}],
   ];
 
+  /* One DLDFScan executed on inputs of three sizes, then the first size again.
+   * Its uniform parameters (input length, tile count) change between runs
+   * while the parameter buffer is reused, so each change must be uploaded;
+   * repeating a run may skip the upload. */
+  async function runReexecuteTest() {
+    const primitive = new DLDFScan({
+      device,
+      binop: new BinOpAdd({ datatype: "u32" }),
+      type: "exclusive",
+      datatype: "u32",
+      ...(useEmu && { disableSubgroups: true }),
+    });
+    let errors = "";
+    for (const size of [65536, 4096 * 3, 1 << 20, 65536, 65536]) {
+      const inputBuffer = device.createBuffer({
+        size: size * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      device.queue.writeBuffer(inputBuffer, 0, new Uint32Array(size).fill(1));
+      const outputBuffer = device.createBuffer({
+        size: size * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+      });
+      const mappable = device.createBuffer({
+        size: size * 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+      });
+      await primitive.execute({ inputBuffer, outputBuffer });
+      const encoder = device.createCommandEncoder();
+      encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, size * 4);
+      device.queue.submit([encoder.finish()]);
+      await mappable.mapAsync(GPUMapMode.READ);
+      const out = new Uint32Array(mappable.getMappedRange().slice());
+      mappable.unmap();
+      for (let i = 0; i < size; i++) {
+        if (out[i] !== i) {
+          errors += `\nsize ${size}: element ${i} is ${out[i]}, expected ${i}`;
+          break;
+        }
+      }
+      for (const b of [inputBuffer, outputBuffer, mappable]) b.destroy();
+    }
+    primitive.destroy();
+    return errors;
+  }
+
   const listEl = isNode ? null : document.getElementById("test-list");
   const { runTest, summarize } = makeRunner(listEl, summaryEl);
 
@@ -682,6 +728,7 @@ ${randomBitsWGSL(this.rng)}
 
   await runTest("primitive destroy() frees its own buffers, then re-executes", runDestroyTest);
   await runTest("ExecutePrimitive: scan nested in another primitive", runExecutePrimitiveTest);
+  await runTest("re-execute one scan at changing sizes (uniform uploads)", runReexecuteTest);
   await runTest("random bits: keyed hash, WGSL = JS; Philox known answers", () => runRandomBitsTest(null));
   await runTest("random bits: Philox4x32-7, WGSL = JS", () => runRandomBitsTest({ key: [0x12345678, 0x9abcdef0], rounds: 7 }));
 
