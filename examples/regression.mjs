@@ -401,6 +401,48 @@ export async function main(navigator) {
   /* Run small tests                                                      */
   /* ------------------------------------------------------------------ */
 
+  /* destroy() frees the buffers a primitive allocated itself (here, DLDFScan's
+   * spine and parameters) but not the caller's; executing again reallocates. */
+  async function runDestroyTest() {
+    const size = 65536;
+    const binop = new BinOpAdd({ datatype: "u32" });
+    const input = new Uint32Array(size).fill(1);
+    const inputBuffer = device.createBuffer({
+      size: size * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(inputBuffer, 0, input);
+    const outputBuffer = device.createBuffer({
+      size: size * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    const mappable = device.createBuffer({
+      size: size * 4,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    const primitive = new DLDFScan({ device, binop, type: "exclusive", datatype: "u32" });
+    await primitive.execute({ inputBuffer, outputBuffer });
+    primitive.destroy();
+    let errors = "";
+    if (primitive.hasBuffer("spine")) errors += "\nspine still registered after destroy()";
+    if (!primitive.hasBuffer("inputBuffer")) errors += "\ncaller's inputBuffer was dropped";
+    /* the caller's buffers must still work, and execute() must reallocate */
+    device.queue.writeBuffer(outputBuffer, 0, new Uint32Array(size));
+    await primitive.execute({ inputBuffer, outputBuffer });
+    const encoder = device.createCommandEncoder();
+    encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, size * 4);
+    device.queue.submit([encoder.finish()]);
+    await mappable.mapAsync(GPUMapMode.READ);
+    const out = new Uint32Array(mappable.getMappedRange().slice());
+    mappable.unmap();
+    for (let i = 0; i < size && errors === ""; i++) {
+      if (out[i] !== i) errors += `\nafter destroy(): element ${i} is ${out[i]}, expected ${i}`;
+    }
+    primitive.destroy();
+    for (const b of [inputBuffer, outputBuffer, mappable]) b.destroy();
+    return errors;
+  }
+
   const listEl = isNode ? null : document.getElementById("test-list");
   const { runTest, summarize } = makeRunner(listEl, summaryEl);
 
@@ -415,6 +457,8 @@ export async function main(navigator) {
     const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}`;
     await runTest(name, () => runSortTest({ type, datatype, direction, size }));
   }
+
+  await runTest("primitive destroy() frees its own buffers, then re-executes", runDestroyTest);
 
   summarize();
 

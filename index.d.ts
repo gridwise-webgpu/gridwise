@@ -22,6 +22,8 @@ export class BasePrimitive {
   }>;
   getBuffer(name: string): any;
   registerBuffer(args: { label: string; buffer: any; device?: GPUDevice }): void;
+  /** destroys GPU buffers the primitive allocated itself */
+  destroy(): void;
 }
 
 export class Kernel {

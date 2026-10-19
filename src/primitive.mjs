@@ -951,8 +951,13 @@ dispatchGeometry: ${dispatchGeometry}`);
               }
             }
           } else {
-            if (existingBuffer?.buffer) {
-              /* buffer exists, but different size. could destroy() it here */
+            if (
+              existingBuffer &&
+              this.__ownedBuffers?.has(existingBuffer.buffer.buffer)
+            ) {
+              /* we allocated it earlier at a different size: free it */
+              this.__ownedBuffers.delete(existingBuffer.buffer.buffer);
+              existingBuffer.buffer.buffer.destroy();
             }
             this.device.pushErrorScope("out-of-memory");
             const allocatedBuffer = this.device.createBuffer({
@@ -974,6 +979,8 @@ dispatchGeometry: ${dispatchGeometry}`);
                 );
               }
             });
+            /* remember buffers we allocate so destroy() can free them */
+            (this.__ownedBuffers ??= new Set()).add(allocatedBuffer);
             this.registerBuffer({
               label: action.label,
               buffer: allocatedBuffer,
@@ -1054,11 +1061,18 @@ dispatchGeometry: ${dispatchGeometry}`);
     return { gpuTotalTimeNS, cpuTotalTimeNS };
   }
   destroy() {
-    /* destroy every buffer */
-    // eslint-disable-next-line no-unused-vars
-    for (const [name, buffer] of Object.entries(this.__buffers)) {
-      //// buffer.destroy();
+    /* destroy the GPU buffers this primitive allocated itself (AllocateBuffer);
+     * buffers passed in by the caller belong to the caller */
+    const owned = this.__ownedBuffers ?? new Set();
+    for (const [label, buffer] of Object.entries(this.__buffers)) {
+      if (owned.has(buffer.buffer?.buffer)) {
+        delete this.__buffers[label]; /* the next execute() reallocates it */
+      }
     }
+    for (const buffer of owned) {
+      buffer.destroy();
+    }
+    owned.clear();
   }
 }
 
