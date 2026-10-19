@@ -155,6 +155,8 @@ BasePrimitive.prototype.execute = async function (args = {}) {
         inputLength = this.getBuffer("inputBuffer").length;
       } else if (this.hasBuffer("keysInOut")) {
         inputLength = this.getBuffer("keysInOut").length;
+      } else if (this.n !== undefined) {
+        inputLength = this.n; /* generators such as MultisplitPerm */
       }
     }
 

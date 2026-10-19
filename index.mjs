@@ -3,6 +3,14 @@ export { Buffer } from "./src/buffer.mjs";
 export { DLDFScan } from "./src/scandldf.mjs";
 export { OneSweepSort } from "./src/onesweep.mjs";
 export {
+  MultisplitPerm,
+  tuneMultisplitPerm,
+  multisplitPermPassBits,
+  localFinishWGSL,
+  wgShuffleWGSL,
+  localFinishCap,
+} from "./src/multisplitperm.mjs";
+export {
   randomBitsWGSL,
   randomBitsJS,
   PHILOX_WGSL,
