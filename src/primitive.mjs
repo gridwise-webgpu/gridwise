@@ -902,100 +902,7 @@ dispatchGeometry: ${dispatchGeometry}`);
           break;
         }
         case AllocateBuffer: {
-          if (!("size" in action)) {
-            console.error(
-              `Primitive::AllocateBuffer: Buffer ${action.label} must include a size (args are `,
-              action,
-              ")"
-            );
-          }
-          if (!Number.isFinite(action.size)) {
-            console.error(
-              `Primitive::AllocateBuffer: Buffer ${action.label} must specify a numerical size (args are `,
-              action,
-              ")"
-            );
-          }
-          /** What if this buffer is already allocated?
-           * We can tell if this is the case if it's already registered.
-           * This might happen if we have an intermediate buffer that's not
-           *   normally visible outside the primitive, but we want to get
-           *   its values.
-           * This might also happen if we are running the same primitive
-           *   multiple times (for benchmarking purposes).
-           * So: if the buffer is already allocated/registered AND it has the
-           *   same size, then skip the new allocation.
-           *
-           * Now, if we're allocating a new buffer, we are guaranteed it
-           *   will be cleared upon allocation. But what if we call
-           *   AllocateBuffer and the buffer is already allocated and we
-           *   reuse it? Do we clear it?
-           * (Of course if we specify populateWith, we initialize the buffer
-           *  with its value.)
-           * Design decision is "yes, unless we explicitly indicate no".
-           *   This is controlled by the parameter `clearBufferOnReuse`,
-           *   which thus defaults to true.
-           * If the primitive initializes this buffer within the primitive,
-           *   e.g., if the first access to the buffer is a full-buffer write,
-           *   we can avoid a useless clear with `clearBufferOnReuse: false`.
-           */
-          const existingBuffer = this.getBuffer(action.label);
-          if (existingBuffer && existingBuffer.size === action.size) {
-            /* just use the existing buffer, but it might be full of non-zero data */
-            if (action.populateWith) {
-              /* do nothing, because we will fill the buffer with data */
-            } else {
-              if (action.clearBufferOnReuse ?? true) {
-                /* clear the buffer if clearBufferOnReuse is unspecified or true */
-                encoder.clearBuffer(existingBuffer.buffer.buffer);
-              }
-            }
-          } else {
-            if (
-              existingBuffer &&
-              this.__ownedBuffers?.has(existingBuffer.buffer.buffer)
-            ) {
-              /* we allocated it earlier at a different size: free it */
-              this.__ownedBuffers.delete(existingBuffer.buffer.buffer);
-              existingBuffer.buffer.buffer.destroy();
-            }
-            this.device.pushErrorScope("out-of-memory");
-            const allocatedBuffer = this.device.createBuffer({
-              label: action.label,
-              size: action.size,
-              usage:
-                action.usage ??
-                /* default: read AND write */
-                GPUBufferUsage.STORAGE |
-                  GPUBufferUsage.COPY_SRC |
-                  GPUBufferUsage.COPY_DST,
-            });
-            this.device.popErrorScope().then((error) => {
-              if (error) {
-                // error is a GPUOutOfMemoryError object instance
-                this.buffer = null;
-                console.error(
-                  `Primitive::execute:AllocateBuffer: Out of memory, buffer too large. Error: ${error.message}`
-                );
-              }
-            });
-            /* remember buffers we allocate so destroy() can free them */
-            (this.__ownedBuffers ??= new Set()).add(allocatedBuffer);
-            this.registerBuffer({
-              label: action.label,
-              buffer: allocatedBuffer,
-              device: this.device,
-              ...(action.datatype && { datatype: action.datatype }),
-            });
-          }
-          /* todo: combine this with WriteGPUBuffer below */
-          if (action.populateWith) {
-            this.device.queue.writeBuffer(
-              this.getBuffer(action.label).buffer.buffer,
-              0,
-              action.populateWith
-            );
-          }
+          this.__allocateBuffer(action, encoder);
           break;
         }
         case WriteGPUBuffer: {
@@ -1053,6 +960,104 @@ dispatchGeometry: ${dispatchGeometry}`);
       }
     }
   }
+  /** Handles an AllocateBuffer action (see execute()). */
+  __allocateBuffer(action, encoder) {
+    if (!("size" in action)) {
+      console.error(
+        `Primitive::AllocateBuffer: Buffer ${action.label} must include a size (args are `,
+        action,
+        ")"
+      );
+    }
+    if (!Number.isFinite(action.size)) {
+      console.error(
+        `Primitive::AllocateBuffer: Buffer ${action.label} must specify a numerical size (args are `,
+        action,
+        ")"
+      );
+    }
+    /** What if this buffer is already allocated?
+     * We can tell if this is the case if it's already registered.
+     * This might happen if we have an intermediate buffer that's not
+     *   normally visible outside the primitive, but we want to get
+     *   its values.
+     * This might also happen if we are running the same primitive
+     *   multiple times (for benchmarking purposes).
+     * So: if the buffer is already allocated/registered AND it has the
+     *   same size, then skip the new allocation.
+     *
+     * Now, if we're allocating a new buffer, we are guaranteed it
+     *   will be cleared upon allocation. But what if we call
+     *   AllocateBuffer and the buffer is already allocated and we
+     *   reuse it? Do we clear it?
+     * (Of course if we specify populateWith, we initialize the buffer
+     *  with its value.)
+     * Design decision is "yes, unless we explicitly indicate no".
+     *   This is controlled by the parameter `clearBufferOnReuse`,
+     *   which thus defaults to true.
+     * If the primitive initializes this buffer within the primitive,
+     *   e.g., if the first access to the buffer is a full-buffer write,
+     *   we can avoid a useless clear with `clearBufferOnReuse: false`.
+     */
+    const existingBuffer = this.getBuffer(action.label);
+    if (existingBuffer && existingBuffer.size === action.size) {
+      /* just use the existing buffer, but it might be full of non-zero data */
+      if (action.populateWith) {
+        /* do nothing, because we will fill the buffer with data */
+      } else {
+        if (action.clearBufferOnReuse ?? true) {
+          /* clear the buffer if clearBufferOnReuse is unspecified or true */
+          encoder.clearBuffer(existingBuffer.buffer.buffer);
+        }
+      }
+    } else {
+      if (
+        existingBuffer &&
+        this.__ownedBuffers?.has(existingBuffer.buffer.buffer)
+      ) {
+        /* we allocated it earlier at a different size: free it */
+        this.__ownedBuffers.delete(existingBuffer.buffer.buffer);
+        existingBuffer.buffer.buffer.destroy();
+      }
+      this.device.pushErrorScope("out-of-memory");
+      const allocatedBuffer = this.device.createBuffer({
+        label: action.label,
+        size: action.size,
+        usage:
+          action.usage ??
+          /* default: read AND write */
+          GPUBufferUsage.STORAGE |
+            GPUBufferUsage.COPY_SRC |
+            GPUBufferUsage.COPY_DST,
+      });
+      this.device.popErrorScope().then((error) => {
+        if (error) {
+          // error is a GPUOutOfMemoryError object instance
+          this.buffer = null;
+          console.error(
+            `Primitive::execute:AllocateBuffer: Out of memory, buffer too large. Error: ${error.message}`
+          );
+        }
+      });
+      /* remember buffers we allocate so destroy() can free them */
+      (this.__ownedBuffers ??= new Set()).add(allocatedBuffer);
+      this.registerBuffer({
+        label: action.label,
+        buffer: allocatedBuffer,
+        device: this.device,
+        ...(action.datatype && { datatype: action.datatype }),
+      });
+    }
+    /* todo: combine this with WriteGPUBuffer below */
+    if (action.populateWith) {
+      this.device.queue.writeBuffer(
+        this.getBuffer(action.label).buffer.buffer,
+        0,
+        action.populateWith
+      );
+    }
+  }
+
   async getTimingResult() {
     const gpuTotalTimeNS = BasePrimitive.__timingHelper
       ? await BasePrimitive.__timingHelper.getResult()
