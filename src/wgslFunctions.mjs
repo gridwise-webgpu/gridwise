@@ -438,6 +438,82 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
 }`;
     return fn;
   }
+  wgExclusiveScan(args = {}) {
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    /** Exclusive scan of one value per invocation across the workgroup,
+     * the scan counterpart of wgReduce.
+     *
+     *   let prefix = wgExclusiveScan(value, &total, builtinsUniform, builtinsNonuniform);
+     *
+     * Returns binop over the values of all invocations with a smaller
+     * local_invocation_index (identity for invocation 0) and writes the
+     * reduction of the whole workgroup to *total in every invocation.
+     * Call from workgroup-uniform control flow with every invocation; it
+     * contains workgroup barriers, including one at the end, so calls can
+     * follow one another without the caller adding barriers.
+     *
+     * Requires: binop (with subgroupExclusiveScanOp and subgroupReduceOp)
+     * and its wgslfn declared as "binop", datatype, workgroupSize. Declares
+     * its own workgroup memory at module scope (name derived from the
+     * configuration), so it may be declared once per module per config.
+     * Args: useLongFunctionName (as in wgReduce).
+     */
+    const params = ["binop", "datatype", "workgroupSize"];
+    for (const necessary of params) {
+      if (!(necessary in env)) {
+        console.warn(`wgExclusiveScan: field '${necessary}' must be set in env`);
+      }
+    }
+    const config = params.map((param) => env[param]).join("_");
+    const longFnName = `wgExclusiveScan_${config}`;
+    const fnName = env?.useLongFunctionName ? longFnName : "wgExclusiveScan";
+    const wgTemp = `wg_scan_temp_${config}`;
+    const T = env.datatype;
+    const id = env.binop.identity;
+    /* One entry per subgroup. The array is sized for the smallest subgroup
+     * size WebGPU allows (4), not for the adapter's reported minimum: the
+     * size a pipeline actually gets is not always the reported one. */
+    return /* wgsl */ `
+var<workgroup> ${wgTemp}: array<${T}, ${Math.ceil(env.workgroupSize / 4)}>;
+
+fn ${fnName}(in: ${T},
+             total: ptr<function, ${T}>,
+             builtinsUniform: BuiltinsUniform,
+             builtinsNonuniform: BuiltinsNonuniform) -> ${T} {
+  let lidx = builtinsNonuniform.lidx;
+  ${env.fnDeclarations.declareSubgroupVarsInsideHelper("builtinsUniform", "builtinsNonuniform")}
+  let sid = lidx / sgsz;
+  let numSubgroups = (${env.workgroupSize}u + sgsz - 1u) / sgsz;
+  /* (1) scan within each subgroup; one invocation per subgroup posts its total */
+  let sgPrefix = ${env.binop.subgroupExclusiveScanOp}(in);
+  let sgTotal = ${env.binop.subgroupReduceOp}(in);
+  if (sgid == 0u) {
+    ${wgTemp}[sid] = sgTotal;
+  }
+  workgroupBarrier();
+  /* (2) exclusive scan of the subgroup totals, sgsz at a time. Every
+   * subgroup computes it (subgroup operations need uniform control flow);
+   * subgroup 0 writes the results back in place. */
+  var carry: ${T} = ${id};
+  for (var base = 0u; base < numSubgroups; base += sgsz) {
+    let i = base + sgid;
+    let v = select(${id}, ${wgTemp}[min(i, numSubgroups - 1u)], i < numSubgroups);
+    let prefix = ${env.binop.subgroupExclusiveScanOp}(v);
+    let chunk = ${env.binop.subgroupReduceOp}(v);
+    workgroupBarrier(); /* everyone has read this chunk before it is overwritten */
+    if (sid == 0u && i < numSubgroups) {
+      ${wgTemp}[i] = binop(carry, prefix);
+    }
+    carry = binop(carry, chunk);
+    workgroupBarrier();
+  }
+  /* (3) add the scanned subgroup totals to the in-subgroup prefixes */
+  let out = binop(${wgTemp}[sid], sgPrefix);
+  *total = carry;
+  workgroupBarrier(); /* ${wgTemp} may be reused by the next call */
+  return out;
+}`;
+  }
   workgroupScan(args = {}) {
     const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /**
@@ -695,6 +771,63 @@ export class wgslFunctionsWithoutSubgroupSupport extends wgslFunctions {
       return lidx < 32u;
     }`;
   }
+  /* No subgroups: a Hillis-Steele scan in workgroup memory with barriers
+   * only. Emulated subgroups would spin-wait on other invocations, which
+   * needs forward-progress guarantees WebGPU does not make; barriers do not. */
+  wgExclusiveScan(args = {}) {
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    /** Exclusive scan (no-subgroup version) of one value per invocation across the workgroup,
+     * the scan counterpart of wgReduce.
+     *
+     *   let prefix = wgExclusiveScan(value, &total, builtinsUniform, builtinsNonuniform);
+     *
+     * Returns binop over the values of all invocations with a smaller
+     * local_invocation_index (identity for invocation 0) and writes the
+     * reduction of the whole workgroup to *total in every invocation.
+     * Call from workgroup-uniform control flow with every invocation; it
+     * contains workgroup barriers, including one at the end, so calls can
+     * follow one another without the caller adding barriers.
+     *
+     * Requires: binop (with subgroupExclusiveScanOp and subgroupReduceOp)
+     * and its wgslfn declared as "binop", datatype, workgroupSize. Declares
+     * its own workgroup memory at module scope (name derived from the
+     * configuration), so it may be declared once per module per config.
+     * Args: useLongFunctionName (as in wgReduce).
+     */
+    const params = ["binop", "datatype", "workgroupSize"];
+    const config = params.map((param) => env[param]).join("_");
+    const longFnName = `wgExclusiveScan_${config}`;
+    const fnName = env?.useLongFunctionName ? longFnName : "wgExclusiveScan";
+    const wgTemp = `wg_scan_temp_${config}`;
+    const T = env.datatype;
+    const W = env.workgroupSize;
+    return /* wgsl */ `
+var<workgroup> ${wgTemp}: array<${T}, ${W}>;
+
+fn ${fnName}(in: ${T},
+             total: ptr<function, ${T}>,
+             builtinsUniform: BuiltinsUniform,
+             builtinsNonuniform: BuiltinsNonuniform) -> ${T} {
+  let lidx = builtinsNonuniform.lidx;
+  ${wgTemp}[lidx] = in;
+  workgroupBarrier();
+  for (var offset = 1u; offset < ${W}u; offset <<= 1u) {
+    var earlier: ${T} = ${env.binop.identity};
+    if (lidx >= offset) {
+      earlier = ${wgTemp}[lidx - offset];
+    }
+    workgroupBarrier();
+    ${wgTemp}[lidx] = binop(earlier, ${wgTemp}[lidx]);
+    workgroupBarrier();
+  }
+  /* ${wgTemp} now holds the inclusive scan */
+  let out = select(${env.binop.identity}, ${wgTemp}[max(lidx, 1u) - 1u], lidx > 0u);
+  *total = ${wgTemp}[${W - 1}u];
+  workgroupBarrier(); /* ${wgTemp} may be reused by the next call */
+  return out;
+}`;
+  }
+
   subgroupAny(args = {}) {
     // eslint-disable-next-line no-unused-vars
     const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env

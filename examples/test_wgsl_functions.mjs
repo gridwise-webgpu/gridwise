@@ -36,6 +36,7 @@ class TestWGSLFunctionsPrimitive extends BasePrimitive {
       ${this.fnDeclarations.subgroupBallot()}
       ${this.fnDeclarations.subgroupReduce()}
       ${this.fnDeclarations.subgroupInclusiveOpScan()}
+      ${this.fnDeclarations.wgExclusiveScan()}
 
       @compute @workgroup_size(${this.workgroupSize}) fn main(
         builtinsNonuniform: BuiltinsNonuniform,
@@ -143,6 +144,28 @@ export async function runSuite(device, resultsCallback) {
       name: "subgroupExclusiveAdd",
       kernelBody: "outputBuffer[gid] = subgroupExclusiveAdd(1u);",
       expected: (lidx, sgsz) => lidx % sgsz,
+    },
+    {
+      /* exclusive scan of v(i) = (7i + 3) mod 11 across the workgroup */
+      name: "wgExclusiveScan",
+      kernelBody:
+        "var total = 0u; let v = (builtinsNonuniform.lidx * 7u + 3u) % 11u; outputBuffer[gid] = wgExclusiveScan(v, &total, builtinsUniform, builtinsNonuniform);",
+      expected: (lidx) => {
+        let s = 0;
+        for (let i = 0; i < lidx; i++) s += (i * 7 + 3) % 11;
+        return s;
+      },
+    },
+    {
+      /* the total, after a second call (checks the scan's memory can be reused at once) */
+      name: "wgExclusiveScan total",
+      kernelBody:
+        "var total = 0u; let v = (builtinsNonuniform.lidx * 7u + 3u) % 11u; let a = wgExclusiveScan(v, &total, builtinsUniform, builtinsNonuniform); var total2 = 0u; let b = wgExclusiveScan(1u, &total2, builtinsUniform, builtinsNonuniform); outputBuffer[gid] = total * 1000u + total2 + (b - builtinsNonuniform.lidx);",
+      expected: () => {
+        let s = 0;
+        for (let i = 0; i < 256; i++) s += (i * 7 + 3) % 11;
+        return s * 1000 + 256;
+      },
     },
   ];
 
