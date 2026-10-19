@@ -6,6 +6,12 @@ import {
 } from "../src/binop.mjs";
 import { datatypeToTypedArray, getBrowserName } from "../src/util.mjs";
 import { DLDFScan } from "../src/scandldf.mjs";
+import {
+  BasePrimitive,
+  Kernel,
+  AllocateBuffer,
+  ExecutePrimitive,
+} from "../src/primitive.mjs";
 import { OneSweepSort } from "../src/onesweep.mjs";
 
 export async function main(navigator) {
@@ -443,6 +449,94 @@ export async function main(navigator) {
     return errors;
   }
 
+  /* ExecutePrimitive: a primitive that runs a DLDFScan into a buffer it
+   * allocates itself, then adds 1 to every element in its own kernel. The
+   * scan's output buffer exists only as this primitive's AllocateBuffer, so
+   * counting kernels (for GPU timing) has to allocate it early. */
+  class ScanPlusOne extends BasePrimitive {
+    constructor(args) {
+      super(args);
+      this.knownBuffers = ["inputBuffer", "outputBuffer"];
+      this.workgroupSize = 256;
+      this.scan = new DLDFScan({
+        device: this.device,
+        binop: new BinOpAdd({ datatype: "u32" }),
+        type: "exclusive",
+        datatype: "u32",
+        ...(this.disableSubgroups && { disableSubgroups: true }),
+      });
+    }
+    compute() {
+      const size = this.getBuffer("inputBuffer").size;
+      return [
+        new AllocateBuffer({ label: "scanned", size, clearBufferOnReuse: false }),
+        new ExecutePrimitive({
+          primitive: this.scan,
+          buffers: { inputBuffer: "inputBuffer", outputBuffer: "scanned" },
+        }),
+        new Kernel({
+          kernel: /* wgsl */ `
+@group(0) @binding(0) var<storage, read> scanned: array<u32>;
+@group(0) @binding(1) var<storage, read_write> outputBuffer: array<u32>;
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) id: vec3u,
+                                      @builtin(num_workgroups) nwg: vec3u) {
+  let i = id.x + id.y * nwg.x * 256u;
+  if (i < arrayLength(&outputBuffer)) { outputBuffer[i] = scanned[i] + 1u; }
+}`,
+          bufferTypes: [["read-only-storage", "storage"]],
+          bindings: [["scanned", "outputBuffer"]],
+          getDispatchGeometry: () =>
+            this.getSimpleDispatchGeometry({ workgroupCount: Math.ceil(size / 4 / 256) }),
+        }),
+      ];
+    }
+    destroy() {
+      super.destroy();
+      this.scan.destroy();
+    }
+  }
+
+  async function runExecutePrimitiveTest() {
+    const size = 65536 + 1024;
+    const input = new Uint32Array(size);
+    for (let i = 0; i < size; i++) input[i] = (i * 7 + 3) % 11;
+    const inputBuffer = device.createBuffer({
+      size: size * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(inputBuffer, 0, input);
+    const outputBuffer = device.createBuffer({
+      size: size * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    const mappable = device.createBuffer({
+      size: size * 4,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    const primitive = new ScanPlusOne({ device, ...(useEmu && { disableSubgroups: true }) });
+    let errors = "";
+    /* counting before the first execute must work (allocates "scanned" early) */
+    primitive.registerBuffer({ label: "inputBuffer", buffer: inputBuffer, device });
+    primitive.registerBuffer({ label: "outputBuffer", buffer: outputBuffer, device });
+    const kernels = primitive.countKernels();
+    if (kernels !== 2) errors += `\ncountKernels() is ${kernels}, expected 2 (the scan's and our own)`;
+    await primitive.execute({ inputBuffer, outputBuffer });
+    const encoder = device.createCommandEncoder();
+    encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, size * 4);
+    device.queue.submit([encoder.finish()]);
+    await mappable.mapAsync(GPUMapMode.READ);
+    const out = new Uint32Array(mappable.getMappedRange().slice());
+    mappable.unmap();
+    let sum = 0;
+    for (let i = 0; i < size && errors === ""; i++) {
+      if (out[i] !== sum + 1) errors += `\nelement ${i}: expected ${sum + 1}, saw ${out[i]}`;
+      sum += input[i];
+    }
+    primitive.destroy();
+    for (const b of [inputBuffer, outputBuffer, mappable]) b.destroy();
+    return errors;
+  }
+
   const listEl = isNode ? null : document.getElementById("test-list");
   const { runTest, summarize } = makeRunner(listEl, summaryEl);
 
@@ -459,6 +553,7 @@ export async function main(navigator) {
   }
 
   await runTest("primitive destroy() frees its own buffers, then re-executes", runDestroyTest);
+  await runTest("ExecutePrimitive: scan nested in another primitive", runExecutePrimitiveTest);
 
   summarize();
 

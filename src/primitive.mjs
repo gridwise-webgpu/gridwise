@@ -486,14 +486,16 @@ export class BasePrimitive {
       );
     }
 
-    /* begin timestamp prep - count kernels, allocate 2 timestamps/kernel */
+    /* compute() once: the action list is used for kernel counting and execution.
+     * Primitives run by ExecutePrimitive must be the same objects in both. */
+    const actions = this.compute();
+
+    /* begin timestamp prep - count kernels, allocate 2 timestamps/kernel.
+     * A primitive executed by a parent (ExecutePrimitive) records into the
+     * parent's timing helper, which already counted its kernels. */
     let kernelCount = 0; // how many kernels are there total?
-    if (args.enableGPUTiming) {
-      for (const action of this.compute()) {
-        if (action.constructor === Kernel && action.enabled()) {
-          kernelCount++;
-        }
-      }
+    if (args.enableGPUTiming && !args.__timingSetUpByParent) {
+      kernelCount = this.countKernels(actions);
       if (BasePrimitive.__timingHelper) {
         if (BasePrimitive.__timingHelper.numKernels === kernelCount) {
           /* do nothing - we can reuse __timingHelper without change */
@@ -524,7 +526,7 @@ export class BasePrimitive {
     const webGPUObjectCache =
       /* this was created in constructor */
       BasePrimitive.__deviceToWebGPUObjectCache.get(this.device);
-    for (const action of this.compute()) {
+    for (const action of actions) {
       switch (action.constructor) {
         case Kernel: {
           if (!action.enabled()) {
@@ -905,6 +907,21 @@ dispatchGeometry: ${dispatchGeometry}`);
           this.__allocateBuffer(action, encoder);
           break;
         }
+        case ExecutePrimitive: {
+          /* run another primitive's actions on this encoder, with its named
+           * buffers bound to this primitive's buffers */
+          if (!action.enabled()) {
+            break;
+          }
+          this.__bindChildBuffers(action, actions);
+          await action.primitive.execute({
+            encoder,
+            trials: args.trials,
+            enableGPUTiming: args.enableGPUTiming,
+            __timingSetUpByParent: true,
+          });
+          break;
+        }
         case WriteGPUBuffer: {
           if (!this.hasBuffer(action.label)) {
             console.warn(
@@ -960,7 +977,8 @@ dispatchGeometry: ${dispatchGeometry}`);
       }
     }
   }
-  /** Handles an AllocateBuffer action (see execute()). */
+  /** Handles an AllocateBuffer action (see execute()). encoder may be null
+   * when a buffer is allocated before execution starts. */
   __allocateBuffer(action, encoder) {
     if (!("size" in action)) {
       console.error(
@@ -1007,14 +1025,13 @@ dispatchGeometry: ${dispatchGeometry}`);
       } else {
         if (action.clearBufferOnReuse ?? true) {
           /* clear the buffer if clearBufferOnReuse is unspecified or true */
-          encoder.clearBuffer(existingBuffer.buffer.buffer);
+          /* encoder is null when allocating ahead of execution (see
+           * __bindChildBuffers); the buffer is then cleared on the real pass */
+          encoder?.clearBuffer(existingBuffer.buffer.buffer);
         }
       }
     } else {
-      if (
-        existingBuffer &&
-        this.__ownedBuffers?.has(existingBuffer.buffer.buffer)
-      ) {
+      if (existingBuffer && this.__ownedBuffers?.has(existingBuffer.buffer.buffer)) {
         /* we allocated it earlier at a different size: free it */
         this.__ownedBuffers.delete(existingBuffer.buffer.buffer);
         existingBuffer.buffer.buffer.destroy();
@@ -1056,6 +1073,49 @@ dispatchGeometry: ${dispatchGeometry}`);
         action.populateWith
       );
     }
+  }
+
+  /** Bind an ExecutePrimitive action's buffers into its primitive:
+   * action.buffers maps the child's buffer names to this primitive's buffer
+   * names. A buffer this primitive has not allocated yet is allocated now
+   * from its AllocateBuffer action, so the child can size itself (for
+   * instance, to count its kernels for GPU timing before execution). */
+  __bindChildBuffers(action, actions) {
+    for (const [childName, parentName] of Object.entries(action.buffers ?? {})) {
+      if (!this.hasBuffer(parentName)) {
+        const allocation = actions.find(
+          (a) => a.constructor === AllocateBuffer && a.label === parentName
+        );
+        if (allocation) {
+          this.__allocateBuffer(allocation, null);
+        } else {
+          throw new Error(
+            `Primitive ${this.label}: ExecutePrimitive maps ${childName} to unknown buffer ${parentName}`
+          );
+        }
+      }
+      action.primitive.registerBuffer({
+        label: childName,
+        buffer: this.getBuffer(parentName).buffer,
+        device: this.device,
+      });
+    }
+  }
+
+  /** Number of compute passes execute() records (one per enabled Kernel),
+   * including those of primitives run by ExecutePrimitive actions. Used to
+   * size GPU timing. */
+  countKernels(actions = this.compute()) {
+    let count = 0;
+    for (const action of actions) {
+      if (action.constructor === Kernel && action.enabled()) {
+        count++;
+      } else if (action.constructor === ExecutePrimitive && action.enabled()) {
+        this.__bindChildBuffers(action, actions);
+        count += action.primitive.countKernels();
+      }
+    }
+    return count;
   }
 
   async getTimingResult() {
@@ -1103,6 +1163,26 @@ export class Kernel {
   }
   enabled() {
     /* default: enabled */
+    return this.enable ?? true;
+  }
+}
+
+/** Run another primitive as part of this one, on the same encoder.
+ *   new ExecutePrimitive({
+ *     primitive: this.scan,    // created once (e.g., in the constructor), not per compute()
+ *     buffers: { inputBuffer: "counts", outputBuffer: "offsets" },  // child name: our name
+ *     label: "scan of counts",
+ *     enable: true,            // optional, like Kernel
+ *   })
+ * GPU timing counts and times the child's kernels with this primitive's. */
+export class ExecutePrimitive {
+  constructor(args) {
+    Object.assign(this, args);
+    if (!this.primitive) {
+      throw new Error("ExecutePrimitive: requires a 'primitive' argument");
+    }
+  }
+  enabled() {
     return this.enable ?? true;
   }
 }

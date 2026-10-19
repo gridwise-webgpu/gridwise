@@ -1,4 +1,4 @@
-export { BasePrimitive, Kernel, AllocateBuffer, WriteGPUBuffer } from "./src/primitive.mjs";
+export { BasePrimitive, Kernel, AllocateBuffer, WriteGPUBuffer, ExecutePrimitive } from "./src/primitive.mjs";
 export { Buffer } from "./src/buffer.mjs";
 export { DLDFScan } from "./src/scandldf.mjs";
 export { OneSweepSort } from "./src/onesweep.mjs";

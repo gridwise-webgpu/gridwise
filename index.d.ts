@@ -22,6 +22,8 @@ export class BasePrimitive {
   }>;
   getBuffer(name: string): any;
   registerBuffer(args: { label: string; buffer: any; device?: GPUDevice }): void;
+  /** compute passes execute() records, including nested primitives' */
+  countKernels(): number;
   /** destroys GPU buffers the primitive allocated itself */
   destroy(): void;
 }
@@ -53,6 +55,22 @@ export class AllocateBuffer {
     usage?: number;
     [key: string]: any;
   });
+}
+
+/** Run another primitive inside this one's compute(), on the same encoder. */
+export class ExecutePrimitive {
+  primitive: BasePrimitive;
+  buffers?: { [childBufferName: string]: string };
+
+  constructor(args: {
+    primitive: BasePrimitive;
+    /** child buffer name -> this primitive's buffer name */
+    buffers?: { [childBufferName: string]: string };
+    label?: string;
+    enable?: boolean;
+  });
+
+  enabled(): boolean;
 }
 
 export class WriteGPUBuffer {
