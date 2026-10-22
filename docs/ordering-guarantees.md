@@ -8,7 +8,7 @@ order: 11
 
 When integrating Gridwise parallel primitives into real-time graphics engines (e.g., Three.js, Babylon.js), physics simulations, or complex compute pipelines, understanding WebGPU's execution and synchronization model is critical. 
 
-A common concern is whether `async/await` is required between dispatches, which would introduce CPU-GPU round-trip latency and stall the pipeline. **Gridwise is designed to avoid these stalls completely.**
+A common concern is whether the CPU has to wait for the GPU between dispatches, which would introduce CPU-GPU round-trip latency and stall the pipeline. **Gridwise is designed to avoid these stalls completely.**
 
 ---
 
@@ -39,10 +39,11 @@ In WebGPU, you **do not** need to manually insert pipeline barriers or execution
 
 If you want to run multiple Gridwise primitives sequentially (e.g., Sort a buffer, then run a Scan on it, then run a custom simulation shader):
 
-1. **Do not** await each `execute()` call on the CPU.
-2. **Do** pass a shared `GPUCommandEncoder` to each primitive's `execute()` method.
+1. **Do** pass a shared `GPUCommandEncoder` to each primitive's `execute()` method.
+2. **Do not** wait for the GPU between primitives: no submit per primitive, and no `device.queue.onSubmittedWorkDone()` or `mapAsync()` in between.
+3. **Do** `await` each `execute()` call. With an `encoder`, `execute()` only *records* the primitive's compute passes into your encoder, and its promise resolves as soon as recording is done; it does not submit anything or wait for the GPU. Awaiting it costs no GPU round trip, and it makes sure every pass has been recorded before you call `encoder.finish()`.
 
-Because `execute()` accepts a pre-existing `encoder`, it will record its compute passes to your command buffer without submitting it to the queue.
+Because `execute()` accepts a pre-existing `encoder`, it records its compute passes into your command buffer without submitting it to the queue.
 
 ### Example: Zero-Stall Pipeline Chaining
 
@@ -79,7 +80,7 @@ device.queue.submit([commandBuffer]);
 ```
 
 > [!NOTE]
-> Although `execute` is an `async` function, when an external `encoder` is passed, it only resolves when recording is finished. It does *not* wait for GPU execution. The promise resolves immediately so you can proceed to record the next step.
+> `execute` is an `async` function. When an external `encoder` is passed, its promise resolves when recording is finished, not when the GPU has run the work, so awaiting it does not stall on the GPU. Do await it before recording the next step or calling `encoder.finish()`: recording can involve asynchronous steps, and a pass that has not been recorded yet would be missing from the command buffer.
 
 ---
 

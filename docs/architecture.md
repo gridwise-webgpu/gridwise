@@ -34,7 +34,11 @@ This particular primitive is parameterized by its datatype (in this case, "u32")
 
 When the scan is actually executed, its arguments are buffers that store its input and output. This particular primitive has named arguments of an input buffer named `inputBuffer` and an output buffer named `outputBuffer`. These buffers can be WebGPU buffers of type `GPUBuffer` but can also be `Buffer`s, described next.
 
-The primitive performs all necessary WebGPU operations, including (optionally) setting up an encoder, building up and setting WebGPU layouts and pipelines, running the pipeline, and optionally recording GPU-side or CPU-side timing. It also caches WebGPU layouts and pipelines to avoid the expense of recreating them if they have already been created.
+The primitive performs all necessary WebGPU operations, including (optionally) setting up an encoder, building up and setting WebGPU layouts and pipelines, running the pipeline, and optionally recording GPU-side or CPU-side timing. It also caches WebGPU layouts and pipelines to avoid the expense of recreating them if they have already been created. Internally, a primitive describes its work as a list of actions returned by its `compute()` method (kernels to dispatch, internal buffers to allocate, copies), and `execute()` carries them out in order. One kind of action runs another primitive, so a primitive can use an existing one, such as a scan, as one of its own steps (see [Composing primitives](#composing-primitives) below).
+
+### Composing primitives
+
+A primitive's work is a list of actions returned by its `compute()` method: `Kernel`s to dispatch, `AllocateBuffer`s for internal buffers, copies and writes. One of those actions can be another primitive. `ExecutePrimitive` runs a child primitive at that point in the list, on the same encoder, with the child's buffers bound to the parent's by name, so a new primitive can reuse an existing one (for example, a scan) as one of its steps and still be a single primitive to execute, time and test. [Composing Primitives](../composing-primitives/) describes why this exists and how it works.
 
 ### Buffer
 

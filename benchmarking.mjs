@@ -37,7 +37,6 @@ if (typeof process !== "undefined" && process.release.name === "node") {
 }
 
 // tests
-// import { NoAtomicPKReduceTestSuite } from "./src/reduce.mjs";
 // import { HierarchicalScanTestSuite } from "./src/scan.mjs";
 import {
   // DLDFScanTestSuite,
@@ -113,7 +112,6 @@ async function main(navigator) {
   // const testSuites = [
   // AtomicGlobalU32ReduceTestSuite,
   // AtomicGlobalU32ReduceBinOpsTestSuite,
-  // NoAtomicPKReduceTestSuite,
   // HierarchicalScanTestSuite,
   // DLDFScanTestSuite,
   // DLDFReduceTestSuite,

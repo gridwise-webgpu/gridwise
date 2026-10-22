@@ -27,7 +27,6 @@ if (isNode) {
 }
 
 // import primitive only, no test suite
-import { NoAtomicPKReduce } from "./src/reduce.mjs";
 import { HierarchicalScan } from "./src/scan.mjs";
 import { DLDFScan } from "./src/scandldf.mjs";
 
@@ -61,18 +60,6 @@ export async function main(navigator) {
   console.log("in", memsrcX32);
 
   // eslint-disable-next-line no-unused-vars
-  const reducePrimitive = new NoAtomicPKReduce({
-    device,
-    binop: new BinOpAdd({ datatype }),
-    datatype: datatype,
-    gputimestamps: true, //// TODO should work without this
-    // inputBuffer and outputBuffer are Reduce-specific names
-    // inputBuffer: { buffer: memsrcBuffer, offset: 0 },
-    // inputBuffer: memsrcBuffer,
-    // outputBuffer: memdestBuffer,
-  });
-
-  // eslint-disable-next-line no-unused-vars
   const iscanPrimitive = new HierarchicalScan({
     device,
     binop: new BinOpAdd({ datatype }),
@@ -100,25 +87,11 @@ export async function main(navigator) {
 
   // const primitive = iscanPrimitive;
   // const primitive = escanPrimitive;
-  // const primitive = reducePrimitive;
   const primitive = dldfscanPrimitive;
 
-  let memdestBytes;
-  switch (primitive.constructor.name) {
-    case "NoAtomicPKReduce":
-      memdestBytes = 4;
-      break;
-    default:
-      if (
-        primitive.constructor.name === "DLDFScan" &&
-        primitive.type === "reduce"
-      ) {
-        memdestBytes = 4;
-      } else {
-        memdestBytes = memsrcX32.byteLength;
-      }
-      break;
-  }
+  /* a reduce writes one element */
+  const memdestBytes =
+    primitive.type === "reduce" ? 4 : memsrcX32.byteLength;
 
   // allocate/create buffers on the GPU to hold in/out data
   const memsrcBuffer = device.createBuffer({

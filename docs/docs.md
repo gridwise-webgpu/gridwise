@@ -17,6 +17,9 @@ Complete documentation for Gridwise's OneSweepSort implementation. Covers key-on
 ### [Binary Operations]({{ "/binop/" | relative_url }})
 Guide to binary operations (monoids) used in Gridwise's scan and reduce. Documents standard operators (Add, Min, Max, Multiply) and shows how to specialize them by datatype or implement custom binary operators by extending the `BinOp` class.
 
+### [Random Numbers]({{ "/random-numbers/" | relative_url }})
+Random bits for WGSL kernels: the fast keyed hash and Philox4x32, their bit-exact JavaScript mirrors, how to declare and call them, and when to use each.
+
 ### [Buffer Management]({{ "/buffer/" | relative_url }})
 Best practices for allocating, managing, and optimizing GPU buffers in Gridwise. Covers buffer creation, storage usage flags, memory optimization, copy strategies, and handling edge cases such as non-aligned input lengths.
 
@@ -34,6 +37,9 @@ Deep-dives into the architecture, implementation choices, WGSL code-generation s
 
 ### [Architecture]({{ "/architecture/" | relative_url }})
 Overview of Gridwise's system design, module structure, and how primitives are organized as modular, reusable classes for clean separation of concerns and extensibility.
+
+### [Composing Primitives]({{ "/composing-primitives/" | relative_url }})
+How a primitive can run another primitive as one of its steps with the `ExecutePrimitive` action: the motivation (reusing a scan inside a new primitive), usage, and how ordering, buffer binding and GPU timing work for nested primitives.
 
 ### [Primitive Design]({{ "/primitive-design/" | relative_url }})
 Deep dive into the design principles behind Gridwise primitives, focusing on single-pass chained algorithms for scan, sort, and reduce. Explores decoupled lookback/fallback optimization techniques and memory bandwidth bounds.

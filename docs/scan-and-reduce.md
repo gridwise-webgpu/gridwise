@@ -51,7 +51,19 @@ The carry chain in a chained scan stores the inclusive scan of the reduction of 
 
 WebGPU's optional [subgroups](https://www.w3.org/TR/webgpu/#subgroups) feature enables WebGPU programs to use SIMD instructions within a workgroup. These deliver significant performance gains primarily by utilizing register shuffling, minimizing the amount of work that must be routed through shared memory. Consequently, our initial performance testing indicated that scan operations are 2.5x slower using Gridwise's [subgroup emulation](../subgroup-strategy/) compared to native hardware. While both emulated and hardware-backed approaches theoretically share the same minimal algorithmic depth, the native hardware scan requires no barriers for the steps performed via shuffling, whereas the emulated loop must perform all work through shared memory, incurring a barrier at each iteration. Therefore, while the theoretical depth remains constant, emulated scans—or native execution on smaller subgroup sizes—tend to perform worse in practice due to the increased relative cost of synchronization required by shared memory.
 
-It is possible that the fastest scan and reduce implementations in the absence of subgroup hardware are not chained ones. We have not investigated this at all. In general, in Gridwise, we expect that subgroup operations are available, and we use them to reduce across subgroups and workgroups, to broadcast information from one thread to others, and to compute local subgroup-sized scans as part of workgroup scans.
+It is possible that the fastest scan and reduce implementations in the absence of subgroup hardware are not chained ones; `HierarchicalScan` (below) is the non-chained alternative, and comparing the two without subgroups is an open question. In general, in Gridwise, we expect that subgroup operations are available, and we use them to reduce across subgroups and workgroups, to broadcast information from one thread to others, and to compute local subgroup-sized scans as part of workgroup scans.
+
+### HierarchicalScan: reduce-then-scan
+
+Gridwise also provides `HierarchicalScan`, a reduce-then-scan implementation with the same interface as `DLDFScan` (`type` exclusive, inclusive or reduce; any `binop` and `datatype`). It is the classic 3*n*-access algorithm described above:
+
+1. reduce each tile into a buffer of per-tile reductions;
+2. exclusive-scan those reductions, with another `HierarchicalScan` run by an [`ExecutePrimitive`](../composing-primitives/) action (the recursion stops when the reductions fit in one tile);
+3. scan each tile, starting from its scanned reduction.
+
+Each tile is scanned with the workgroup function `wgScan`.
+
+Use it where a chained scan is a poor fit, chiefly on hardware without subgroups. There `HierarchicalScan` uses only workgroup barriers, while `DLDFScan` relies on emulated subgroups, which spin-wait and can stall on implementations that do not guarantee forward progress between invocations, such as CPU-based WebGPU renderers. Because it makes no forward-progress assumptions at all, it is also the simpler of the two to read, and a compact example of building a primitive from a workgroup function plus composition.
 
 ## Configuring and Calling Gridwise Scan and Reduce
 

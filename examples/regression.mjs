@@ -6,7 +6,16 @@ import {
 } from "../src/binop.mjs";
 import { datatypeToTypedArray, getBrowserName } from "../src/util.mjs";
 import { DLDFScan } from "../src/scandldf.mjs";
+import { HierarchicalScan } from "../src/scan.mjs";
+import { randomBitsWGSL, randomBitsJS, pmMixJS, philox4x32JS } from "../src/random.mjs";
+import {
+  BasePrimitive,
+  Kernel,
+  AllocateBuffer,
+  ExecutePrimitive,
+} from "../src/primitive.mjs";
 import { OneSweepSort } from "../src/onesweep.mjs";
+import { MultisplitPerm } from "../src/multisplitperm.mjs";
 
 export async function main(navigator) {
   const isNode = typeof window === "undefined";
@@ -132,13 +141,13 @@ export async function main(navigator) {
     return data;
   }
 
-  async function runScanTest({ type, datatype, binop, size }) {
+  async function runScanTest({ type, datatype, binop, size, Primitive = DLDFScan }) {
     const TypedArray = datatypeToTypedArray(datatype);
     const memsrc = generateScanInput(datatype, binop, size);
     const isReduce = type === "reduce";
     const destBytes = isReduce ? 4 : memsrc.byteLength;
 
-    const primitive = new DLDFScan({ device, binop, type, datatype });
+    const primitive = new Primitive({ device, binop, type, datatype });
 
     const srcBuffer = device.createBuffer({
       size: memsrc.byteLength,
@@ -475,6 +484,308 @@ export async function main(navigator) {
   /* Run small tests                                                      */
   /* ------------------------------------------------------------------ */
 
+  /* destroy() frees the buffers a primitive allocated itself (here, DLDFScan's
+   * spine and parameters) but not the caller's; executing again reallocates. */
+  async function runDestroyTest() {
+    const size = 65536;
+    const binop = new BinOpAdd({ datatype: "u32" });
+    const input = new Uint32Array(size).fill(1);
+    const inputBuffer = device.createBuffer({
+      size: size * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(inputBuffer, 0, input);
+    const outputBuffer = device.createBuffer({
+      size: size * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    const mappable = device.createBuffer({
+      size: size * 4,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    const primitive = new DLDFScan({ device, binop, type: "exclusive", datatype: "u32" });
+    await primitive.execute({ inputBuffer, outputBuffer });
+    primitive.destroy();
+    let errors = "";
+    if (primitive.hasBuffer("spine")) errors += "\nspine still registered after destroy()";
+    if (!primitive.hasBuffer("inputBuffer")) errors += "\ncaller's inputBuffer was dropped";
+    /* the caller's buffers must still work, and execute() must reallocate */
+    device.queue.writeBuffer(outputBuffer, 0, new Uint32Array(size));
+    await primitive.execute({ inputBuffer, outputBuffer });
+    const encoder = device.createCommandEncoder();
+    encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, size * 4);
+    device.queue.submit([encoder.finish()]);
+    await mappable.mapAsync(GPUMapMode.READ);
+    const out = new Uint32Array(mappable.getMappedRange().slice());
+    mappable.unmap();
+    for (let i = 0; i < size && errors === ""; i++) {
+      if (out[i] !== i) errors += `\nafter destroy(): element ${i} is ${out[i]}, expected ${i}`;
+    }
+    primitive.destroy();
+    for (const b of [inputBuffer, outputBuffer, mappable]) b.destroy();
+    return errors;
+  }
+
+  /* ExecutePrimitive: a primitive that runs a DLDFScan into a buffer it
+   * allocates itself, then adds 1 to every element in its own kernel. The
+   * scan's output buffer exists only as this primitive's AllocateBuffer, so
+   * counting kernels (for GPU timing) has to allocate it early. */
+  class ScanPlusOne extends BasePrimitive {
+    constructor(args) {
+      super(args);
+      this.knownBuffers = ["inputBuffer", "outputBuffer"];
+      this.workgroupSize = 256;
+      this.scan = new DLDFScan({
+        device: this.device,
+        binop: new BinOpAdd({ datatype: "u32" }),
+        type: "exclusive",
+        datatype: "u32",
+        ...(this.disableSubgroups && { disableSubgroups: true }),
+      });
+    }
+    compute() {
+      const size = this.getBuffer("inputBuffer").size;
+      return [
+        new AllocateBuffer({ label: "scanned", size, clearBufferOnReuse: false }),
+        new ExecutePrimitive({
+          primitive: this.scan,
+          buffers: { inputBuffer: "inputBuffer", outputBuffer: "scanned" },
+        }),
+        new Kernel({
+          kernel: /* wgsl */ `
+@group(0) @binding(0) var<storage, read> scanned: array<u32>;
+@group(0) @binding(1) var<storage, read_write> outputBuffer: array<u32>;
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) id: vec3u,
+                                      @builtin(num_workgroups) nwg: vec3u) {
+  let i = id.x + id.y * nwg.x * 256u;
+  if (i < arrayLength(&outputBuffer)) { outputBuffer[i] = scanned[i] + 1u; }
+}`,
+          bufferTypes: [["read-only-storage", "storage"]],
+          bindings: [["scanned", "outputBuffer"]],
+          getDispatchGeometry: () =>
+            this.getSimpleDispatchGeometry({ workgroupCount: Math.ceil(size / 4 / 256) }),
+        }),
+      ];
+    }
+    destroy() {
+      super.destroy();
+      this.scan.destroy();
+    }
+  }
+
+  async function runExecutePrimitiveTest() {
+    const size = 65536 + 1024;
+    const input = new Uint32Array(size);
+    for (let i = 0; i < size; i++) input[i] = (i * 7 + 3) % 11;
+    const inputBuffer = device.createBuffer({
+      size: size * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(inputBuffer, 0, input);
+    const outputBuffer = device.createBuffer({
+      size: size * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    const mappable = device.createBuffer({
+      size: size * 4,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    const primitive = new ScanPlusOne({ device, ...(useEmu && { disableSubgroups: true }) });
+    let errors = "";
+    /* counting before the first execute must work (allocates "scanned" early) */
+    primitive.registerBuffer({ label: "inputBuffer", buffer: inputBuffer, device });
+    primitive.registerBuffer({ label: "outputBuffer", buffer: outputBuffer, device });
+    const kernels = primitive.countKernels();
+    if (kernels !== 2) errors += `\ncountKernels() is ${kernels}, expected 2 (the scan's and our own)`;
+    await primitive.execute({ inputBuffer, outputBuffer });
+    const encoder = device.createCommandEncoder();
+    encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, size * 4);
+    device.queue.submit([encoder.finish()]);
+    await mappable.mapAsync(GPUMapMode.READ);
+    const out = new Uint32Array(mappable.getMappedRange().slice());
+    mappable.unmap();
+    let sum = 0;
+    for (let i = 0; i < size && errors === ""; i++) {
+      if (out[i] !== sum + 1) errors += `\nelement ${i}: expected ${sum + 1}, saw ${out[i]}`;
+      sum += input[i];
+    }
+    primitive.destroy();
+    for (const b of [inputBuffer, outputBuffer, mappable]) b.destroy();
+    return errors;
+  }
+
+  /* random.mjs: the JS Philox against Random123's known-answer vectors, then
+   * the WGSL functions against their JS mirrors for 4096 inputs. */
+  class RandomBitsTest extends BasePrimitive {
+    constructor(args) {
+      super(args);
+      this.knownBuffers = ["outputBuffer"];
+    }
+    compute() {
+      return [
+        new Kernel({
+          kernel: /* wgsl */ `
+${randomBitsWGSL(this.rng)}
+@group(0) @binding(0) var<storage, read_write> outputBuffer: array<u32>;
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) id: vec3u) {
+  let i = id.x;
+  var ctr = 0u;
+  outputBuffer[4u * i] = pm_mix(i, 0x2545f491u);
+  outputBuffer[4u * i + 1u] = pm_unmix(pm_mix(i, 77u), 77u);
+  outputBuffer[4u * i + 2u] = pm_rand(i, i >> 3u, 0x5eedu);
+  outputBuffer[4u * i + 3u] = pm_bounded(i + 1u, i, 9u, &ctr);
+}`,
+          bufferTypes: [["storage"]],
+          bindings: [["outputBuffer"]],
+          getDispatchGeometry: () => [16],
+        }),
+      ];
+    }
+  }
+
+  async function runRandomBitsTest(rng) {
+    let errors = "";
+    if (!rng) {
+      const hex = (a) => a.map((x) => x.toString(16).padStart(8, "0")).join(" ");
+      const kat = [
+        [[0, 0, 0, 0], [0, 0], "6627e8d5 e169c58d bc57ac4c 9b00dbd8"],
+        [[0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff], [0xffffffff, 0xffffffff], "408f276d 41c83b0e a20bc7c6 6d5451fd"],
+        [[0x243f6a88, 0x85a308d3, 0x13198a2e, 0x03707344], [0xa4093822, 0x299f31d0], "d16cfe09 94fdcceb 5001e420 24126ea1"],
+      ];
+      for (const [c, k, want] of kat) {
+        const got = hex(philox4x32JS(c, k));
+        if (got !== want) errors += `\nphilox4x32JS(${hex(c)}): ${got}, expected ${want}`;
+      }
+    }
+    const n = 4096;
+    const outputBuffer = device.createBuffer({
+      size: n * 16,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    const mappable = device.createBuffer({
+      size: n * 16,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    const primitive = new RandomBitsTest({ device, rng });
+    await primitive.execute({ outputBuffer });
+    const encoder = device.createCommandEncoder();
+    encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, n * 16);
+    device.queue.submit([encoder.finish()]);
+    await mappable.mapAsync(GPUMapMode.READ);
+    const out = new Uint32Array(mappable.getMappedRange().slice());
+    mappable.unmap();
+    const R = randomBitsJS(rng);
+    for (let i = 0; i < n && errors.split("\n").length < 5; i++) {
+      const want = [pmMixJS(i, 0x2545f491), i, R.rand(i, i >>> 3, 0x5eed), R.bounded(i + 1, i, 9, { value: 0 })];
+      for (let j = 0; j < 4; j++) {
+        if (out[4 * i + j] !== want[j]) {
+          errors += `\ninput ${i}, function ${["pm_mix", "pm_unmix", "pm_rand", "pm_bounded"][j]}: GPU ${out[4 * i + j]}, JS ${want[j]}`;
+        }
+      }
+    }
+    primitive.destroy();
+    outputBuffer.destroy();
+    mappable.destroy();
+    return errors;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Random permutations                                                  */
+  /* ------------------------------------------------------------------ */
+
+  /* MultisplitPerm writes a permutation of 0..n-1; validate() checks it is a
+   * permutation in group order and, when reproducible, that it equals the
+   * CPU reference bit for bit. */
+  async function runPermTest({ n, options }) {
+    const primitive = new MultisplitPerm({
+      device,
+      n,
+      seed: 0x5eed,
+      ...(useEmu && { disableSubgroups: true }),
+      ...options,
+    });
+    const outputBuffer = device.createBuffer({
+      size: n * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    const mappable = device.createBuffer({
+      size: n * 4,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    await primitive.execute({ outputBuffer });
+    const encoder = device.createCommandEncoder();
+    encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, n * 4);
+    device.queue.submit([encoder.finish()]);
+    await mappable.mapAsync(GPUMapMode.READ);
+    const output = new Uint32Array(mappable.getMappedRange().slice());
+    mappable.unmap();
+    mappable.destroy();
+    outputBuffer.destroy();
+    const result = primitive.validate({ outputBuffer: output });
+    primitive.destroy();
+    return result;
+  }
+
+  /* [n, options] */
+  const permTests = [
+    [65536, {}],
+    [65536, { reproducible: true }],
+    [100003, { carry: "indices" }] /* not a power of two */,
+    [131072, { reproducible: true, split: "3+3+1" }] /* three passes */,
+    [5000, { reproducible: true, localCap: 256 }] /* overflow path */,
+    [16384, { reproducible: true, rng: { key: [1, 2], rounds: 7 }, carry: "pairs" }],
+  ];
+  const largePermTests = [
+    [1 << 20, { reproducible: true }] /* CPU reference: keep it modest */,
+    [1 << 24, {}],
+  ];
+
+  /* One DLDFScan executed on inputs of three sizes, then the first size again.
+   * Its uniform parameters (input length, tile count) change between runs
+   * while the parameter buffer is reused, so each change must be uploaded;
+   * repeating a run may skip the upload. */
+  async function runReexecuteTest() {
+    const primitive = new DLDFScan({
+      device,
+      binop: new BinOpAdd({ datatype: "u32" }),
+      type: "exclusive",
+      datatype: "u32",
+      ...(useEmu && { disableSubgroups: true }),
+    });
+    let errors = "";
+    for (const size of [65536, 4096 * 3, 1 << 20, 65536, 65536]) {
+      const inputBuffer = device.createBuffer({
+        size: size * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      device.queue.writeBuffer(inputBuffer, 0, new Uint32Array(size).fill(1));
+      const outputBuffer = device.createBuffer({
+        size: size * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+      });
+      const mappable = device.createBuffer({
+        size: size * 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+      });
+      await primitive.execute({ inputBuffer, outputBuffer });
+      const encoder = device.createCommandEncoder();
+      encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, size * 4);
+      device.queue.submit([encoder.finish()]);
+      await mappable.mapAsync(GPUMapMode.READ);
+      const out = new Uint32Array(mappable.getMappedRange().slice());
+      mappable.unmap();
+      for (let i = 0; i < size; i++) {
+        if (out[i] !== i) {
+          errors += `\nsize ${size}: element ${i} is ${out[i]}, expected ${i}`;
+          break;
+        }
+      }
+      for (const b of [inputBuffer, outputBuffer, mappable]) b.destroy();
+    }
+    primitive.destroy();
+    return errors;
+  }
+
   const listEl = isNode ? null : document.getElementById("test-list");
   const { runTest, summarize } = makeRunner(listEl, summaryEl);
 
@@ -483,6 +794,15 @@ export async function main(navigator) {
     const opName = BinOpClass.name.replace("BinOp", "").toLowerCase();
     const name = `scan  ${type.padEnd(9)} ${datatype}  ${opName.padEnd(8)} size=${size}`;
     await runTest(name, () => runScanTest({ type, datatype, binop, size }));
+  }
+
+  /* the same scans with HierarchicalScan (reduce-then-scan built on wgScan
+   * and ExecutePrimitive), which also runs without subgroups using barriers only */
+  for (const [type, datatype, BinOpClass, size] of scanTests) {
+    const binop = new BinOpClass({ datatype });
+    const opName = BinOpClass.name.replace("BinOp", "").toLowerCase();
+    const name = `hscan ${type.padEnd(9)} ${datatype}  ${opName.padEnd(8)} size=${size}`;
+    await runTest(name, () => runScanTest({ type, datatype, binop, size, Primitive: HierarchicalScan }));
   }
 
   for (const [type, datatype, direction, size, keyBits] of sortTests) {
@@ -495,6 +815,17 @@ export async function main(navigator) {
     await runTest(name, () =>
       runSortTest({ type, datatype, direction, size, keyBits, copyOutputToTemp: false })
     );
+  }
+
+  await runTest("primitive destroy() frees its own buffers, then re-executes", runDestroyTest);
+  await runTest("ExecutePrimitive: scan nested in another primitive", runExecutePrimitiveTest);
+  await runTest("re-execute one scan at changing sizes (uniform uploads)", runReexecuteTest);
+  await runTest("random bits: keyed hash, WGSL = JS; Philox known answers", () => runRandomBitsTest(null));
+  await runTest("random bits: Philox4x32-7, WGSL = JS", () => runRandomBitsTest({ key: [0x12345678, 0x9abcdef0], rounds: 7 }));
+
+  for (const [n, options] of permTests) {
+    const name = `perm  MultisplitPerm n=${n} ${JSON.stringify(options)}`;
+    await runTest(name, () => runPermTest({ n, options }));
   }
 
   summarize();
@@ -516,10 +847,21 @@ export async function main(navigator) {
       const name = `scan  ${type.padEnd(9)} ${datatype}  ${opName.padEnd(8)} size=${size}`;
       await runLarge(name, () => runScanTest({ type, datatype, binop, size }));
     }
+    for (const [type, datatype, BinOpClass, size] of largeScanTests) {
+      const binop = new BinOpClass({ datatype });
+      const opName = BinOpClass.name.replace("BinOp", "").toLowerCase();
+      const name = `hscan ${type.padEnd(9)} ${datatype}  ${opName.padEnd(8)} size=${size}`;
+      await runLarge(name, () => runScanTest({ type, datatype, binop, size, Primitive: HierarchicalScan }));
+    }
 
     for (const [type, datatype, direction, size, keyBits] of largeSortTests) {
       const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}${keyBits !== undefined ? ` keyBits=${keyBits}` : ""}`;
       await runLarge(name, () => runSortTest({ type, datatype, direction, size, keyBits }));
+    }
+
+    for (const [n, options] of largePermTests) {
+      const name = `perm  MultisplitPerm n=${n} ${JSON.stringify(options)}`;
+      await runLarge(name, () => runPermTest({ n, options }));
     }
 
     summarizeLarge();

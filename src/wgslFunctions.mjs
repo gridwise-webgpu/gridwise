@@ -93,6 +93,31 @@
 
 import { BinOpAdd } from "./binop.mjs";
 
+/** Names shared by both versions of wgScan: one function and one workgroup
+ * temp per (scan type, binop, datatype, workgroup size), so that exclusive
+ * and inclusive scans can both be declared in one module. */
+function wgScanNames(env) {
+  const scanType = env.scanType ?? "exclusive";
+  if (scanType !== "exclusive" && scanType !== "inclusive") {
+    throw new Error(`wgScan: scanType must be "exclusive" or "inclusive", not "${scanType}"`);
+  }
+  for (const necessary of ["binop", "datatype", "workgroupSize"]) {
+    if (!(necessary in env)) {
+      console.warn(`wgScan: field '${necessary}' must be set in env`);
+    }
+  }
+  const Type = scanType === "inclusive" ? "Inclusive" : "Exclusive";
+  const config = [env.binop, env.datatype, env.workgroupSize].join("_");
+  const shortName = `wg${Type}Scan`;
+  return {
+    fnName: env.useLongFunctionName ? `${shortName}_${config}` : shortName,
+    wgTemp: `wg_${scanType}_scan_temp_${config}`,
+    T: env.datatype,
+    identity: env.binop.identity,
+    inclusive: scanType === "inclusive",
+  };
+}
+
 export class wgslFunctions {
   constructor(args) {
     this.env = args;
@@ -438,113 +463,79 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
 }`;
     return fn;
   }
-  workgroupScan(args = {}) {
+  wgScan(args = {}) {
     const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
-    /**
-     * Supports both inclusive and exclusive scan.
-     * Arguments:
-     * - output: Output array in global storage memory
-     * - input: Input array in read-only global storage memory
-     * - partials: Input array, one element per workgroup, to be added to workgroup
-     * - wgTemp: workgroup temporary memory
-     * Operation: Scans workgroup. Adds result of that scan to corresponding
-     *   element of "partials" input array.
-     * Requires declarations of:
-     * - "type" (exclusive or inclusive)
-     * - "binop" that, in turn, declares a subgroup{Type}ScanOp
+    /** Scan of one value per invocation across the workgroup, the scan
+     * counterpart of wgReduce.
+     *
+     *   ${this.fnDeclarations.wgScan()}                           // declares wgExclusiveScan
+     *   ${this.fnDeclarations.wgScan({ scanType: "inclusive" })}  // declares wgInclusiveScan
+     *
+     *   var total: T;
+     *   let prefix = wgExclusiveScan(value, &total, builtinsUniform, builtinsNonuniform);
+     *
+     * Exclusive: binop over the values of all invocations with a smaller
+     * local_invocation_index (identity for invocation 0). Inclusive: the
+     * same plus the invocation's own value. Both write the reduction of the
+     * whole workgroup to *total in every invocation. Works with any binop
+     * (add, min, max, multiply, custom). Call from workgroup-uniform control
+     * flow with every invocation; it contains workgroup barriers, including
+     * one at the end, so calls can follow one another directly.
+     *
+     * Args: scanType ("exclusive", default, or "inclusive"),
+     * useLongFunctionName (as in wgReduce). Requires binop (its wgslfn
+     * declared as "binop"), datatype and workgroupSize; with subgroups, also
+     * subgroupInclusiveOpScan declared in the module. Declares its own
+     * module-scope workgroup memory, named by configuration.
      */
-    const scanType = env.type;
-    const scanTypeCap = scanType.charAt(0).toUpperCase() + scanType.slice(1);
-    const subgroupScanOp = env.binop[`subgroup${scanTypeCap}ScanOp`];
+    const { fnName, wgTemp, T, identity, inclusive } = wgScanNames(env);
+    /* Scan within each subgroup (subgroupInclusiveOpScan: the binop's own
+     * subgroup scan if it has one, else shuffles), scan the subgroup totals
+     * sgsz at a time, then combine. The temp array has one entry per
+     * subgroup, sized for the smallest subgroup size WebGPU allows (4), not
+     * the adapter's reported minimum: the size a pipeline actually gets is
+     * not always the reported one. */
     return /* wgsl */ `
-    fn workgroup${scanTypeCap}Scan(builtins: Builtins,
-      output: ptr<storage, array<${env.datatype}>, read_write>,
-      input: ptr<storage, array<${env.datatype}>, read>,
-      partials: ptr<storage, array<${env.datatype}>, read>,
-      wgTemp: ptr<workgroup, array<${env.datatype}, 32> >
-    ) -> ${env.datatype} {
-      /* TODO: what if there are more threads than subgroup_size * subgroup_size? */
-      ${env.fnDeclarations.computeLinearizedGridParameters}
-      ${env.fnDeclarations.declareSubgroupVarsInsideHelper("builtins", "builtins")}
-      var numSubgroups = roundUpDivU32(${env.workgroupSize}, sgsz);
-      var i = gid;
-      var in = select(${env.binop.identity}, input[i], i < arrayLength(input));
-      workgroupBarrier();
-      /* "in" now contains the block of data to scan, padded with the identity */
-      /* (1) reduce "in" within our workgroup */
-      /* switch to local IDs only. write into wg memory */
-      var sgReduction = subgroupReduce(in);
-      var mySubgroupID = builtins.lidx / sgsz;
-      if (subgroupElect()) {
-        /* I'm the first element in my subgroup */
-        wgTemp[mySubgroupID] = sgReduction;
-      }
-      workgroupBarrier(); /* completely populate wg memory */
-      /* Now temp[i] contains reduction of subgroup i */
-      /* (2) read sums of all other subgroups into acc, in parallel across the subgroup */
-      /** acc is only valid for lid < numSubgroups, but we need uniform control flow
-       * for the subgroupScanOp. So the select and subgroup scan are wasted work for
-       * all but subgroup == 0. */
-      var spineScanInput = select(${env.binop.identity},
-                                  wgTemp[builtins.lidx],
-                                  builtins.lidx < numSubgroups);
-      /* no matter what type of scan we have, we use exclusiveScan here */
-      var spineScanOutput = ${env.binop.subgroupExclusiveScanOp}(spineScanInput);
-      /** add reduction of previous workgroups, computed in previous kernel */
-      if (builtins.lidx < sgsz) { /* only activate 0th subgroup */
-        wgTemp[builtins.lidx] = binop(partials[wgid], spineScanOutput);
-      }
-      workgroupBarrier();
-      /** Now go add that spineScan value back to my local scan. Here's where
-       * we differentiate between exclusive/inclusive. */
-      var subgroupScan = ${subgroupScanOp}(in);
-      return binop(wgTemp[mySubgroupID], subgroupScan);
-    };`;
-  }
-  oneWorkgroupExclusiveScan(args = {}) {
-    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
-    /**
-     * Arguments:
-     * - inputoutput: Input/output array in global storage memory (in place)
-     * Returns:
-     *   Nothing
-     * Restrictions:
-     *   Call this with one workgroup.
-     * Operation: Scans workgroup, writes back, one subgroup at a time, serially
-     *   Ignores any threads that aren't part of the 0th workgroup
-     *   Not efficent. Not even close to being efficient.
-     * Requires declaration of:
-     * - "binop" that, in turn, declares a subgroupExclusiveScanOp
-     */
-    return /* wgsl */ `
-    fn oneWorkgroupExclusiveScan(builtinsUniform: BuiltinsUniform,
-      builtinsNonuniform: BuiltinsNonuniform,
-      inputoutput: ptr<storage, array<${env.datatype}>, read_write>,
-    ) {
-      ${env.fnDeclarations.declareSubgroupVarsInsideHelper("builtinsUniform", "builtinsNonuniform")}
-      var acc : ${env.datatype} = ${env.binop.identity};
-      /* making this work under uniform control flow is tricky */
-      /* big idea: convert any control dependence to data dependence (i) */
-      var ibase : u32 = 0;
-      var sg0 = builtinsNonuniform.lidx < sgsz;
-      while (ibase < arrayLength(inputoutput)) {
-        /* work still left to be done */
-        var i = ibase + builtinsNonuniform.lidx;
-        var in = select(${env.binop.identity},
-                        inputoutput[i],
-                        (i < arrayLength(inputoutput)) && sg0);
+var<workgroup> ${wgTemp}: array<${T}, ${Math.ceil(env.workgroupSize / 4)}>;
 
-        var sgEScan = ${env.binop.subgroupExclusiveScanOp}(in);
-        var sgReduction = subgroupReduce(in);
-        if (sg0) {
-          inputoutput[i] = binop(acc, sgEScan);
-          acc = binop(acc, sgReduction);
-        }
-        var eadd = subgroupExclusiveAdd(in);
-        ibase += sgsz;
-      }
-      return;
-    };`;
+fn ${fnName}(in: ${T},
+             total: ptr<function, ${T}>,
+             builtinsUniform: BuiltinsUniform,
+             builtinsNonuniform: BuiltinsNonuniform) -> ${T} {
+  let lidx = builtinsNonuniform.lidx;
+  ${env.fnDeclarations.declareSubgroupVarsInsideHelper("builtinsUniform", "builtinsNonuniform")}
+  let sid = lidx / sgsz;
+  let numSubgroups = (${env.workgroupSize}u + sgsz - 1u) / sgsz;
+  /* (1) inclusive scan within each subgroup; its last lane posts the total */
+  let sgInclusive = subgroupInclusiveOpScan(in, sgid, sgsz);
+  if (sgid == sgsz - 1u || lidx == ${env.workgroupSize - 1}u) {
+    ${wgTemp}[sid] = sgInclusive;
+  }
+  workgroupBarrier();
+  /* (2) exclusive scan of the subgroup totals, sgsz at a time. Every
+   * subgroup computes it (subgroup operations need uniform control flow);
+   * subgroup 0 writes the results back in place. */
+  var carry: ${T} = ${identity};
+  for (var base = 0u; base < numSubgroups; base += sgsz) {
+    let i = base + sgid;
+    let v = select(${identity}, ${wgTemp}[min(i, numSubgroups - 1u)], i < numSubgroups);
+    let chunkInclusive = subgroupInclusiveOpScan(v, sgid, sgsz);
+    let chunkExclusive = select(${identity}, subgroupShuffleUp(chunkInclusive, 1u), sgid > 0u);
+    let chunkTotal = subgroupShuffle(chunkInclusive, sgsz - 1u);
+    workgroupBarrier(); /* everyone has read this chunk before it is overwritten */
+    if (sid == 0u && i < numSubgroups) {
+      ${wgTemp}[i] = binop(carry, chunkExclusive);
+    }
+    carry = binop(carry, chunkTotal);
+    workgroupBarrier();
+  }
+  /* (3) combine: the earlier subgroups' total, then the prefix in this subgroup */
+  let inSubgroup = ${inclusive ? "sgInclusive" : `select(${identity}, subgroupShuffleUp(sgInclusive, 1u), sgid > 0u)`};
+  let out = binop(${wgTemp}[sid], inSubgroup);
+  *total = carry;
+  workgroupBarrier(); /* ${wgTemp} may be reused by the next call */
+  return out;
+}`;
   }
 }
 
@@ -695,6 +686,63 @@ export class wgslFunctionsWithoutSubgroupSupport extends wgslFunctions {
       return lidx < 32u;
     }`;
   }
+  /* No subgroups: a Hillis-Steele scan in workgroup memory with barriers
+   * only. Emulated subgroups would spin-wait on other invocations, which
+   * needs forward-progress guarantees WebGPU does not make; barriers do not. */
+  wgScan(args = {}) {
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    /** Scan (no-subgroup version) of one value per invocation across the workgroup, the scan
+     * counterpart of wgReduce.
+     *
+     *   ${this.fnDeclarations.wgScan()}                           // declares wgExclusiveScan
+     *   ${this.fnDeclarations.wgScan({ scanType: "inclusive" })}  // declares wgInclusiveScan
+     *
+     *   var total: T;
+     *   let prefix = wgExclusiveScan(value, &total, builtinsUniform, builtinsNonuniform);
+     *
+     * Exclusive: binop over the values of all invocations with a smaller
+     * local_invocation_index (identity for invocation 0). Inclusive: the
+     * same plus the invocation's own value. Both write the reduction of the
+     * whole workgroup to *total in every invocation. Works with any binop
+     * (add, min, max, multiply, custom). Call from workgroup-uniform control
+     * flow with every invocation; it contains workgroup barriers, including
+     * one at the end, so calls can follow one another directly.
+     *
+     * Args: scanType ("exclusive", default, or "inclusive"),
+     * useLongFunctionName (as in wgReduce). Requires binop (its wgslfn
+     * declared as "binop"), datatype and workgroupSize; with subgroups, also
+     * subgroupInclusiveOpScan declared in the module. Declares its own
+     * module-scope workgroup memory, named by configuration.
+     */
+    const { fnName, wgTemp, T, identity, inclusive } = wgScanNames(env);
+    const W = env.workgroupSize;
+    return /* wgsl */ `
+var<workgroup> ${wgTemp}: array<${T}, ${W}>;
+
+fn ${fnName}(in: ${T},
+             total: ptr<function, ${T}>,
+             builtinsUniform: BuiltinsUniform,
+             builtinsNonuniform: BuiltinsNonuniform) -> ${T} {
+  let lidx = builtinsNonuniform.lidx;
+  ${wgTemp}[lidx] = in;
+  workgroupBarrier();
+  for (var offset = 1u; offset < ${W}u; offset <<= 1u) {
+    var earlier: ${T} = ${identity};
+    if (lidx >= offset) {
+      earlier = ${wgTemp}[lidx - offset];
+    }
+    workgroupBarrier();
+    ${wgTemp}[lidx] = binop(earlier, ${wgTemp}[lidx]);
+    workgroupBarrier();
+  }
+  /* ${wgTemp} now holds the inclusive scan */
+  let out = ${inclusive ? `${wgTemp}[lidx]` : `select(${identity}, ${wgTemp}[max(lidx, 1u) - 1u], lidx > 0u)`};
+  *total = ${wgTemp}[${W - 1}u];
+  workgroupBarrier(); /* ${wgTemp} may be reused by the next call */
+  return out;
+}`;
+  }
+
   subgroupAny(args = {}) {
     // eslint-disable-next-line no-unused-vars
     const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
