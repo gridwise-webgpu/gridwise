@@ -15,6 +15,7 @@ import {
   ExecutePrimitive,
 } from "../src/primitive.mjs";
 import { OneSweepSort } from "../src/onesweep.mjs";
+import { MultisplitPerm } from "../src/multisplitperm.mjs";
 
 export async function main(navigator) {
   const isNode = typeof window === "undefined";
@@ -614,6 +615,57 @@ ${randomBitsWGSL(this.rng)}
     return errors;
   }
 
+  /* ------------------------------------------------------------------ */
+  /* Random permutations                                                  */
+  /* ------------------------------------------------------------------ */
+
+  /* MultisplitPerm writes a permutation of 0..n-1; validate() checks it is a
+   * permutation in group order and, when reproducible, that it equals the
+   * CPU reference bit for bit. */
+  async function runPermTest({ n, options }) {
+    const primitive = new MultisplitPerm({
+      device,
+      n,
+      seed: 0x5eed,
+      ...(useEmu && { disableSubgroups: true }),
+      ...options,
+    });
+    const outputBuffer = device.createBuffer({
+      size: n * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    const mappable = device.createBuffer({
+      size: n * 4,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    await primitive.execute({ outputBuffer });
+    const encoder = device.createCommandEncoder();
+    encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, n * 4);
+    device.queue.submit([encoder.finish()]);
+    await mappable.mapAsync(GPUMapMode.READ);
+    const output = new Uint32Array(mappable.getMappedRange().slice());
+    mappable.unmap();
+    mappable.destroy();
+    outputBuffer.destroy();
+    const result = primitive.validate({ outputBuffer: output });
+    primitive.destroy();
+    return result;
+  }
+
+  /* [n, options] */
+  const permTests = [
+    [65536, {}],
+    [65536, { reproducible: true }],
+    [100003, { carry: "indices" }] /* not a power of two */,
+    [131072, { reproducible: true, split: "3+3+1" }] /* three passes */,
+    [5000, { reproducible: true, localCap: 256 }] /* overflow path */,
+    [16384, { reproducible: true, rng: { key: [1, 2], rounds: 7 }, carry: "pairs" }],
+  ];
+  const largePermTests = [
+    [1 << 20, { reproducible: true }] /* CPU reference: keep it modest */,
+    [1 << 24, {}],
+  ];
+
   const listEl = isNode ? null : document.getElementById("test-list");
   const { runTest, summarize } = makeRunner(listEl, summaryEl);
 
@@ -642,6 +694,11 @@ ${randomBitsWGSL(this.rng)}
   await runTest("ExecutePrimitive: scan nested in another primitive", runExecutePrimitiveTest);
   await runTest("random bits: keyed hash, WGSL = JS; Philox known answers", () => runRandomBitsTest(null));
   await runTest("random bits: Philox4x32-7, WGSL = JS", () => runRandomBitsTest({ key: [0x12345678, 0x9abcdef0], rounds: 7 }));
+
+  for (const [n, options] of permTests) {
+    const name = `perm  MultisplitPerm n=${n} ${JSON.stringify(options)}`;
+    await runTest(name, () => runPermTest({ n, options }));
+  }
 
   summarize();
 
@@ -672,6 +729,11 @@ ${randomBitsWGSL(this.rng)}
     for (const [type, datatype, direction, size] of largeSortTests) {
       const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}`;
       await runLarge(name, () => runSortTest({ type, datatype, direction, size }));
+    }
+
+    for (const [n, options] of largePermTests) {
+      const name = `perm  MultisplitPerm n=${n} ${JSON.stringify(options)}`;
+      await runLarge(name, () => runPermTest({ n, options }));
     }
 
     summarizeLarge();
