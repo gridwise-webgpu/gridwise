@@ -4,7 +4,7 @@ title: "Gridwise Random Permutations"
 category: gridwise
 permalink: /random-permutations/
 excerpt: "MultisplitPerm: an unbiased, optionally bit-reproducible GPU random permutation built from a multisplit and a per-group shuffle."
-order: 13
+order: 14
 ---
 
 `MultisplitPerm` writes a uniformly random permutation of 0..n-1 into an output buffer:
@@ -43,7 +43,7 @@ The fastest `groupSize` and `split` depend on the GPU. `tuneMultisplitPerm({ dev
 
 Writing this primitive added several general-purpose pieces to Gridwise:
 
-- **`ExecutePrimitive` action.** A primitive's `compute()` can run another primitive on the same encoder, binding the child's named buffers to its own: `new ExecutePrimitive({ primitive: this.scan, buffers: { inputBuffer: "counts", outputBuffer: "offsets" } })`. Create the child once (for example, in the constructor), not in `compute()`. GPU timing counts and records the child's kernels together with the parent's.
+- **`ExecutePrimitive` action** (see [Composing Primitives](../composing-primitives/)). A primitive's `compute()` can run another primitive on the same encoder, binding the child's named buffers to its own: `new ExecutePrimitive({ primitive: this.scan, buffers: { inputBuffer: "counts", outputBuffer: "offsets" } })`. Create the child once (for example, in the constructor), not in `compute()`. GPU timing counts and records the child's kernels together with the parent's.
 - **`wgExclusiveScan` in `wgslFunctions`.** An exclusive scan of one value per invocation across a workgroup, the scan counterpart of `wgReduce`. The subgroup version handles any subgroup size from 4 up. The version for devices without subgroups uses only workgroup barriers, not emulated subgroups, so it does not depend on forward progress.
 - **`random.mjs`.** WGSL random bits (a keyed invertible hash and Philox4x32) with bit-exact JavaScript mirrors for validation.
 - **`destroy()` frees internal buffers.** `BasePrimitive.destroy()` now destroys the GPU buffers the primitive allocated itself with `AllocateBuffer`. Buffers the caller passed in are left alone.
