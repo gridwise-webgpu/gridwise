@@ -275,7 +275,6 @@ async function buildAndRun() {
           device,
           datatype: params.datatype,
           direction: params.direction,
-          copyOutputToTemp: true,
           inputLength: inputLength,
         });
         break;
@@ -284,7 +283,6 @@ async function buildAndRun() {
           device,
           datatype: params.datatype,
           direction: params.direction,
-          copyOutputToTemp: true,
           type: "keyvalue",
           inputLength: inputLength,
         });
@@ -450,10 +448,14 @@ async function buildAndRun() {
     const encoder = device.createCommandEncoder({
       label: "copy result CPU->GPU encoder",
     });
-    const outputIsInMemsrcBuffer =
+    /* sort leaves its output in whichever buffer its last radix pass wrote
+     * (keysInOut = memsrcBuffer or keysTemp = memdestBuffer) and reports
+     * which; scan and reduce write outputBuffer = memdestBuffer */
+    const isSort =
       params.primitive === "sort_keys" || params.primitive === "sort_pairs";
+    const sortOutputInSrc = isSort && !primitive.outputIsInTemp;
     encoder.copyBufferToBuffer(
-      outputIsInMemsrcBuffer ? memsrcBuffer : memdestBuffer,
+      sortOutputInSrc ? memsrcBuffer : memdestBuffer,
       0,
       mappableMemdestBuffer,
       0,
@@ -462,7 +464,7 @@ async function buildAndRun() {
 
     if (params.primitive == "sort_pairs") {
       encoder.copyBufferToBuffer(
-        payLoadsrcBuffer,
+        sortOutputInSrc ? payLoadsrcBuffer : payloadDestBuffer,
         0,
         mappablePayloadDestBuffer,
         0,
@@ -511,9 +513,6 @@ async function buildAndRun() {
           });
           break;
         default:
-          /* this validation is only possible because the output is copied
-           * into outputBuffer by configuring the OneSweepSort primitive with
-           * copyOutputToTemp: true */
           errorstr = primitive.validate({
             inputBuffer: memsrc,
             outputBuffer: memdest,

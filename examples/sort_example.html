@@ -30,32 +30,37 @@
       boilerplate, the important parts follow.
     </p>
     <p>
-      First, we declare the sort primitive. We configure its datatype (i32), the
-      input length, and set <code>copyOutputToTemp</code> to
-      <code>true</code> so the sorted result is written to a separate
-      destination buffer rather than overwriting the input.
+      First, we declare the sort primitive. We configure its datatype (i32) and
+      the input length.
     </p>
     <pre><code class="language-javascript">const datatype = "i32";
 const sortKeysPrimitive = new OneSweepSort({
   device,
   datatype,
   inputLength: inputLength,
-  copyOutputToTemp: true,
 });
 const primitive = sortKeysPrimitive;</code></pre>
     <p>
       We have declared buffers (using WebGPU's <code>device.createBuffer</code>)
       called <code>memsrcBuffer</code> and <code>memdestBuffer</code>. Sort
-      operates on <code>keysInOut</code> (the input, which may be modified in
-      place during sorting) and <code>keysTemp</code> (the destination buffer
-      that holds the final sorted output when <code>copyOutputToTemp</code> is
-      true). We then call the primitive's <code>execute</code> procedure (note
+      ping-pongs between <code>keysInOut</code> (the input) and
+      <code>keysTemp</code>, one radix pass at a time, so both may be
+      overwritten. We call the primitive's <code>execute</code> procedure (note
       that <code>execute</code> is an <code>async</code> call):
     </p>
     <pre><code class="language-javascript">await primitive.execute({
   keysInOut: memsrcBuffer,
   keysTemp: memdestBuffer,
 });</code></pre>
+    <p>
+      The sorted output is in whichever buffer the last pass wrote. The
+      primitive reports which (<code>outputIsInTemp</code>, or
+      <code>outputKeysBufferName</code>, which is <code>"keysInOut"</code> or
+      <code>"keysTemp"</code>), so we read back from that buffer. (Constructing
+      the primitive with <code>copyOutputToTemp: true</code> instead guarantees
+      the output is in <code>keysTemp</code>, at the cost of a copy.)
+    </p>
+    <pre><code class="language-javascript">const sortedBuffer = primitive.outputIsInTemp ? memdestBuffer : memsrcBuffer;</code></pre>
     <p>We then read back the result from the GPU and validate it.</p>
     <p>
       Your developer console should show a result that allows you to inspect the

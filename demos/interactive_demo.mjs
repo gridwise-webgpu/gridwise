@@ -214,7 +214,8 @@ function initGPUResources(count) {
     type: "keyvalue",
     direction: "ascending",
     inputLength: count,
-    copyOutputToTemp: true,
+    /* no copyOutputToTemp: the sorted payload stays in whichever buffer the
+     * last radix pass wrote, and buildBindGroups() binds that one */
   });
 
   sortKeysBuffer = device.createBuffer({
@@ -707,7 +708,8 @@ function buildBindGroups() {
     layout: applySortedPipeline.getBindGroupLayout(0),
     entries: [
       { binding: 0, resource: { buffer: particlesBuffer } },
-      { binding: 1, resource: { buffer: sortTempPayloadBuffer } },
+      /* the sorted payload: payloadTemp or payloadInOut, as the sorter reports */
+      { binding: 1, resource: { buffer: sorter.outputIsInTemp ? sortTempPayloadBuffer : sortPayloadBuffer } },
       { binding: 2, resource: { buffer: simulationUniformBuffer } },
     ],
   });

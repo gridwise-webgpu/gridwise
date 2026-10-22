@@ -81,7 +81,13 @@ const sort = new OneSweepSort({
 });
 
 sort.registerBuffer({ label: "keysInOut", buffer: keysBuffer });
+sort.registerBuffer({ label: "keysTemp", buffer: keysTempBuffer });
 await sort.execute({ count });
+
+// Radix sort ping-pongs between the two buffers; the sorted keys are in
+// whichever the last pass wrote ("keysInOut" or "keysTemp"):
+const sorted = sort.getBuffer(sort.outputKeysBufferName);
+// or construct with copyOutputToTemp: true to always find them in keysTemp
 ```
 
 ---
