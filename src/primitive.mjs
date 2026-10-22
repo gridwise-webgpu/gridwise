@@ -92,6 +92,33 @@ function generateCacheKey(obj) {
   });
 }
 
+/** A uniform buffer's contents can only change by an upload: kernels cannot
+ * write uniform buffers. So when AllocateBuffer reuses one and its
+ * populateWith data is identical to what was last uploaded, the upload can be
+ * skipped. That matters for primitives executed many times in one command
+ * buffer (benchmarks), where every queue.writeBuffer is a copy the GPU runs.
+ * Storage buffers are always re-uploaded: a kernel may have changed them. */
+const lastUniformUpload = new WeakMap(); /* GPUBuffer -> Uint8Array */
+function uniformContentsUnchanged(gpuBuffer, data) {
+  const isUniform =
+    typeof GPUBufferUsage !== "undefined" &&
+    gpuBuffer.usage !== undefined &&
+    (gpuBuffer.usage & GPUBufferUsage.UNIFORM) !== 0 &&
+    (gpuBuffer.usage & GPUBufferUsage.STORAGE) === 0;
+  if (!isUniform) {
+    return false;
+  }
+  const bytes = ArrayBuffer.isView(data)
+    ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+    : new Uint8Array(data);
+  const last = lastUniformUpload.get(gpuBuffer);
+  if (last && last.length === bytes.length && last.every((b, i) => b === bytes[i])) {
+    return true;
+  }
+  lastUniformUpload.set(gpuBuffer, bytes.slice());
+  return false;
+}
+
 export class BasePrimitive {
   // these static objects are shared by all Primitives
   static __deviceToWebGPUObjectCache = new WeakMap();
@@ -1067,11 +1094,10 @@ dispatchGeometry: ${dispatchGeometry}`);
     }
     /* todo: combine this with WriteGPUBuffer below */
     if (action.populateWith) {
-      this.device.queue.writeBuffer(
-        this.getBuffer(action.label).buffer.buffer,
-        0,
-        action.populateWith
-      );
+      const gpuBuffer = this.getBuffer(action.label).buffer.buffer;
+      if (!uniformContentsUnchanged(gpuBuffer, action.populateWith)) {
+        this.device.queue.writeBuffer(gpuBuffer, 0, action.populateWith);
+      }
     }
   }
 
