@@ -1,9 +1,9 @@
-import { range, arrayProd } from "./util.mjs";
+import { range } from "./util.mjs";
 import {
   BasePrimitive,
   Kernel,
-  // InitializeMemoryBlock,
   AllocateBuffer,
+  ExecutePrimitive,
 } from "./primitive.mjs";
 import { BaseTestSuite } from "./testsuite.mjs";
 import { BinOpAddU32 } from "./binop.mjs";
@@ -208,226 +208,182 @@ const scanWGSizeBinOpPlot = {
   caption: "Lines are workgroup size",
 };
 
-export class WGScan extends BaseScan {
-  constructor(args) {
-    super(args);
-  }
-
-  finalizeRuntimeParameters() {
-    /* Set reasonable defaults for tunable parameters */
-    this.workgroupSize = this.workgroupSize ?? 256;
-    this.maxGSLWorkgroupCount = this.maxGSLWorkgroupCount ?? 256;
-
-    /* Compute settings based on tunable parameters */
-    this.workgroupCount = Math.min(
-      Math.ceil(this.getBuffer("inputBuffer").size / this.workgroupSize),
-      this.maxGSLWorkgroupCount
-    );
-    this.numPartials = this.workgroupCount;
-  }
-  scanKernelDefinition = () => {
-    /** this needs to be an arrow function so "this" is the Primitive
-     *  that declares it
-     */
-
-    /** this definition could be inline when the kernel is specified,
-     * but since we call it twice, we move it here
-     */
-    const scanType = this.type;
-    /* exclusive -> Exclusive, inclusive -> Inclusive */
-    const scanTypeCap = scanType.charAt(0).toUpperCase() + scanType.slice(1);
-    return /* wgsl */ `
-      enable subgroups;
-      /* output */
-      @group(0) @binding(0) var<storage, read_write> outputBuffer: array<${
-        this.datatype
-      }>;
-      /* input */
-      @group(0) @binding(1) var<storage, read> inputBuffer: array<${
-        this.datatype
-      }>;
-
-      ${BasePrimitive.fnDeclarations.commonDefinitions}
-
-      /* TODO: the "32" in the next line should be workgroupSize / subgroupSize */
-      var<workgroup> wgTemp: array<${this.datatype}, 32>; // zero initialized
-
-      ${this.binop.wgslfn}
-
-      ${BasePrimitive.fnDeclarations.roundUpDivU32}
-
-      ${BasePrimitive.fnDeclarations.workgroupScan(this)}
-
-      @compute @workgroup_size(${this.workgroupSize}) fn workgroupScanKernel(
-         builtins: Builtins) {
-          var scan: ${this.datatype} = workgroup${scanTypeCap}Scan(builtins);
-          outputBuffer[builtins.gid.x] = scan;
-        }`;
-  };
-  compute() {
-    this.finalizeRuntimeParameters();
-    return [
-      new Kernel({
-        kernel: this.scanKernelDefinition,
-        bufferTypes: [["storage", "read-only-storage"]],
-        bindings: [["outputBuffer", "inputBuffer"]],
-        label: "workgroup scan",
-        getDispatchGeometry: () => {
-          /* this is a grid-stride loop, so limit the dispatch */
-          return [1];
-        },
-      }),
-    ];
-  }
-}
-
+/**
+ * HierarchicalScan: a scan (exclusive, inclusive or reduce) built in the
+ * classic reduce-then-scan way, from one workgroup function (wgScan) and
+ * composition (ExecutePrimitive). Not chained like DLDFScan, so it makes no
+ * forward-progress assumptions and needs no subgroups: without them it uses
+ * only workgroup barriers.
+ *
+ * The input is cut into tiles of workgroupSize * itemsPerThread elements;
+ * invocation i of a tile owns itemsPerThread consecutive elements.
+ *
+ *   one tile:   tile_scan          scan the tile (or reduce it) directly
+ *   more:       tile_reduce        each tile's reduction -> partials
+ *               (HierarchicalScan) exclusive scan of partials -> carries,
+ *                                  itself a HierarchicalScan, run with
+ *                                  ExecutePrimitive: the recursion ends when
+ *                                  the partials fit in one tile
+ *               tile_scan          scan each tile, starting from its carry
+ *   reduce:     tile_reduce, then a HierarchicalScan reduce of the partials
+ *               (one tile: tile_reduce writes the result directly)
+ *
+ * Memory traffic: one read for the reductions, then one read and one write
+ * for the scan (about 3n elements, against about 2n for DLDFScan).
+ *
+ * Options (besides BaseScan's datatype, binop, type): workgroupSize (default
+ * 256), itemsPerThread (default 4).
+ */
 export class HierarchicalScan extends BaseScan {
-  /**
-   * 3 steps, each a kernel:
-   * 1. Reduce each workgroup, write into partials (spine)
-   * 2. Scan partials (spine)
-   * 3. Scan each workgroup, adding in scanned partials
-   *
-   * (Currently) limited in size to what we can scan in step 2 w/ a single kernel
-   * Could be alleviated by continuing to recurse
-   */
   constructor(args) {
     super(args);
+    this.workgroupSize = this.workgroupSize ?? 256;
+    this.itemsPerThread = this.itemsPerThread ?? 4;
+    if (!("label" in args)) {
+      this.label += this.makeParamString(["type", "datatype", "binop", "useSubgroups"]);
+    }
   }
 
   finalizeRuntimeParameters() {
-    /* Set reasonable defaults for tunable parameters */
-    this.workgroupSize = this.workgroupSize ?? 256;
-    this.numThreadsPerWorkgroup = arrayProd(this.workgroupSize);
-
-    /* Compute settings based on tunable parameters */
-    this.workgroupCount = Math.ceil(
-      this.getBuffer("inputBuffer").size /
-        (this.numThreadsPerWorkgroup * datatypeToBytes(this.datatype))
-    );
-    this.numPartials = this.workgroupCount;
+    this.inputLength = this.getBuffer("inputBuffer").size / datatypeToBytes(this.datatype);
+    this.tileSize = this.workgroupSize * this.itemsPerThread;
+    this.numTiles = Math.max(1, Math.ceil(this.inputLength / this.tileSize));
+    this.workgroupCount = this.numTiles;
+    this.scanParameters = new Uint32Array([this.inputLength, this.numTiles, 0, 0]);
   }
-  reducePerWorkgroupKernel = () => {
+
+  /** The scan of the per-tile partials: another HierarchicalScan (exclusive,
+   * or reduce for a reduce), created once and reused. */
+  get partialsScan() {
+    const type = this.type === "reduce" ? "reduce" : "exclusive";
+    if (this.__partialsScan?.type !== type) {
+      this.__partialsScan = new HierarchicalScan({
+        device: this.device,
+        datatype: this.datatype,
+        binop: this.binop,
+        type,
+        workgroupSize: this.workgroupSize,
+        itemsPerThread: this.itemsPerThread,
+        ...(this.disableSubgroups && { disableSubgroups: true }),
+        ...(this.adapter && { adapter: this.adapter }),
+      });
+    }
+    return this.__partialsScan;
+  }
+
+  /** WGSL for one tile kernel. mode: "reduce" writes each tile's reduction
+   * to out[tile]; "scan" writes the scan of each tile, starting from
+   * carries[tile] when withCarries. */
+  tileKernel = ({ mode, withCarries }) => {
+    const T = this.datatype;
+    const K = this.itemsPerThread;
+    const W = this.workgroupSize;
+    const inclusive = this.type === "inclusive";
     return /* wgsl */ `
-    enable subgroups;
-    /* output */
-    @group(0) @binding(0) var<storage, read_write> partials: array<${this.datatype}>;
-    /* input */
-    @group(0) @binding(1) var<storage, read> inputBuffer: array<${this.datatype}>;
+${this.fnDeclarations.enableSubgroupsIfAppropriate()}
+${this.fnDeclarations.commonDefinitions()}
+${this.fnDeclarations.subgroupEmulation()}
+${this.binop.wgslfn}
+${this.fnDeclarations.subgroupInclusiveOpScan()}
+${this.fnDeclarations.wgScan()}
 
-    /* TODO: the "32" in the next line should be workgroupSize / subgroupSize */
-    var<workgroup> wgTemp: array<${this.datatype}, 32>; // zero initialized
+struct ScanParameters { n: u32, numTiles: u32, p0: u32, p1: u32 };
+@group(0) @binding(0) var<storage, read> inputBuffer: array<${T}>;
+@group(0) @binding(1) var<storage, read_write> out: array<${T}>;
+@group(0) @binding(2) var<uniform> params: ScanParameters;
+${withCarries ? `@group(0) @binding(3) var<storage, read> carries: array<${T}>;` : ""}
 
-    ${this.fnDeclarations.commonDefinitions}
-    ${this.binop.wgslfn}
-    ${this.fnDeclarations.roundUpDivU32}
-    ${this.fnDeclarations.workgroupReduce}
+const K = ${K}u;
 
-    @compute @workgroup_size(${this.workgroupSize}) fn reducePerWorkgroupKernel(
-      builtins: Builtins
-    ) {
-        ${this.fnDeclarations.computeLinearizedGridParameters}
-        var reduction: ${this.datatype} = workgroupReduce(&inputBuffer, &wgTemp, builtins);
-        if (builtins.lid == 0) {
-          partials[wgid] = reduction;
-        }
-      }
-    `;
+@compute @workgroup_size(${W})
+fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
+  ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
+  if (wgid >= params.numTiles) { return; }
+  let lidx = builtinsNonuniform.lidx;
+  /* this invocation's K consecutive elements: load them and scan them in order */
+  let first = wgid * ${W * K}u + lidx * K;
+  var items: array<${T}, K>;
+  var threadTotal: ${T} = ${this.binop.identity};
+  for (var k = 0u; k < K; k++) {
+    let i = first + k;
+    let x = select(${this.binop.identity}, inputBuffer[min(i, params.n - 1u)], i < params.n);
+    ${mode === "scan" ? (inclusive ? "threadTotal = binop(threadTotal, x);\n    items[k] = threadTotal;" : "items[k] = threadTotal;\n    threadTotal = binop(threadTotal, x);") : "threadTotal = binop(threadTotal, x);"}
+  }
+  /* combine the invocations' totals across the workgroup */
+  var tileTotal: ${T};
+  let prefix = wgExclusiveScan(threadTotal, &tileTotal, builtinsUniform, builtinsNonuniform);
+  ${
+    mode === "reduce"
+      ? `if (lidx == 0u) { out[wgid] = tileTotal; }`
+      : `let carry = ${withCarries ? "binop(carries[wgid], prefix)" : "prefix"};
+  for (var k = 0u; k < K; k++) {
+    let i = first + k;
+    if (i < params.n) { out[i] = binop(carry, items[k]); }
+  }`
+  }
+}`;
   };
 
-  scanOneWorkgroupKernel = () => {
-    return /* wgsl */ `
-    enable subgroups;
-    /* input + output */
-    @group(0) @binding(0) var<storage, read_write> partials: array<${this.datatype}>;
-
-    ${this.fnDeclarations.commonDefinitions}
-
-    /* TODO: the "32" in the next line should be workgroupSize / subgroupSize */
-    var<workgroup> wgTemp: array<${this.datatype}, 32>; // zero initialized
-
-    ${this.binop.wgslfn}
-    ${this.fnDeclarations.roundUpDivU32}
-    ${this.fnDeclarations.oneWorkgroupExclusiveScan}
-
-    @compute @workgroup_size(${this.workgroupSize}) fn scanOneWorkgroupKernel(
-      builtinsUniform: BuiltinsUniform,
-      builtinsNonuniform: BuiltinsNonuniform
-    ) {
-        oneWorkgroupExclusiveScan(builtinsUniform, builtinsNonuniform, &partials);
-      }
-    `;
-  };
-
-  scanAndAddPartialsKernel = () => {
-    /** this needs to be an arrow function so "this" is the Primitive
-     *  that declares it
-     */
-    const scanType = this.type;
-    /* exclusive -> Exclusive, inclusive -> Inclusive */
-    const scanTypeCap = scanType.charAt(0).toUpperCase() + scanType.slice(1);
-    return /* wgsl */ `
-      enable subgroups;
-      /* output */
-      @group(0) @binding(0) var<storage, read_write> outputBuffer: array<${this.datatype}>;
-      /* input */
-      @group(0) @binding(1) var<storage, read> inputBuffer: array<${this.datatype}>;
-      @group(0) @binding(2) var<storage, read> partials: array<${this.datatype}>;
-
-      /* TODO: the "32" in the next line should be workgroupSize / subgroupSize */
-      var<workgroup> wgTemp: array<${this.datatype}, 32>; // zero initialized
-
-      ${this.fnDeclarations.commonDefinitions}
-      ${this.binop.wgslfn}
-      ${this.fnDeclarations.roundUpDivU32}
-      ${this.fnDeclarations.workgroupScan}
-
-      @compute @workgroup_size(${this.workgroupSize}) fn scanAndAddPartialsKernel(
-        builtins: Builtins
-      ) {
-          ${this.fnDeclarations.computeLinearizedGridParameters}
-          var scan: ${this.datatype} = workgroup${scanTypeCap}Scan(builtins, &outputBuffer, &inputBuffer, &partials, &wgTemp);
-          outputBuffer[gid] = scan;
-        }`;
-  };
   compute() {
     this.finalizeRuntimeParameters();
-    return [
+    const T = this.datatype;
+    const actions = [
       new AllocateBuffer({
-        label: "partials",
-        size: this.numPartials * 4,
-      }),
-      new Kernel({
-        kernel: this.reducePerWorkgroupKernel,
-        bufferTypes: [["storage", "read-only-storage"]],
-        bindings: [["partials", "inputBuffer"]],
-        label: "reduce each workgroup into partials",
-        logKernelCodeToConsole: false,
-        getDispatchGeometry: () => {
-          return this.getSimpleDispatchGeometry();
-        },
-      }),
-      new Kernel({
-        kernel: this.scanOneWorkgroupKernel,
-        bufferTypes: [["storage"]],
-        bindings: [["partials"]],
-        label: "single-workgroup exclusive scan",
-        logKernelCodeToConsole: false,
-        getDispatchGeometry: () => {
-          return [1];
-        },
-      }),
-      new Kernel({
-        kernel: this.scanAndAddPartialsKernel,
-        bufferTypes: [["storage", "read-only-storage", "read-only-storage"]],
-        bindings: [["outputBuffer", "inputBuffer", "partials"]],
-        label: "add partials to scan of each workgroup",
-        logKernelCodeToConsole: false,
-        getDispatchGeometry: () => {
-          return this.getSimpleDispatchGeometry();
-        },
+        label: "scanParameters",
+        size: this.scanParameters.byteLength,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        populateWith: this.scanParameters,
       }),
     ];
+    const dispatch = () => this.getSimpleDispatchGeometry({ workgroupCount: this.numTiles });
+    const tile = (mode, withCarries, outName) =>
+      new Kernel({
+        kernel: () => this.tileKernel({ mode, withCarries }),
+        entryPoint: "main",
+        bufferTypes: [
+          ["read-only-storage", "storage", "uniform", ...(withCarries ? ["read-only-storage"] : [])],
+        ],
+        bindings: [["inputBuffer", outName, "scanParameters", ...(withCarries ? ["carries"] : [])]],
+        label: `HierarchicalScan tile_${mode} (${this.numTiles} tiles)`,
+        getDispatchGeometry: dispatch,
+      });
+    if (this.numTiles === 1) {
+      /* one tile: scan or reduce it directly */
+      actions.push(tile(this.type === "reduce" ? "reduce" : "scan", false, "outputBuffer"));
+      return actions;
+    }
+    /* exactly numTiles elements: the nested scan sizes itself from this buffer,
+     * and padding would add elements (wrong for min, max, multiply) */
+    const partialsSize = this.numTiles * datatypeToBytes(T);
+    actions.push(
+      new AllocateBuffer({ label: "partials", size: partialsSize, clearBufferOnReuse: false }),
+      tile("reduce", false, "partials")
+    );
+    if (this.type === "reduce") {
+      actions.push(
+        new ExecutePrimitive({
+          primitive: this.partialsScan,
+          buffers: { inputBuffer: "partials", outputBuffer: "outputBuffer" },
+          label: "reduce of the tile reductions",
+        })
+      );
+      return actions;
+    }
+    actions.push(
+      new AllocateBuffer({ label: "carries", size: partialsSize, clearBufferOnReuse: false }),
+      new ExecutePrimitive({
+        primitive: this.partialsScan,
+        buffers: { inputBuffer: "partials", outputBuffer: "carries" },
+        label: "exclusive scan of the tile reductions",
+      }),
+      tile("scan", true, "outputBuffer")
+    );
+    return actions;
+  }
+
+  destroy() {
+    super.destroy();
+    this.__partialsScan?.destroy();
   }
 }
 
