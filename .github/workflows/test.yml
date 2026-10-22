@@ -3,8 +3,8 @@ name: Run WebGPU Primitives Tests
 on:
   push:
     branches: [ main ]
+  # every pull request, including stacked PRs whose base is another PR's branch
   pull_request:
-    branches: [ main ]
 
 jobs:
   test:
