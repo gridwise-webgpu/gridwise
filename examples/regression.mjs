@@ -7,6 +7,7 @@ import {
 import { datatypeToTypedArray, getBrowserName } from "../src/util.mjs";
 import { DLDFScan } from "../src/scandldf.mjs";
 import { HierarchicalScan } from "../src/scan.mjs";
+import { randomBitsWGSL, randomBitsJS, pmMixJS, philox4x32JS } from "../src/random.mjs";
 import {
   BasePrimitive,
   Kernel,
@@ -538,6 +539,81 @@ export async function main(navigator) {
     return errors;
   }
 
+  /* random.mjs: the JS Philox against Random123's known-answer vectors, then
+   * the WGSL functions against their JS mirrors for 4096 inputs. */
+  class RandomBitsTest extends BasePrimitive {
+    constructor(args) {
+      super(args);
+      this.knownBuffers = ["outputBuffer"];
+    }
+    compute() {
+      return [
+        new Kernel({
+          kernel: /* wgsl */ `
+${randomBitsWGSL(this.rng)}
+@group(0) @binding(0) var<storage, read_write> outputBuffer: array<u32>;
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) id: vec3u) {
+  let i = id.x;
+  var ctr = 0u;
+  outputBuffer[4u * i] = pm_mix(i, 0x2545f491u);
+  outputBuffer[4u * i + 1u] = pm_unmix(pm_mix(i, 77u), 77u);
+  outputBuffer[4u * i + 2u] = pm_rand(i, i >> 3u, 0x5eedu);
+  outputBuffer[4u * i + 3u] = pm_bounded(i + 1u, i, 9u, &ctr);
+}`,
+          bufferTypes: [["storage"]],
+          bindings: [["outputBuffer"]],
+          getDispatchGeometry: () => [16],
+        }),
+      ];
+    }
+  }
+
+  async function runRandomBitsTest(rng) {
+    let errors = "";
+    if (!rng) {
+      const hex = (a) => a.map((x) => x.toString(16).padStart(8, "0")).join(" ");
+      const kat = [
+        [[0, 0, 0, 0], [0, 0], "6627e8d5 e169c58d bc57ac4c 9b00dbd8"],
+        [[0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff], [0xffffffff, 0xffffffff], "408f276d 41c83b0e a20bc7c6 6d5451fd"],
+        [[0x243f6a88, 0x85a308d3, 0x13198a2e, 0x03707344], [0xa4093822, 0x299f31d0], "d16cfe09 94fdcceb 5001e420 24126ea1"],
+      ];
+      for (const [c, k, want] of kat) {
+        const got = hex(philox4x32JS(c, k));
+        if (got !== want) errors += `\nphilox4x32JS(${hex(c)}): ${got}, expected ${want}`;
+      }
+    }
+    const n = 4096;
+    const outputBuffer = device.createBuffer({
+      size: n * 16,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    const mappable = device.createBuffer({
+      size: n * 16,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    const primitive = new RandomBitsTest({ device, rng });
+    await primitive.execute({ outputBuffer });
+    const encoder = device.createCommandEncoder();
+    encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, n * 16);
+    device.queue.submit([encoder.finish()]);
+    await mappable.mapAsync(GPUMapMode.READ);
+    const out = new Uint32Array(mappable.getMappedRange().slice());
+    mappable.unmap();
+    const R = randomBitsJS(rng);
+    for (let i = 0; i < n && errors.split("\n").length < 5; i++) {
+      const want = [pmMixJS(i, 0x2545f491), i, R.rand(i, i >>> 3, 0x5eed), R.bounded(i + 1, i, 9, { value: 0 })];
+      for (let j = 0; j < 4; j++) {
+        if (out[4 * i + j] !== want[j]) {
+          errors += `\ninput ${i}, function ${["pm_mix", "pm_unmix", "pm_rand", "pm_bounded"][j]}: GPU ${out[4 * i + j]}, JS ${want[j]}`;
+        }
+      }
+    }
+    primitive.destroy();
+    outputBuffer.destroy();
+    mappable.destroy();
+    return errors;
+  }
+
   const listEl = isNode ? null : document.getElementById("test-list");
   const { runTest, summarize } = makeRunner(listEl, summaryEl);
 
@@ -564,6 +640,8 @@ export async function main(navigator) {
 
   await runTest("primitive destroy() frees its own buffers, then re-executes", runDestroyTest);
   await runTest("ExecutePrimitive: scan nested in another primitive", runExecutePrimitiveTest);
+  await runTest("random bits: keyed hash, WGSL = JS; Philox known answers", () => runRandomBitsTest(null));
+  await runTest("random bits: Philox4x32-7, WGSL = JS", () => runRandomBitsTest({ key: [0x12345678, 0x9abcdef0], rounds: 7 }));
 
   summarize();
 

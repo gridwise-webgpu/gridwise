@@ -167,3 +167,17 @@ export class OneSweepSort extends BasePrimitive {
     disableSubgroups?: boolean;
   });
 }
+
+export type PhiloxRng = { key: [number, number]; rounds?: number };
+
+export function randomBitsWGSL(rng?: PhiloxRng | null): string;
+export function randomBitsJS(rng?: PhiloxRng | null): {
+  rand: (a: number, b: number, seed: number) => number;
+  bounded: (k: number, key: number, seed: number, ctr?: { value: number }) => number;
+  elem: ((i: number) => number) | null;
+};
+export const PHILOX_WGSL: string;
+export function pmMixJS(i: number, seed: number): number;
+export function pmRandJS(a: number, b: number, seed: number): number;
+export function pmBoundedJS(k: number, key: number, seed: number, ctr?: { value: number }, rand?: (a: number, b: number, s: number) => number): number;
+export function philox4x32JS(counter: number[], key: number[], rounds?: number): number[];

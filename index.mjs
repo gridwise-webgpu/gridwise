@@ -3,6 +3,15 @@ export { Buffer } from "./src/buffer.mjs";
 export { DLDFScan } from "./src/scandldf.mjs";
 export { OneSweepSort } from "./src/onesweep.mjs";
 export {
+  randomBitsWGSL,
+  randomBitsJS,
+  PHILOX_WGSL,
+  pmMixJS,
+  pmRandJS,
+  pmBoundedJS,
+  philox4x32JS,
+} from "./src/random.mjs";
+export {
   BinOp,
   BinOpNop,
   BinOpNopU32,
