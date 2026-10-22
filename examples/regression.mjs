@@ -6,6 +6,7 @@ import {
 } from "../src/binop.mjs";
 import { datatypeToTypedArray, getBrowserName } from "../src/util.mjs";
 import { DLDFScan } from "../src/scandldf.mjs";
+import { HierarchicalScan } from "../src/scan.mjs";
 import {
   BasePrimitive,
   Kernel,
@@ -138,13 +139,13 @@ export async function main(navigator) {
     return data;
   }
 
-  async function runScanTest({ type, datatype, binop, size }) {
+  async function runScanTest({ type, datatype, binop, size, Primitive = DLDFScan }) {
     const TypedArray = datatypeToTypedArray(datatype);
     const memsrc = generateScanInput(datatype, binop, size);
     const isReduce = type === "reduce";
     const destBytes = isReduce ? 4 : memsrc.byteLength;
 
-    const primitive = new DLDFScan({ device, binop, type, datatype });
+    const primitive = new Primitive({ device, binop, type, datatype });
 
     const srcBuffer = device.createBuffer({
       size: memsrc.byteLength,
@@ -547,6 +548,15 @@ export async function main(navigator) {
     await runTest(name, () => runScanTest({ type, datatype, binop, size }));
   }
 
+  /* the same scans with HierarchicalScan (reduce-then-scan built on wgScan
+   * and ExecutePrimitive), which also runs without subgroups using barriers only */
+  for (const [type, datatype, BinOpClass, size] of scanTests) {
+    const binop = new BinOpClass({ datatype });
+    const opName = BinOpClass.name.replace("BinOp", "").toLowerCase();
+    const name = `hscan ${type.padEnd(9)} ${datatype}  ${opName.padEnd(8)} size=${size}`;
+    await runTest(name, () => runScanTest({ type, datatype, binop, size, Primitive: HierarchicalScan }));
+  }
+
   for (const [type, datatype, direction, size] of sortTests) {
     const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}`;
     await runTest(name, () => runSortTest({ type, datatype, direction, size }));
@@ -573,6 +583,12 @@ export async function main(navigator) {
       const opName = BinOpClass.name.replace("BinOp", "").toLowerCase();
       const name = `scan  ${type.padEnd(9)} ${datatype}  ${opName.padEnd(8)} size=${size}`;
       await runLarge(name, () => runScanTest({ type, datatype, binop, size }));
+    }
+    for (const [type, datatype, BinOpClass, size] of largeScanTests) {
+      const binop = new BinOpClass({ datatype });
+      const opName = BinOpClass.name.replace("BinOp", "").toLowerCase();
+      const name = `hscan ${type.padEnd(9)} ${datatype}  ${opName.padEnd(8)} size=${size}`;
+      await runLarge(name, () => runScanTest({ type, datatype, binop, size, Primitive: HierarchicalScan }));
     }
 
     for (const [type, datatype, direction, size] of largeSortTests) {
