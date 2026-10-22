@@ -34,7 +34,7 @@ This particular primitive is parameterized by its datatype (in this case, "u32")
 
 When the scan is actually executed, its arguments are buffers that store its input and output. This particular primitive has named arguments of an input buffer named `inputBuffer` and an output buffer named `outputBuffer`. These buffers can be WebGPU buffers of type `GPUBuffer` but can also be `Buffer`s, described next.
 
-The primitive performs all necessary WebGPU operations, including (optionally) setting up an encoder, building up and setting WebGPU layouts and pipelines, running the pipeline, and optionally recording GPU-side or CPU-side timing. It also caches WebGPU layouts and pipelines to avoid the expense of recreating them if they have already been created.
+The primitive performs all necessary WebGPU operations, including (optionally) setting up an encoder, building up and setting WebGPU layouts and pipelines, running the pipeline, and optionally recording GPU-side or CPU-side timing. It also caches WebGPU layouts and pipelines to avoid the expense of recreating them if they have already been created. Internally, a primitive describes its work as a list of actions returned by its `compute()` method (kernels to dispatch, internal buffers to allocate, copies), and `execute()` carries them out in order. One kind of action runs another primitive, so a primitive can use an existing one, such as a scan, as one of its own steps (see [Composing primitives](#composing-primitives) below).
 
 ### Composing primitives
 
