@@ -143,7 +143,7 @@ await dldfscanPrimitive.execute({
 
 ## Usage and performance notes
 
-`DLDFScan`'s input length _must be_ a multiple of 4. Pad the end of your input array with enough identity elements to make this work. (This is because internally, we use `vec4`s for computation.)
+`DLDFScan`'s input length _must be_ a multiple of 4, and it throws an error otherwise. Pad the end of your input array with enough identity elements to make this work. (This is because internally, it reads and writes `vec4`s.) `HierarchicalScan` accepts any input length.
 
 `DLDFScan` has had extensive performance testing and the defaults are fairly stable across different GPUs. The workgroup size, for instance, is set to 256. This particular iteration of the scan kernel has barely been tested with other workgroup sizes and they are unlikely to work out of the box.
 
