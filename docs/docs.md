@@ -35,6 +35,9 @@ Deep-dives into the architecture, implementation choices, WGSL code-generation s
 ### [Architecture]({{ "/architecture/" | relative_url }})
 Overview of Gridwise's system design, module structure, and how primitives are organized as modular, reusable classes for clean separation of concerns and extensibility.
 
+### [Composing Primitives]({{ "/composing-primitives/" | relative_url }})
+How a primitive can run another primitive as one of its steps with the `ExecutePrimitive` action: the motivation (reusing a scan inside a new primitive), usage, and how ordering, buffer binding and GPU timing work for nested primitives.
+
 ### [Primitive Design]({{ "/primitive-design/" | relative_url }})
 Deep dive into the design principles behind Gridwise primitives, focusing on single-pass chained algorithms for scan, sort, and reduce. Explores decoupled lookback/fallback optimization techniques and memory bandwidth bounds.
 

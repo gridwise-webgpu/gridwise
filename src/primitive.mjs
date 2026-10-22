@@ -486,14 +486,16 @@ export class BasePrimitive {
       );
     }
 
-    /* begin timestamp prep - count kernels, allocate 2 timestamps/kernel */
+    /* compute() once: the action list is used for kernel counting and execution.
+     * Primitives run by ExecutePrimitive must be the same objects in both. */
+    const actions = this.compute();
+
+    /* begin timestamp prep - count kernels, allocate 2 timestamps/kernel.
+     * A primitive executed by a parent (ExecutePrimitive) records into the
+     * parent's timing helper, which already counted its kernels. */
     let kernelCount = 0; // how many kernels are there total?
-    if (args.enableGPUTiming) {
-      for (const action of this.compute()) {
-        if (action.constructor === Kernel && action.enabled()) {
-          kernelCount++;
-        }
-      }
+    if (args.enableGPUTiming && !args.__timingSetUpByParent) {
+      kernelCount = this.countKernels(actions);
       if (BasePrimitive.__timingHelper) {
         if (BasePrimitive.__timingHelper.numKernels === kernelCount) {
           /* do nothing - we can reuse __timingHelper without change */
@@ -524,7 +526,7 @@ export class BasePrimitive {
     const webGPUObjectCache =
       /* this was created in constructor */
       BasePrimitive.__deviceToWebGPUObjectCache.get(this.device);
-    for (const action of this.compute()) {
+    for (const action of actions) {
       switch (action.constructor) {
         case Kernel: {
           if (!action.enabled()) {
@@ -902,93 +904,22 @@ dispatchGeometry: ${dispatchGeometry}`);
           break;
         }
         case AllocateBuffer: {
-          if (!("size" in action)) {
-            console.error(
-              `Primitive::AllocateBuffer: Buffer ${action.label} must include a size (args are `,
-              action,
-              ")"
-            );
+          this.__allocateBuffer(action, encoder);
+          break;
+        }
+        case ExecutePrimitive: {
+          /* run another primitive's actions on this encoder, with its named
+           * buffers bound to this primitive's buffers */
+          if (!action.enabled()) {
+            break;
           }
-          if (!Number.isFinite(action.size)) {
-            console.error(
-              `Primitive::AllocateBuffer: Buffer ${action.label} must specify a numerical size (args are `,
-              action,
-              ")"
-            );
-          }
-          /** What if this buffer is already allocated?
-           * We can tell if this is the case if it's already registered.
-           * This might happen if we have an intermediate buffer that's not
-           *   normally visible outside the primitive, but we want to get
-           *   its values.
-           * This might also happen if we are running the same primitive
-           *   multiple times (for benchmarking purposes).
-           * So: if the buffer is already allocated/registered AND it has the
-           *   same size, then skip the new allocation.
-           *
-           * Now, if we're allocating a new buffer, we are guaranteed it
-           *   will be cleared upon allocation. But what if we call
-           *   AllocateBuffer and the buffer is already allocated and we
-           *   reuse it? Do we clear it?
-           * (Of course if we specify populateWith, we initialize the buffer
-           *  with its value.)
-           * Design decision is "yes, unless we explicitly indicate no".
-           *   This is controlled by the parameter `clearBufferOnReuse`,
-           *   which thus defaults to true.
-           * If the primitive initializes this buffer within the primitive,
-           *   e.g., if the first access to the buffer is a full-buffer write,
-           *   we can avoid a useless clear with `clearBufferOnReuse: false`.
-           */
-          const existingBuffer = this.getBuffer(action.label);
-          if (existingBuffer && existingBuffer.size === action.size) {
-            /* just use the existing buffer, but it might be full of non-zero data */
-            if (action.populateWith) {
-              /* do nothing, because we will fill the buffer with data */
-            } else {
-              if (action.clearBufferOnReuse ?? true) {
-                /* clear the buffer if clearBufferOnReuse is unspecified or true */
-                encoder.clearBuffer(existingBuffer.buffer.buffer);
-              }
-            }
-          } else {
-            if (existingBuffer?.buffer) {
-              /* buffer exists, but different size. could destroy() it here */
-            }
-            this.device.pushErrorScope("out-of-memory");
-            const allocatedBuffer = this.device.createBuffer({
-              label: action.label,
-              size: action.size,
-              usage:
-                action.usage ??
-                /* default: read AND write */
-                GPUBufferUsage.STORAGE |
-                  GPUBufferUsage.COPY_SRC |
-                  GPUBufferUsage.COPY_DST,
-            });
-            this.device.popErrorScope().then((error) => {
-              if (error) {
-                // error is a GPUOutOfMemoryError object instance
-                this.buffer = null;
-                console.error(
-                  `Primitive::execute:AllocateBuffer: Out of memory, buffer too large. Error: ${error.message}`
-                );
-              }
-            });
-            this.registerBuffer({
-              label: action.label,
-              buffer: allocatedBuffer,
-              device: this.device,
-              ...(action.datatype && { datatype: action.datatype }),
-            });
-          }
-          /* todo: combine this with WriteGPUBuffer below */
-          if (action.populateWith) {
-            this.device.queue.writeBuffer(
-              this.getBuffer(action.label).buffer.buffer,
-              0,
-              action.populateWith
-            );
-          }
+          this.__bindChildBuffers(action, actions);
+          await action.primitive.execute({
+            encoder,
+            trials: args.trials,
+            enableGPUTiming: args.enableGPUTiming,
+            __timingSetUpByParent: true,
+          });
           break;
         }
         case WriteGPUBuffer: {
@@ -1046,6 +977,147 @@ dispatchGeometry: ${dispatchGeometry}`);
       }
     }
   }
+  /** Handles an AllocateBuffer action (see execute()). encoder may be null
+   * when a buffer is allocated before execution starts. */
+  __allocateBuffer(action, encoder) {
+    if (!("size" in action)) {
+      console.error(
+        `Primitive::AllocateBuffer: Buffer ${action.label} must include a size (args are `,
+        action,
+        ")"
+      );
+    }
+    if (!Number.isFinite(action.size)) {
+      console.error(
+        `Primitive::AllocateBuffer: Buffer ${action.label} must specify a numerical size (args are `,
+        action,
+        ")"
+      );
+    }
+    /** What if this buffer is already allocated?
+     * We can tell if this is the case if it's already registered.
+     * This might happen if we have an intermediate buffer that's not
+     *   normally visible outside the primitive, but we want to get
+     *   its values.
+     * This might also happen if we are running the same primitive
+     *   multiple times (for benchmarking purposes).
+     * So: if the buffer is already allocated/registered AND it has the
+     *   same size, then skip the new allocation.
+     *
+     * Now, if we're allocating a new buffer, we are guaranteed it
+     *   will be cleared upon allocation. But what if we call
+     *   AllocateBuffer and the buffer is already allocated and we
+     *   reuse it? Do we clear it?
+     * (Of course if we specify populateWith, we initialize the buffer
+     *  with its value.)
+     * Design decision is "yes, unless we explicitly indicate no".
+     *   This is controlled by the parameter `clearBufferOnReuse`,
+     *   which thus defaults to true.
+     * If the primitive initializes this buffer within the primitive,
+     *   e.g., if the first access to the buffer is a full-buffer write,
+     *   we can avoid a useless clear with `clearBufferOnReuse: false`.
+     */
+    const existingBuffer = this.getBuffer(action.label);
+    if (existingBuffer && existingBuffer.size === action.size) {
+      /* just use the existing buffer, but it might be full of non-zero data */
+      if (action.populateWith) {
+        /* do nothing, because we will fill the buffer with data */
+      } else {
+        if (action.clearBufferOnReuse ?? true) {
+          /* clear the buffer if clearBufferOnReuse is unspecified or true */
+          /* encoder is null when allocating ahead of execution (see
+           * __bindChildBuffers); the buffer is then cleared on the real pass */
+          encoder?.clearBuffer(existingBuffer.buffer.buffer);
+        }
+      }
+    } else {
+      if (existingBuffer && this.__ownedBuffers?.has(existingBuffer.buffer.buffer)) {
+        /* we allocated it earlier at a different size: free it */
+        this.__ownedBuffers.delete(existingBuffer.buffer.buffer);
+        existingBuffer.buffer.buffer.destroy();
+      }
+      this.device.pushErrorScope("out-of-memory");
+      const allocatedBuffer = this.device.createBuffer({
+        label: action.label,
+        size: action.size,
+        usage:
+          action.usage ??
+          /* default: read AND write */
+          GPUBufferUsage.STORAGE |
+            GPUBufferUsage.COPY_SRC |
+            GPUBufferUsage.COPY_DST,
+      });
+      this.device.popErrorScope().then((error) => {
+        if (error) {
+          // error is a GPUOutOfMemoryError object instance
+          this.buffer = null;
+          console.error(
+            `Primitive::execute:AllocateBuffer: Out of memory, buffer too large. Error: ${error.message}`
+          );
+        }
+      });
+      /* remember buffers we allocate so destroy() can free them */
+      (this.__ownedBuffers ??= new Set()).add(allocatedBuffer);
+      this.registerBuffer({
+        label: action.label,
+        buffer: allocatedBuffer,
+        device: this.device,
+        ...(action.datatype && { datatype: action.datatype }),
+      });
+    }
+    /* todo: combine this with WriteGPUBuffer below */
+    if (action.populateWith) {
+      this.device.queue.writeBuffer(
+        this.getBuffer(action.label).buffer.buffer,
+        0,
+        action.populateWith
+      );
+    }
+  }
+
+  /** Bind an ExecutePrimitive action's buffers into its primitive:
+   * action.buffers maps the child's buffer names to this primitive's buffer
+   * names. A buffer this primitive has not allocated yet is allocated now
+   * from its AllocateBuffer action, so the child can size itself (for
+   * instance, to count its kernels for GPU timing before execution). */
+  __bindChildBuffers(action, actions) {
+    for (const [childName, parentName] of Object.entries(action.buffers ?? {})) {
+      if (!this.hasBuffer(parentName)) {
+        const allocation = actions.find(
+          (a) => a.constructor === AllocateBuffer && a.label === parentName
+        );
+        if (allocation) {
+          this.__allocateBuffer(allocation, null);
+        } else {
+          throw new Error(
+            `Primitive ${this.label}: ExecutePrimitive maps ${childName} to unknown buffer ${parentName}`
+          );
+        }
+      }
+      action.primitive.registerBuffer({
+        label: childName,
+        buffer: this.getBuffer(parentName).buffer,
+        device: this.device,
+      });
+    }
+  }
+
+  /** Number of compute passes execute() records (one per enabled Kernel),
+   * including those of primitives run by ExecutePrimitive actions. Used to
+   * size GPU timing. */
+  countKernels(actions = this.compute()) {
+    let count = 0;
+    for (const action of actions) {
+      if (action.constructor === Kernel && action.enabled()) {
+        count++;
+      } else if (action.constructor === ExecutePrimitive && action.enabled()) {
+        this.__bindChildBuffers(action, actions);
+        count += action.primitive.countKernels();
+      }
+    }
+    return count;
+  }
+
   async getTimingResult() {
     const gpuTotalTimeNS = BasePrimitive.__timingHelper
       ? await BasePrimitive.__timingHelper.getResult()
@@ -1054,11 +1126,18 @@ dispatchGeometry: ${dispatchGeometry}`);
     return { gpuTotalTimeNS, cpuTotalTimeNS };
   }
   destroy() {
-    /* destroy every buffer */
-    // eslint-disable-next-line no-unused-vars
-    for (const [name, buffer] of Object.entries(this.__buffers)) {
-      //// buffer.destroy();
+    /* destroy the GPU buffers this primitive allocated itself (AllocateBuffer);
+     * buffers passed in by the caller belong to the caller */
+    const owned = this.__ownedBuffers ?? new Set();
+    for (const [label, buffer] of Object.entries(this.__buffers)) {
+      if (owned.has(buffer.buffer?.buffer)) {
+        delete this.__buffers[label]; /* the next execute() reallocates it */
+      }
     }
+    for (const buffer of owned) {
+      buffer.destroy();
+    }
+    owned.clear();
   }
 }
 
@@ -1084,6 +1163,26 @@ export class Kernel {
   }
   enabled() {
     /* default: enabled */
+    return this.enable ?? true;
+  }
+}
+
+/** Run another primitive as part of this one, on the same encoder.
+ *   new ExecutePrimitive({
+ *     primitive: this.scan,    // created once (e.g., in the constructor), not per compute()
+ *     buffers: { inputBuffer: "counts", outputBuffer: "offsets" },  // child name: our name
+ *     label: "scan of counts",
+ *     enable: true,            // optional, like Kernel
+ *   })
+ * GPU timing counts and times the child's kernels with this primitive's. */
+export class ExecutePrimitive {
+  constructor(args) {
+    Object.assign(this, args);
+    if (!this.primitive) {
+      throw new Error("ExecutePrimitive: requires a 'primitive' argument");
+    }
+  }
+  enabled() {
     return this.enable ?? true;
   }
 }

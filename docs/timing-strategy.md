@@ -18,7 +18,7 @@ In our implementation, the `Primitive` class has a static `__timingHelper` membe
 
 When GPU timing is enabled in this way, `primitive.execute` checks for a defined `__timingHelper` and initializes one if not, counting the number of kernels in the current primitive for the timing helper's initialization. As explained by the [timing helper](https://webgpufundamentals.org/webgpu/lessons/webgpu-timing.html#a-timing-helper)'s documentation, the timing helper replaces `beginComputePass` with its own `beginComputePass` that initializes the timing helper.
 
-We record a separate timing value for each kernel in the primitive and thus return a list of kernel time durations, one list element per kernel.
+We record a separate timing value for each kernel in the primitive and thus return a list of kernel time durations, one list element per kernel. If the primitive runs other primitives with `ExecutePrimitive` actions, their kernels are counted too (`countKernels()` recurses into them), they record into the same timing helper, and the list includes their kernels in execution order (see [Composing Primitives](../composing-primitives/)).
 
 `primitive.execute`'s argument object also takes a `trials` argument that defaults to 1. If `trials` is _n_, then every kernel dispatch within the primitive is replaced with _n_ consecutive dispatches. Running more trials is helpful for more reliable timing measurements.
 

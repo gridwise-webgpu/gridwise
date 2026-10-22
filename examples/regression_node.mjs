@@ -131,7 +131,10 @@ const originalExecute = BasePrimitive.prototype.execute;
 
 // Intercept BasePrimitive execute method to collect performance metrics
 BasePrimitive.prototype.execute = async function (args = {}) {
-  if (!enableTiming) {
+  /* A primitive run by another primitive (ExecutePrimitive) is timed as part
+   * of its parent; timing it separately would read the parent's timing
+   * helper before the parent has finished recording. */
+  if (!enableTiming || args.__timingSetUpByParent) {
     return await originalExecute.call(this, args);
   }
 
