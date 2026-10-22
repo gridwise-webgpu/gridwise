@@ -131,7 +131,7 @@ export function localFinishCap(device, meanGroupSize = 4096, bytesPerElement = 4
  * GPU). aux: each value comes with a random word in wgShufAux whose low byte
  * is its sub-bucket.
  *
- * env: a primitive (for fnDeclarations.wgExclusiveScan, binop, workgroupSize). */
+ * env: a primitive (for fnDeclarations.wgScan, binop, workgroupSize). */
 export function wgShuffleWGSL(env, cap, { canonical = false, aux = false } = {}) {
   const W = WORKGROUP_SIZE;
   const rankSubBuckets = /* wgsl */ `
@@ -236,7 +236,9 @@ export function localFinishWGSL(env, cap, { unmix = true, canonical = false, rng
 ${env.fnDeclarations.enableSubgroupsIfAppropriate()}
 ${env.fnDeclarations.commonDefinitions()}
 ${env.binop.wgslfn}
-${env.fnDeclarations.wgExclusiveScan()}
+${env.fnDeclarations.subgroupEmulation()}
+${env.fnDeclarations.subgroupInclusiveOpScan()}
+${env.fnDeclarations.wgScan()}
 ${randomBitsWGSL(rng)}
 ${wgShuffleWGSL(env, cap, { canonical, aux: pairs })}
 alias Elem = ${pairs ? "vec2u" : "u32"};   /* ${pairs ? "(index, random word)" : "index or hashed key"} */
@@ -431,7 +433,9 @@ export class MultisplitPerm extends BasePrimitive {
 ${this.fnDeclarations.enableSubgroupsIfAppropriate()}
 ${this.fnDeclarations.commonDefinitions()}
 ${this.binop.wgslfn}
-${this.fnDeclarations.wgExclusiveScan()}
+${this.fnDeclarations.subgroupEmulation()}
+${this.fnDeclarations.subgroupInclusiveOpScan()}
+${this.fnDeclarations.wgScan()}
 ${randomBitsWGSL(rng)}
 struct MS { n: u32, seed: u32, numSegs: u32, slots: u32, segStride: u32, p0: u32, p1: u32, p2: u32 };
 alias Elem = ${pairs ? "vec2u" : "u32"};
