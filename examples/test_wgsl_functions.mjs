@@ -1,5 +1,5 @@
 import { BasePrimitive, Kernel, AllocateBuffer, WriteGPUBuffer } from "../src/primitive.mjs";
-import { BinOpAdd } from "../src/binop.mjs";
+import { BinOpAdd, BinOpMax } from "../src/binop.mjs";
 import { datatypeToTypedArray } from "../src/util.mjs";
 
 class TestWGSLFunctionsPrimitive extends BasePrimitive {
@@ -36,7 +36,8 @@ class TestWGSLFunctionsPrimitive extends BasePrimitive {
       ${this.fnDeclarations.subgroupBallot()}
       ${this.fnDeclarations.subgroupReduce()}
       ${this.fnDeclarations.subgroupInclusiveOpScan()}
-      ${this.fnDeclarations.wgExclusiveScan()}
+      ${this.fnDeclarations.wgScan()}
+      ${this.fnDeclarations.wgScan({ scanType: "inclusive" })}
 
       @compute @workgroup_size(${this.workgroupSize}) fn main(
         builtinsNonuniform: BuiltinsNonuniform,
@@ -145,9 +146,9 @@ export async function runSuite(device, resultsCallback) {
       kernelBody: "outputBuffer[gid] = subgroupExclusiveAdd(1u);",
       expected: (lidx, sgsz) => lidx % sgsz,
     },
+    /* wgScan on v(i) = (7i + 3) mod 11 across the workgroup */
     {
-      /* exclusive scan of v(i) = (7i + 3) mod 11 across the workgroup */
-      name: "wgExclusiveScan",
+      name: "wgScan exclusive (add)",
       kernelBody:
         "var total = 0u; let v = (builtinsNonuniform.lidx * 7u + 3u) % 11u; outputBuffer[gid] = wgExclusiveScan(v, &total, builtinsUniform, builtinsNonuniform);",
       expected: (lidx) => {
@@ -157,14 +158,47 @@ export async function runSuite(device, resultsCallback) {
       },
     },
     {
-      /* the total, after a second call (checks the scan's memory can be reused at once) */
-      name: "wgExclusiveScan total",
+      name: "wgScan inclusive (add)",
       kernelBody:
-        "var total = 0u; let v = (builtinsNonuniform.lidx * 7u + 3u) % 11u; let a = wgExclusiveScan(v, &total, builtinsUniform, builtinsNonuniform); var total2 = 0u; let b = wgExclusiveScan(1u, &total2, builtinsUniform, builtinsNonuniform); outputBuffer[gid] = total * 1000u + total2 + (b - builtinsNonuniform.lidx);",
+        "var total = 0u; let v = (builtinsNonuniform.lidx * 7u + 3u) % 11u; outputBuffer[gid] = wgInclusiveScan(v, &total, builtinsUniform, builtinsNonuniform);",
+      expected: (lidx) => {
+        let s = 0;
+        for (let i = 0; i <= lidx; i++) s += (i * 7 + 3) % 11;
+        return s;
+      },
+    },
+    {
+      /* the totals of two back-to-back calls (the scan's memory can be reused at once) */
+      name: "wgScan totals, back-to-back calls",
+      kernelBody:
+        "var total = 0u; let v = (builtinsNonuniform.lidx * 7u + 3u) % 11u; let a = wgExclusiveScan(v, &total, builtinsUniform, builtinsNonuniform); var total2 = 0u; let b = wgInclusiveScan(1u, &total2, builtinsUniform, builtinsNonuniform); outputBuffer[gid] = total * 1000u + total2 + (b - builtinsNonuniform.lidx - 1u);",
       expected: () => {
         let s = 0;
         for (let i = 0; i < 256; i++) s += (i * 7 + 3) % 11;
         return s * 1000 + 256;
+      },
+    },
+    {
+      /* a binop with no native subgroup scan: max of v(i) = (37i) mod 101 */
+      name: "wgScan exclusive (max)",
+      binop: new BinOpMax({ datatype: "u32" }),
+      kernelBody:
+        "var total = 0u; let v = (builtinsNonuniform.lidx * 37u) % 101u; outputBuffer[gid] = wgExclusiveScan(v, &total, builtinsUniform, builtinsNonuniform);",
+      expected: (lidx) => {
+        let m = 0;
+        for (let i = 0; i < lidx; i++) m = Math.max(m, (i * 37) % 101);
+        return m;
+      },
+    },
+    {
+      name: "wgScan inclusive (max), total",
+      binop: new BinOpMax({ datatype: "u32" }),
+      kernelBody:
+        "var total = 0u; let v = (builtinsNonuniform.lidx * 37u) % 101u; let p = wgInclusiveScan(v, &total, builtinsUniform, builtinsNonuniform); outputBuffer[gid] = p * 1000u + total;",
+      expected: (lidx) => {
+        let m = 0;
+        for (let i = 0; i <= lidx; i++) m = Math.max(m, (i * 37) % 101);
+        return m * 1000 + 100;
       },
     },
   ];
@@ -188,6 +222,7 @@ export async function runSuite(device, resultsCallback) {
           workgroupSize: 256,
           disableSubgroups: mode.disableSubgroups,
           kernelBody: test.kernelBody,
+          ...(test.binop && { binop: test.binop }),
         });
 
         await primitive.execute();
