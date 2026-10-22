@@ -149,6 +149,24 @@ export class DLDFScan extends BasePrimitive {
   });
 }
 
+/** reduce-then-scan; same arguments as DLDFScan, any input length */
+export class HierarchicalScan extends BasePrimitive {
+  type: "exclusive" | "inclusive" | "reduce";
+  datatype: string;
+  binop: BinOp;
+
+  constructor(args: {
+    device: GPUDevice;
+    binop: BinOp;
+    type: "exclusive" | "inclusive" | "reduce";
+    datatype: string;
+    label?: string;
+    disableSubgroups?: boolean;
+    workgroupSize?: number;
+    itemsPerThread?: number;
+  });
+}
+
 export class OneSweepSort extends BasePrimitive {
   datatype: string;
   direction: "ascending" | "descending";

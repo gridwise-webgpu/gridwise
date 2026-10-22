@@ -130,7 +130,7 @@ export class BinOpMultiply extends BinOp {
     this.identity = 1;
     this.op = (a, b) => a * b;
     this.wgslfn = `fn binop(a : ${this.datatype}, b : ${this.datatype}) -> ${this.datatype} {return a*b;}`;
-    this.wgslatomic = "atomicMul";
+    /* no wgslatomic: WGSL has no atomic multiply */
     this.subgroupReduceOp = "subgroupMul";
   }
 }
