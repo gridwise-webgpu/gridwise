@@ -1,12 +1,9 @@
-import { range } from "./util.mjs";
 import {
   BasePrimitive,
   Kernel,
   // InitializeMemoryBlock,
   AllocateBuffer,
 } from "./primitive.mjs";
-import { BaseTestSuite } from "./testsuite.mjs";
-import { BinOpMaxU32 } from "./binop.mjs";
 import { datatypeToTypedArray, datatypeToBytes } from "./util.mjs";
 
 // exports: TestSuites, Primitives
@@ -95,24 +92,6 @@ class BaseReduce extends BasePrimitive {
   };
 }
 
-const ReduceWGSizePlot = {
-  x: { field: "inputBytes", label: "Input array size (B)" },
-  y: { field: "bandwidth", label: "Achieved bandwidth (GB/s)" },
-  stroke: { field: "workgroupSize" },
-  fx: { field: "timing" },
-  test_br: "gpuinfo.description",
-  caption: "Lines are workgroup size",
-};
-
-const ReduceWGCountPlot = {
-  x: { field: "inputBytes", label: "Input array size (B)" },
-  y: { field: "bandwidth", label: "Achieved bandwidth (GB/s)" },
-  stroke: { field: "workgroupCount" },
-  fx: { field: "timing" },
-  test_br: "gpuinfo.description",
-  caption: "Lines are workgroup count",
-};
-
 /* needs to be a function if we do string interpolation */
 // eslint-disable-next-line no-unused-vars
 function ReduceWGCountFnPlot() {
@@ -136,129 +115,6 @@ const ReduceWGSizeBinOpPlot = {
   test_br: "gpuinfo.description",
   caption: "Lines are workgroup size",
 };
-
-export class NoAtomicPKReduce extends BaseReduce {
-  /* persistent kernel, no atomics */
-  constructor(args) {
-    super(args);
-    /* Check for required parameters for this kernel first */
-    for (const required of ["binop", "datatype"]) {
-      if (!this[required]) {
-        throw new Error(
-          `${this.constructor.name}: ${required} is a required parameter.`
-        );
-      }
-    }
-  }
-
-  finalizeRuntimeParameters() {
-    /* Set reasonable defaults for tunable parameters */
-    this.workgroupSize = this.workgroupSize ?? 256;
-    this.maxGSLWorkgroupCount = this.maxGSLWorkgroupCount ?? 256;
-
-    /* Compute settings based on tunable parameters */
-    this.workgroupCount = Math.min(
-      Math.ceil(this.getBuffer("inputBuffer").length / this.workgroupSize),
-      this.maxGSLWorkgroupCount
-    );
-    this.partialsLength = this.workgroupCount;
-  }
-  reductionKernel = () => {
-    /** this needs to be an arrow function so "this" is the Primitive
-     *  that declares it
-     */
-
-    /** this definition could be inline when the kernel is specified,
-     * but since we call it twice, we move it here
-     */
-    return /* wgsl */ `
-      enable subgroups;
-      /* output */
-      @group(0) @binding(0) var<storage, read_write> outputBuffer: array<${this.datatype}>;
-      /* input */
-      @group(0) @binding(1) var<storage, read> inputBuffer: array<${this.datatype}>;
-
-      /* TODO: the "32" in the next line should be workgroupSize / subgroupSize */
-      var<workgroup> wgTemp: array<${this.datatype}, 32>; // zero initialized
-
-      ${this.fnDeclarations.commonDefinitions}
-      ${this.fnDeclarations.roundUpDivU32}
-      ${this.binop.wgslfn}
-      ${this.fnDeclarations.workgroupReduce}
-
-      @compute @workgroup_size(${this.workgroupSize})
-      fn noAtomicPKReduceIntoPartials(builtins : Builtins) {
-        var reduction: ${this.datatype} = workgroupReduce(&inputBuffer, &wgTemp, builtins);
-        if (builtins.lid == 0) {
-          outputBuffer[builtins.wgid.x] = reduction;
-        }
-      }`;
-  };
-  compute() {
-    this.finalizeRuntimeParameters();
-    return [
-      new AllocateBuffer({
-        label: "partials",
-        size: this.partialsLength * datatypeToBytes(this.datatype),
-      }),
-      /* first kernel: per-workgroup persistent-kernel reduce */
-      new Kernel({
-        kernel: this.reductionKernel,
-        bufferTypes: [["storage", "read-only-storage"]],
-        bindings: [["partials", "inputBuffer"]],
-        label: "noAtomicPKReduce workgroup reduce -> partials",
-        getDispatchGeometry: () => {
-          /* this is a grid-stride loop, so limit the dispatch */
-          return [this.workgroupCount];
-        },
-      }),
-      /* second kernel: reduce partials into final output */
-      new Kernel({
-        kernel: this.reductionKernel,
-        bufferTypes: [["storage", "read-only-storage"]],
-        bindings: [["outputBuffer", "partials"]],
-        label: "noAtomicPKReduce partials->final",
-        getDispatchGeometry: () => {
-          /* This reduce is defined to do its final step with one workgroup */
-          return [1];
-        },
-        enable: true,
-        logKernelCodeToConsole: false,
-      }),
-    ];
-  }
-}
-
-const PKReduceParams = {
-  inputLength: range(8, 26).map((i) => 2 ** i) /* slowest */,
-  maxGSLWorkgroupCount: range(2, 8).map((i) => 2 ** i),
-  workgroupSize: range(5, 8).map((i) => 2 ** i),
-};
-
-// eslint-disable-next-line no-unused-vars
-const PKReduceParamsSingleton = {
-  inputLength: [2 ** 20],
-  maxGSLWorkgroupCount: [2 ** 5],
-  workgroupSize: [2 ** 7],
-};
-
-export const NoAtomicPKReduceTestSuite = new BaseTestSuite({
-  category: "reduce",
-  testSuite: "no-atomic persistent-kernel u32 sum reduction",
-  trials: 10,
-  params: PKReduceParams,
-  uniqueRuns: ["inputLength", "workgroupCount", "workgroupSize"],
-  primitive: NoAtomicPKReduce,
-  primitiveArgs: {
-    datatype: "u32",
-    binop: BinOpMaxU32,
-    gputimestamps: true,
-  },
-  plots: [
-    { ...ReduceWGSizePlot, ...{ fy: { field: "workgroupCount" } } },
-    { ...ReduceWGCountPlot, ...{ fy: { field: "workgroupSize" } } },
-  ],
-});
 
 export class ReduceDLDF extends BaseReduce {
   /* includes decoupled lookback, decoupled fallback */
