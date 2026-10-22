@@ -17,6 +17,9 @@ Complete documentation for Gridwise's OneSweepSort implementation. Covers key-on
 ### [Binary Operations]({{ "/binop/" | relative_url }})
 Guide to binary operations (monoids) used in Gridwise's scan and reduce. Documents standard operators (Add, Min, Max, Multiply) and shows how to specialize them by datatype or implement custom binary operators by extending the `BinOp` class.
 
+### [Random Numbers]({{ "/random-numbers/" | relative_url }})
+Random bits for WGSL kernels: the fast keyed hash and Philox4x32, their bit-exact JavaScript mirrors, how to declare and call them, and when to use each.
+
 ### [Buffer Management]({{ "/buffer/" | relative_url }})
 Best practices for allocating, managing, and optimizing GPU buffers in Gridwise. Covers buffer creation, storage usage flags, memory optimization, copy strategies, and handling edge cases such as non-aligned input lengths.
 
