@@ -65,7 +65,6 @@ export async function main(navigator) {
     binop: new BinOpAdd({ datatype }),
     type: "inclusive",
     datatype: datatype,
-    gputimestamps: true, //// TODO should work without this
   });
 
   // eslint-disable-next-line no-unused-vars
@@ -74,7 +73,6 @@ export async function main(navigator) {
     binop: new BinOpAdd({ datatype }),
     type: "exclusive",
     datatype: datatype,
-    gputimestamps: true, //// TODO should work without this
   });
 
   const dldfscanPrimitive = new DLDFScan({
@@ -82,7 +80,6 @@ export async function main(navigator) {
     binop: new BinOpAdd({ datatype }),
     type: "exclusive",
     datatype: datatype,
-    gputimestamps: true, //// TODO should work without this
   });
 
   // const primitive = iscanPrimitive;

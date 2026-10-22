@@ -409,7 +409,6 @@ export const HierarchicalScanTestSuite = new BaseTestSuite({
   primitiveArgs: {
     datatype: "u32",
     binop: BinOpAddU32,
-    gputimestamps: true,
   },
   plots: [
     { ...scanWGSizePlot, ...{ fy: { field: "workgroupSize" } } },
