@@ -93,6 +93,31 @@
 
 import { BinOpAdd } from "./binop.mjs";
 
+/** Names shared by both versions of wgScan: one function and one workgroup
+ * temp per (scan type, binop, datatype, workgroup size), so that exclusive
+ * and inclusive scans can both be declared in one module. */
+function wgScanNames(env) {
+  const scanType = env.scanType ?? "exclusive";
+  if (scanType !== "exclusive" && scanType !== "inclusive") {
+    throw new Error(`wgScan: scanType must be "exclusive" or "inclusive", not "${scanType}"`);
+  }
+  for (const necessary of ["binop", "datatype", "workgroupSize"]) {
+    if (!(necessary in env)) {
+      console.warn(`wgScan: field '${necessary}' must be set in env`);
+    }
+  }
+  const Type = scanType === "inclusive" ? "Inclusive" : "Exclusive";
+  const config = [env.binop, env.datatype, env.workgroupSize].join("_");
+  const shortName = `wg${Type}Scan`;
+  return {
+    fnName: env.useLongFunctionName ? `${shortName}_${config}` : shortName,
+    wgTemp: `wg_${scanType}_scan_temp_${config}`,
+    T: env.datatype,
+    identity: env.binop.identity,
+    inclusive: scanType === "inclusive",
+  };
+}
+
 export class wgslFunctions {
   constructor(args) {
     this.env = args;
@@ -438,6 +463,80 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
 }`;
     return fn;
   }
+  wgScan(args = {}) {
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    /** Scan of one value per invocation across the workgroup, the scan
+     * counterpart of wgReduce.
+     *
+     *   ${this.fnDeclarations.wgScan()}                           // declares wgExclusiveScan
+     *   ${this.fnDeclarations.wgScan({ scanType: "inclusive" })}  // declares wgInclusiveScan
+     *
+     *   var total: T;
+     *   let prefix = wgExclusiveScan(value, &total, builtinsUniform, builtinsNonuniform);
+     *
+     * Exclusive: binop over the values of all invocations with a smaller
+     * local_invocation_index (identity for invocation 0). Inclusive: the
+     * same plus the invocation's own value. Both write the reduction of the
+     * whole workgroup to *total in every invocation. Works with any binop
+     * (add, min, max, multiply, custom). Call from workgroup-uniform control
+     * flow with every invocation; it contains workgroup barriers, including
+     * one at the end, so calls can follow one another directly.
+     *
+     * Args: scanType ("exclusive", default, or "inclusive"),
+     * useLongFunctionName (as in wgReduce). Requires binop (its wgslfn
+     * declared as "binop"), datatype and workgroupSize; with subgroups, also
+     * subgroupInclusiveOpScan declared in the module. Declares its own
+     * module-scope workgroup memory, named by configuration.
+     */
+    const { fnName, wgTemp, T, identity, inclusive } = wgScanNames(env);
+    /* Scan within each subgroup (subgroupInclusiveOpScan: the binop's own
+     * subgroup scan if it has one, else shuffles), scan the subgroup totals
+     * sgsz at a time, then combine. The temp array has one entry per
+     * subgroup, sized for the smallest subgroup size WebGPU allows (4), not
+     * the adapter's reported minimum: the size a pipeline actually gets is
+     * not always the reported one. */
+    return /* wgsl */ `
+var<workgroup> ${wgTemp}: array<${T}, ${Math.ceil(env.workgroupSize / 4)}>;
+
+fn ${fnName}(in: ${T},
+             total: ptr<function, ${T}>,
+             builtinsUniform: BuiltinsUniform,
+             builtinsNonuniform: BuiltinsNonuniform) -> ${T} {
+  let lidx = builtinsNonuniform.lidx;
+  ${env.fnDeclarations.declareSubgroupVarsInsideHelper("builtinsUniform", "builtinsNonuniform")}
+  let sid = lidx / sgsz;
+  let numSubgroups = (${env.workgroupSize}u + sgsz - 1u) / sgsz;
+  /* (1) inclusive scan within each subgroup; its last lane posts the total */
+  let sgInclusive = subgroupInclusiveOpScan(in, sgid, sgsz);
+  if (sgid == sgsz - 1u || lidx == ${env.workgroupSize - 1}u) {
+    ${wgTemp}[sid] = sgInclusive;
+  }
+  workgroupBarrier();
+  /* (2) exclusive scan of the subgroup totals, sgsz at a time. Every
+   * subgroup computes it (subgroup operations need uniform control flow);
+   * subgroup 0 writes the results back in place. */
+  var carry: ${T} = ${identity};
+  for (var base = 0u; base < numSubgroups; base += sgsz) {
+    let i = base + sgid;
+    let v = select(${identity}, ${wgTemp}[min(i, numSubgroups - 1u)], i < numSubgroups);
+    let chunkInclusive = subgroupInclusiveOpScan(v, sgid, sgsz);
+    let chunkExclusive = select(${identity}, subgroupShuffleUp(chunkInclusive, 1u), sgid > 0u);
+    let chunkTotal = subgroupShuffle(chunkInclusive, sgsz - 1u);
+    workgroupBarrier(); /* everyone has read this chunk before it is overwritten */
+    if (sid == 0u && i < numSubgroups) {
+      ${wgTemp}[i] = binop(carry, chunkExclusive);
+    }
+    carry = binop(carry, chunkTotal);
+    workgroupBarrier();
+  }
+  /* (3) combine: the earlier subgroups' total, then the prefix in this subgroup */
+  let inSubgroup = ${inclusive ? "sgInclusive" : `select(${identity}, subgroupShuffleUp(sgInclusive, 1u), sgid > 0u)`};
+  let out = binop(${wgTemp}[sid], inSubgroup);
+  *total = carry;
+  workgroupBarrier(); /* ${wgTemp} may be reused by the next call */
+  return out;
+}`;
+  }
   workgroupScan(args = {}) {
     const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /**
@@ -695,6 +794,63 @@ export class wgslFunctionsWithoutSubgroupSupport extends wgslFunctions {
       return lidx < 32u;
     }`;
   }
+  /* No subgroups: a Hillis-Steele scan in workgroup memory with barriers
+   * only. Emulated subgroups would spin-wait on other invocations, which
+   * needs forward-progress guarantees WebGPU does not make; barriers do not. */
+  wgScan(args = {}) {
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    /** Scan (no-subgroup version) of one value per invocation across the workgroup, the scan
+     * counterpart of wgReduce.
+     *
+     *   ${this.fnDeclarations.wgScan()}                           // declares wgExclusiveScan
+     *   ${this.fnDeclarations.wgScan({ scanType: "inclusive" })}  // declares wgInclusiveScan
+     *
+     *   var total: T;
+     *   let prefix = wgExclusiveScan(value, &total, builtinsUniform, builtinsNonuniform);
+     *
+     * Exclusive: binop over the values of all invocations with a smaller
+     * local_invocation_index (identity for invocation 0). Inclusive: the
+     * same plus the invocation's own value. Both write the reduction of the
+     * whole workgroup to *total in every invocation. Works with any binop
+     * (add, min, max, multiply, custom). Call from workgroup-uniform control
+     * flow with every invocation; it contains workgroup barriers, including
+     * one at the end, so calls can follow one another directly.
+     *
+     * Args: scanType ("exclusive", default, or "inclusive"),
+     * useLongFunctionName (as in wgReduce). Requires binop (its wgslfn
+     * declared as "binop"), datatype and workgroupSize; with subgroups, also
+     * subgroupInclusiveOpScan declared in the module. Declares its own
+     * module-scope workgroup memory, named by configuration.
+     */
+    const { fnName, wgTemp, T, identity, inclusive } = wgScanNames(env);
+    const W = env.workgroupSize;
+    return /* wgsl */ `
+var<workgroup> ${wgTemp}: array<${T}, ${W}>;
+
+fn ${fnName}(in: ${T},
+             total: ptr<function, ${T}>,
+             builtinsUniform: BuiltinsUniform,
+             builtinsNonuniform: BuiltinsNonuniform) -> ${T} {
+  let lidx = builtinsNonuniform.lidx;
+  ${wgTemp}[lidx] = in;
+  workgroupBarrier();
+  for (var offset = 1u; offset < ${W}u; offset <<= 1u) {
+    var earlier: ${T} = ${identity};
+    if (lidx >= offset) {
+      earlier = ${wgTemp}[lidx - offset];
+    }
+    workgroupBarrier();
+    ${wgTemp}[lidx] = binop(earlier, ${wgTemp}[lidx]);
+    workgroupBarrier();
+  }
+  /* ${wgTemp} now holds the inclusive scan */
+  let out = ${inclusive ? `${wgTemp}[lidx]` : `select(${identity}, ${wgTemp}[max(lidx, 1u) - 1u], lidx > 0u)`};
+  *total = ${wgTemp}[${W - 1}u];
+  workgroupBarrier(); /* ${wgTemp} may be reused by the next call */
+  return out;
+}`;
+  }
+
   subgroupAny(args = {}) {
     // eslint-disable-next-line no-unused-vars
     const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
