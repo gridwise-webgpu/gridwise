@@ -63,7 +63,7 @@ Gridwise also provides `HierarchicalScan`, a reduce-then-scan implementation wit
 
 Each tile is scanned with the workgroup function `wgScan`.
 
-Use it where a chained scan is a poor fit, chiefly on hardware without subgroups. `DLDFScan` leans heavily on subgroup operations, and without subgroups each of those is emulated through workgroup memory with a barrier per step. `HierarchicalScan` needs only `wgScan`, which without subgroups is a single barrier-based scan over the workgroup. Because it has no carry chain (no lookback or fallback), it is also the simpler of the two to read, and a compact example of building a primitive from a workgroup function plus composition.
+Use it where a chained scan is a poor fit, chiefly on hardware without subgroups. There `DLDFScan` relies on emulated subgroup operations, and Gridwise's emulation coordinates invocations by spin-waiting on flags in workgroup memory. That is slow, and it can stall on implementations that do not guarantee forward progress between the invocations of a workgroup, such as CPU-based WebGPU renderers. `HierarchicalScan` needs only `wgScan`, which without subgroups synchronizes with workgroup barriers alone. Because it has no carry chain (no lookback or fallback), it is also the simpler of the two to read, and a compact example of building a primitive from a workgroup function plus composition.
 
 ## Configuring and Calling Gridwise Scan and Reduce
 
