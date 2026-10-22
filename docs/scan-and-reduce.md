@@ -19,9 +19,9 @@ Finally, scans have two variants, exclusive and inclusive. Each output element o
 
 ## GPU Scan Background
 
-On GPUs, scan performance is bound by memory bandwidth. The best GPU scan implementations fully saturate the GPU's memory system. Thus the best GPU scan implementations are those that use algorithms that require the fewest accesses to memory. The "classic" GPU way to compute scan is to divide the input into tiles, compute the reduction of all elements in each tile, compute the prefix sum of those per-tile reductions, then use the values of that per-tile prefix sum as inputs into a blockwise scan of each individual tile. This strategy is called _reduce-then-scan_. The details aren't important; what is important is that for an _n_-element scan, we incur 3*n* memory accesses (_n_ for the per-block reduction and 2*n* to read the input/write the output in the blockwise scan).
+On GPUs, scan performance is bound by memory bandwidth. The best GPU scan implementations fully saturate the GPU's memory system. Thus the best GPU scan implementations are those that use algorithms that require the fewest accesses to memory. The "classic" GPU way to compute scan is to divide the input into tiles, compute the reduction of all elements in each tile, compute the prefix sum of those per-tile reductions, then use the values of that per-tile prefix sum as inputs into a blockwise scan of each individual tile. This strategy is called _reduce-then-scan_. The details aren't important; what is important is that for an _n_-element scan, we incur 3*n* memory accesses (_n_ for the per-tile reduction and 2*n* to read the input/write the output in the tile-by-tile scan).
 
-In 2015, Yan et al. introduced an alternate GPU-scan implementation, [StreamScan](https://dl.acm.org/doi/10.1145/2442516.2442539), which required only 2*n* memory accesses. Like reduce-then-scan, StreamScan computes a reduction for each input tile, but unlike reduce-then-scan, StreamScan then _serializes_ the scan of the per-tile values across tile processors. This approach is called a _chained scan_. Each tile processor must wait for its predecessor to compute the reduction of all elements up to and including the predecessor's tile. Then the tile adds its tile reduction to the global reduction and passes it to the next tile's processor, then uses the partial sum to complete the scan of its tile. The key data structure here is the carry chain, which stores the inclusive scan of the tile reductions. The most important aspect of this implementation is that it only requires reading and writing each element once and thus incurs only 2*n* memory references, the theoretical minimum.
+In 2013, Yan et al. introduced an alternate GPU-scan implementation, [StreamScan](https://dl.acm.org/doi/10.1145/2442516.2442539), which required only 2*n* memory accesses. Like reduce-then-scan, StreamScan computes a reduction for each input tile, but unlike reduce-then-scan, StreamScan then _serializes_ the scan of the per-tile values across tile processors. This approach is called a _chained scan_. Each tile processor must wait for its predecessor to compute the reduction of all elements up to and including the predecessor's tile. Then the tile adds its tile reduction to the global reduction and passes it to the next tile's processor, then uses the partial sum to complete the scan of its tile. The key data structure here is the carry chain, which stores the inclusive scan of the tile reductions. The most important aspect of this implementation is that it only requires reading and writing each element once and thus incurs only 2*n* memory references, the theoretical minimum.
 
 (All of the above is covered in great detail in our [SPAA 2025 paper](https://dl.acm.org/doi/10.1145/3694906.3743326).)
 
@@ -45,13 +45,13 @@ Lookback and fallback were challenging to implement correctly.
 
 ### Gridwise's Reduce
 
-The carry chain in a chained scan stores the inclusive scan of the reduction of each tile. The last element in that carry chain is the sum of all input tiles and is thus the reduction of the entire input. A reduce can thus be implemented using the existing scan machinery (and run at full memory bandwidth). A traditional reduce implementation (computing tile reductions in parallel then reducing the tile reductions into a single value) would likely run just as fast, but would require a different implementation, so we have chosen to use the chained-scan implementation as Gridwise's reduce. When configured as a reduction primitive, our scan implementation leaves out any scan-specific computation (e.g., we don't have to compute the final per-tile scan).
+The carry chain in a chained scan stores the inclusive scan of the reduction of each tile. The last element in that carry chain is the sum of all input tiles and is thus the reduction of the entire input. A reduce can thus be implemented using the existing scan machinery (and run at full memory bandwidth). A traditional reduce implementation (computing tile reductions in parallel then reducing the tile reductions into a single value) would likely run just as fast, but would require a different implementation, so `DLDFScan` with `type: "reduce"` is Gridwise's main reduce. (`HierarchicalScan`, below, also offers `type: "reduce"`, which is that traditional implementation.) When configured as a reduction primitive, our scan implementation leaves out any scan-specific computation (e.g., we don't have to compute the final per-tile scan).
 
 ### Leveraging Subgroups
 
 WebGPU's optional [subgroups](https://www.w3.org/TR/webgpu/#subgroups) feature enables WebGPU programs to use SIMD instructions within a workgroup. These deliver significant performance gains primarily by utilizing register shuffling, minimizing the amount of work that must be routed through shared memory. Consequently, our initial performance testing indicated that scan operations are 2.5x slower using Gridwise's [subgroup emulation](../subgroup-strategy/) compared to native hardware. While both emulated and hardware-backed approaches theoretically share the same minimal algorithmic depth, the native hardware scan requires no barriers for the steps performed via shuffling, whereas the emulated loop must perform all work through shared memory, incurring a barrier at each iteration. Therefore, while the theoretical depth remains constant, emulated scans—or native execution on smaller subgroup sizes—tend to perform worse in practice due to the increased relative cost of synchronization required by shared memory.
 
-It is possible that the fastest scan and reduce implementations in the absence of subgroup hardware are not chained ones; `HierarchicalScan` (below) is the non-chained alternative, and comparing the two without subgroups is an open question. In general, in Gridwise, we expect that subgroup operations are available, and we use them to reduce across subgroups and workgroups, to broadcast information from one thread to others, and to compute local subgroup-sized scans as part of workgroup scans.
+In the absence of subgroup hardware, the fastest scan and reduce implementations may not be chained ones. `HierarchicalScan` (below) is the non-chained alternative. On an Apple M1 Max with subgroups disabled, it ran roughly 20–30× faster than `DLDFScan` with emulated subgroups. In general, in Gridwise, we expect that subgroup operations are available, and we use them to reduce across subgroups and workgroups, to broadcast information from one thread to others, and to compute local subgroup-sized scans as part of workgroup scans.
 
 ### HierarchicalScan: reduce-then-scan
 
@@ -63,13 +63,13 @@ Gridwise also provides `HierarchicalScan`, a reduce-then-scan implementation wit
 
 Each tile is scanned with the workgroup function `wgScan`.
 
-Use it where a chained scan is a poor fit, chiefly on hardware without subgroups. There `HierarchicalScan` uses only workgroup barriers, while `DLDFScan` relies on emulated subgroups, which spin-wait and can stall on implementations that do not guarantee forward progress between invocations, such as CPU-based WebGPU renderers. Because it makes no forward-progress assumptions at all, it is also the simpler of the two to read, and a compact example of building a primitive from a workgroup function plus composition.
+Use it where a chained scan is a poor fit, chiefly on hardware without subgroups. `DLDFScan` leans heavily on subgroup operations, and without subgroups each of those is emulated through workgroup memory with a barrier per step. `HierarchicalScan` needs only `wgScan`, which without subgroups is a single barrier-based scan over the workgroup. Because it has no carry chain (no lookback or fallback), it is also the simpler of the two to read, and a compact example of building a primitive from a workgroup function plus composition.
 
 ## Configuring and Calling Gridwise Scan and Reduce
 
 ### Defining the primitive
 
-Declare the scan or reduce primitive as an instance of the `DLDFScan` class. An example scan declaration:
+Declare the scan or reduce primitive as an instance of the `DLDFScan` class (or `HierarchicalScan`, which takes the same arguments). An example scan declaration:
 
 ```js
 const datatype = "u32"; // or "i32" or "f32"
@@ -78,30 +78,29 @@ const dldfscanPrimitive = new DLDFScan({
   binop: new BinOpAdd({ datatype }),
   type: "exclusive",
   datatype, // use the "datatype" string defined above
-  gputimestamps: true,
 });
 ```
 
 The argument is a JS object and its members may include:
 
 - **device** (required): the GPU device on which this primitive will run.
-- **datatype** (required): Scans need to specify the datatype that can be scanned. Currently we support the (WGSL) types "u32", "i32", and "f32", specified as strings. It is definitely possible to support more complex datatypes (e.g., structs), but this would take non-trivial engineering work.
-- **binop** (required): the "binary operation" aka a [monoid](https://en.wikipedia.org/wiki/Monoid), specified as a combination of a datatype and a binary operator that operates on that datatype. The core scan implementation is agnostic as to the binary operation; the `binop` supplies that operation. The binop class is described in more detail [here](../binop/).
+- **datatype** (required): the datatype to scan, as a string. Currently we support the WGSL scalar types `"u32"`, `"i32"`, and `"f32"`. It is definitely possible to support more complex datatypes (e.g., structs), but this would take non-trivial engineering work.
+- **binop** (required): the "binary operation" aka a [monoid](https://en.wikipedia.org/wiki/Monoid), specified as a combination of a datatype and a binary operator that operates on that datatype. Pass an instance whose datatype matches **datatype**, e.g., `new BinOpAdd({ datatype })`. The core scan implementation is agnostic as to the binary operation; the `binop` supplies that operation. The binop class is described in more detail [here](../binop/).
 - **type**: any of `"exclusive"`, `"inclusive"`, or `"reduce"`. Default is `"exclusive"`.
-- **datatype** (required): currently, any WGSL scalar primitive type (`"u32"`, `"i32"`, or `"f32"`). Scan and reduce could be extended to other datatypes with some engineering effort.
-- **gputimestamps**: enable GPU timestamps for the primitive's kernel calls.
+
+GPU timing is requested per call, with `execute({ enableGPUTiming: true })` (below), not in the constructor.
 
 ### Configuring the primitive
 
 Once the primitive is _defined_, it must then be _configured_. The primitive knows that it requires an input and output buffer, named `inputBuffer` and `outputBuffer`. (We use our [`Buffer` class](../buffer/) for this.) We configure the primitive by registering data buffers with the primitive. This can be done either with a `primitive.registerBuffer()` call or as an argument to the `execute` call. (The former is preferred if we need to register the buffer(s) once and then call `execute` many times.)
 
-To register a buffer, simply call `primitive.registerBuffer(buffer)`, where `buffer.label` is either `inputBuffer` or `outputBuffer`. The below code creates a `Buffer` then registers it.
+To register a buffer, simply call `primitive.registerBuffer(buffer)`, where `buffer.label` is either `inputBuffer` or `outputBuffer`. The below code creates a `Buffer` then registers it. The output buffer is registered the same way; for a reduce it holds one element.
 
 ```js
 const inputLength = 2 ** 20;
-testInputBuffer = new Buffer({
+const testInputBuffer = new Buffer({
   device,
-  datatype: "f32",
+  datatype, // must match the primitive's datatype
   length: inputLength,
   label: "inputBuffer",
   createCPUBuffer: true,
@@ -110,7 +109,7 @@ testInputBuffer = new Buffer({
   initializeGPUBuffer: true /* with CPU data */,
   createMappableGPUBuffer: false /* never reading this back */,
 });
-primitdldfscanPrimitiveive.registerBuffer(testInputBuffer);
+dldfscanPrimitive.registerBuffer(testInputBuffer);
 ```
 
 ### Calling scan or reduce
@@ -144,8 +143,8 @@ await dldfscanPrimitive.execute({
 
 ## Usage and performance notes
 
-Input lengths _must be_ a multiple of 4. Pad the end of your input array with enough identity elements to make this work. (This is because internally, we use `vec4`s for computation.)
+`DLDFScan`'s input length _must be_ a multiple of 4. Pad the end of your input array with enough identity elements to make this work. (This is because internally, we use `vec4`s for computation.)
 
-Scan has had extensive performance testing and the defaults are fairly stable across different GPUs. The workgroup size, for instance, is set to 256. This particular iteration of the scan kernel has barely been tested with other workgroup sizes and they are unlikely to work out of the box.
+`DLDFScan` has had extensive performance testing and the defaults are fairly stable across different GPUs. The workgroup size, for instance, is set to 256. This particular iteration of the scan kernel has barely been tested with other workgroup sizes and they are unlikely to work out of the box.
 
 If we extended scan to larger datatypes (beyond 32 bits), we expect that workgroup memory consumption would become an issue. We expect we would have to reduce workgroup size accordingly.
