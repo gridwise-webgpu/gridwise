@@ -38,7 +38,7 @@ Radix sort implementations (including ours) typically use a ping-pong pair of ar
 
 ### Defining the primitive
 
-Declare the scan or reduce primitive as an instance of the `OneSweepSort` class. An example scan declaration:
+Declare the sort primitive as an instance of the `OneSweepSort` class. An example sort declaration:
 
 ```js
 const datatype = "u32"; // or "i32" or "f32"
@@ -58,15 +58,15 @@ Gridwise OneSweep supports all combinations of:
 
 ### Configuring the primitive
 
-Once the primitive is _defined_, it must then be _configured_. The primitive knows that it requires an input/output and temporary buffer, labeled `keysInOut` and `keysTemp`. (We use our [`Buffer` class](../buffer/) for this.) If we are doing a key-value sort, we also require `payloadInOut` and `payloadTemp` buffers, which store the values.) We configure the primitive by registering data buffers with the primitive. This can be done either with a `primitive.registerBuffer()` call or as an argument to the `execute` call. (The former is preferred if we need to register the buffer(s) once and then call `execute` many times.)
+Once the primitive is _defined_, it must then be _configured_. The primitive knows that it requires an input/output and temporary buffer, labeled `keysInOut` and `keysTemp`. (We use our [`Buffer` class](../buffer/) for this.) If we are doing a key-value sort, we also require `payloadInOut` and `payloadTemp` buffers, which store the values. We configure the primitive by registering data buffers with the primitive. This can be done either with a `primitive.registerBuffer()` call or as an argument to the `execute` call. (The former is preferred if we need to register the buffer(s) once and then call `execute` many times.)
 
 To register a buffer, simply call `primitive.registerBuffer(buffer)`, where `buffer.label` is one of the buffers above. The below code creates a `Buffer` then registers it.
 
 ```js
 const inputLength = 2 ** 20;
-testKeysBuffer = new Buffer({
+const testKeysBuffer = new Buffer({
   device,
-  datatype: "f32",
+  datatype, // must match the primitive's datatype
   length: inputLength,
   label: "keysInOut",
   createCPUBuffer: true,
@@ -102,7 +102,7 @@ const sortedValues = sort.getBuffer(sort.outputPayloadBufferName);  // payloadIn
 
 If only the low bits of `u32` keys vary (for instance, keys known to be below 2^20), pass `KEY_BITS` to the constructor to sort only those bits. That saves passes: `KEY_BITS: 20` takes 3 passes instead of 4. Because the pass count can then be odd, use `outputKeysBufferName` (or `copyOutputToTemp: true`) to find the result.
 
-### Calling scan or reduce
+### Calling sort
 
 Once the primitive is defined and configured, simply call its `execute()` method.
 
@@ -135,7 +135,7 @@ await oneSweepSortPrimitive.execute({
 
 The number of items to sort must be no greater than 2^30. (CUB's OneSweep implementation has the same restriction.) We use the two most-significant bits as status bits. It would take a large engineering effort to remove this limitation.
 
-Just as with scan, input lengths _must be_ a multiple of 4. Pad the end of your input array with enough largest-key-value elements to make this work. (This is because internally, we use `vec4`s for computation.)
+Just as with `DLDFScan`, input lengths _must be_ a multiple of 4. Pad the end of your input array with enough elements to make this work, using the largest key value for an ascending sort or the smallest for a descending sort, so the padding sorts to the end. (This is because internally, we use `vec4`s for computation.)
 
 During its development, sort had extensive performance testing and the defaults are fairly stable across different GPUs. We sort 8 bits per pass and this particular implementation has never been tested with a different number of bits per pass. This could be remedied with engineering effort.
 

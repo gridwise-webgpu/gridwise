@@ -48,7 +48,7 @@ WebGPU functions (shader compilation, adapter requests, resource binding) are as
 ## 4. Clear Console History on Load
 Chrome preserves console history across reloads. If a script fails to compile on run $N$, the log capture on run $N+1$ may still contain the stale compile error:
 *   Insert `console.clear()` right after imports at the top of your script.
-*   *Warning*: Never put `console.clear()` *before* imports, as ES Module syntax mandates that import statements must be the first expressions in the file, otherwise a `SyntaxError` will occur.
+*   *Note*: Placing `console.clear()` *above* the imports is not a `SyntaxError` (import declarations may appear anywhere at a module's top level), but imports are hoisted: the imported modules run first, so anything they log is cleared. Putting `console.clear()` right after the imports makes the order explicit.
 
 ---
 

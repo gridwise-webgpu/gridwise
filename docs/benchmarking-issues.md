@@ -3,7 +3,7 @@ layout: page
 title: "Benchmarking Issues & Idempotence"
 category: gridwise
 permalink: /benchmarking-issues/
-order: 12
+order: 16
 ---
 
 # Benchmarking Issues and Idempotence in WebGPU Compute Primitives
@@ -17,8 +17,8 @@ When evaluating the performance of highly optimized WebGPU compute primitives (l
 To avoid CPU-GPU round-trip latency, Gridwise records a loop of *N* dispatches directly inside a single command buffer when `trials > 1` (configured via `args.trials`). 
 
 ### The Problem
-Any buffer allocation and initialization commands (such as `AllocateBuffer` with `clearBufferOnReuse: true`) are recorded and executed **on the CPU before the command buffer is submitted**.
-* Between consecutive dispatches on the GPU, **no CPU-driven clearing commands run**.
+Buffer allocation and initialization (such as `AllocateBuffer` with `clearBufferOnReuse: true`) happens **once per `execute()`, before the kernel's dispatches** are recorded.
+* Between consecutive dispatches of the same kernel on the GPU, **nothing clears those buffers** unless the primitive asks for it (below).
 * If a buffer accumulates state across dispatches (e.g. via `atomicAdd`), trial 1 will accumulate into the buffer, and trial 2 will start with the populated buffer, yielding incorrect results or timing.
 
 ---
@@ -49,9 +49,9 @@ To resolve the lookback spine corruption without skewing performance timings, we
 Some atomic buffers, such as `sortBump` and `scanBump`, do not need external resets because the compute shader itself resets the atomic counter back to `0` using `atomicStore` on the final workgroup dispatch.
 
 ### Dynamic Reset of Lookback Spines
-Because the lookback spines (`passHist` and `spine`) are small (e.g., 15.6 KB for a 1,000,000 element scan), they can be cleared on the GPU between dispatches using a lightweight GPU shader (`clear_buffer`) with zero measurable overhead.
-* **Sort Solution**: Include `"passHist"` in `resetBuffersForBenchmarkingOnly` inside [onesweep.mjs](file:///Users/jdowens/Documents/working/gridwise/onesweep.mjs).
-* **Scan Solution**: Set `clearBufferOnReuse: true` and add `resetBuffersForBenchmarkingOnly: ["spine"]` inside [scandldf.mjs](file:///Users/jdowens/Documents/working/gridwise/scandldf.mjs).
+Because the lookback spines (`passHist` and `spine`) are small (e.g., about 4 KB for a 1,000,000-element scan), they can be cleared on the GPU between dispatches using a lightweight GPU shader (`clear_buffer`) with zero measurable overhead. A `Kernel` action lists the buffers to clear in `resetBuffersForBenchmarkingOnly`; for _N_ trials, `execute()` interleaves _N_ − 1 clears with the _N_ dispatches.
+* **Sort Solution**: The `onesweep_pass` kernel lists `["hist", "passHist"]` in `resetBuffersForBenchmarkingOnly` ([src/onesweep.mjs](https://github.com/gridwise-webgpu/gridwise/blob/main/src/onesweep.mjs)).
+* **Scan Solution**: The spine is allocated with `clearBufferOnReuse: true`, and the scan kernel lists `["spine"]` in `resetBuffersForBenchmarkingOnly` ([src/scandldf.mjs](https://github.com/gridwise-webgpu/gridwise/blob/main/src/scandldf.mjs)).
 
 ### Restoring Input Data
 For in-place algorithms like sorting, the input buffer is modified by the sort itself. Restoring the input data via full memory copies (GPU-to-GPU) would double the memory traffic and artificially deflate performance for bandwidth-bound primitives.

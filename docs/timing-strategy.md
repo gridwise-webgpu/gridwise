@@ -14,7 +14,7 @@ Building a high-performance WebGPU primitive library requires careful timing mea
 Gridwise's GPU timing uses WebGPU's GPU timestamp queries. Gregg Tavares's "[WebGPU Timing Performance
 ](https://webgpufundamentals.org/webgpu/lessons/webgpu-timing.html)" is both an excellent overview of using timestamp queries as well as the basis for our implementation. We began with his [timing helper](https://webgpufundamentals.org/webgpu/lessons/webgpu-timing.html#a-timing-helper) and augmented it to support calling multiple kernels (which is useful for benchmarking purposes).
 
-In our implementation, the `Primitive` class has a static `__timingHelper` member that is initialized to understand. The timing helper is enabled by passing `enableGPUTiming: true` as a member of the argument object to `primitive.execute()` (i.e., `primitive.execute{ enableGPUTiming: true, ...}`).
+In our implementation, the `BasePrimitive` class has a static `__timingHelper` member that is initialized to `undefined`. The timing helper is enabled by passing `enableGPUTiming: true` as a member of the argument object to `primitive.execute()` (i.e., `primitive.execute({ enableGPUTiming: true, ... })`).
 
 When GPU timing is enabled in this way, `primitive.execute` checks for a defined `__timingHelper` and initializes one if not, counting the number of kernels in the current primitive for the timing helper's initialization. As explained by the [timing helper](https://webgpufundamentals.org/webgpu/lessons/webgpu-timing.html#a-timing-helper)'s documentation, the timing helper replaces `beginComputePass` with its own `beginComputePass` that initializes the timing helper.
 
@@ -24,7 +24,7 @@ We record a separate timing value for each kernel in the primitive and thus retu
 
 ## CPU timing
 
-CPU timing is only possible if the primitive creates its own encoder to ensure that the resulting command buffer only reflects the work within the primitive. It is enabled in a similar way to GPU timing (`primitive.execute{ enableCPUTiming: true, ...}`). In our internal discussions, we have settled on the following way to best measure CPU timing, which is what is implemented within Gridwise, but we are open to better suggestions here. Our strategy is to clear the device's queue, record the current time as `cpuStartTime`, submit the command buffer and wait for the queue to clear, then record the current time as `gpuStartTime`. The elapsed time is the time between the two CPU time stamps.
+CPU timing is only possible if the primitive creates its own encoder to ensure that the resulting command buffer only reflects the work within the primitive. It is enabled in a similar way to GPU timing (`primitive.execute({ enableCPUTiming: true, ... })`). In our internal discussions, we have settled on the following way to best measure CPU timing, which is what is implemented within Gridwise, but we are open to better suggestions here. Our strategy is to clear the device's queue, record the current time as `cpuStartTime`, submit the command buffer and wait for the queue to clear, then record the current time as `cpuEndTime`. The elapsed time is the time between the two CPU time stamps.
 
 ```js
 const commandBuffer = encoder.finish();

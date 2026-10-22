@@ -11,7 +11,7 @@ Some primitives need another primitive as one of their steps. A primitive's `com
 
 ## Motivation
 
-The first primitive that needed this was `MultisplitPerm`, a random permutation built from multisplit passes (it is in a separate pull request). Each pass is three steps:
+The first primitive that needed this was [`MultisplitPerm`](../random-permutations/), a random permutation built from multisplit passes. Each pass is three steps:
 
 1. a histogram kernel counts how many elements go to each bucket;
 2. an exclusive scan of those counts gives every bucket its output offset;
@@ -76,4 +76,4 @@ class HistogramThenScan extends BasePrimitive {
 - **Trials.** The parent's `trials` argument is passed to the child, so every kernel, the child's included, is dispatched that many times.
 - **`compute()` is called once per `execute()`**, and the same action list is used for counting kernels and for execution.
 
-Nesting is recursive: a child may itself contain `ExecutePrimitive` actions. Only one level of nesting is tested so far (the `ScanPlusOne` regression test in `examples/regression.mjs`).
+Nesting is recursive: a child may itself contain `ExecutePrimitive` actions. `HierarchicalScan` relies on this: it scans its per-tile reductions with a nested `HierarchicalScan`, which nests another when those reductions do not fit in one tile. The regression suite covers one level (the `ScanPlusOne` test and `MultisplitPerm`) and two levels (`HierarchicalScan` on inputs of more than 2<sup>20</sup> elements).

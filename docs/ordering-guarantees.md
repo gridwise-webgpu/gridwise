@@ -31,7 +31,7 @@ If a compute pass writes to a buffer (e.g., `keysTemp`) and a subsequent compute
 
 In WebGPU, you **do not** need to manually insert pipeline barriers or execution barriers (unlike Vulkan or WebGL/OpenGL memory barriers). 
 - **Between Compute Passes**: WebGPU automatically inserts the necessary memory and pipeline barriers between separate compute passes to ensure all writes in a previous pass are visible to the reads in the next pass.
-- **Within a Single Compute Pass**: WebGPU does *not* automatically synchronize multiple dispatches within the *same* compute pass. For this reason, Gridwise primitives separate dependent phases into distinct compute passes (e.g., `global_hist` and `onesweep_pass` are executed as separate compute passes).
+- **Within a Single Compute Pass**: WebGPU also orders consecutive dispatches within the *same* compute pass: each dispatch is its own synchronization scope, so a dispatch sees the storage writes of the dispatches before it. (What WebGPU does *not* synchronize is invocations *within* one dispatch; that is what workgroup barriers and atomics are for.) Gridwise records each kernel in its own compute pass anyway (e.g., `global_hist` and `onesweep_pass`), which lets GPU timing time each kernel separately.
 
 ---
 

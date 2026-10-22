@@ -56,6 +56,8 @@ Specifically, it appears likely that kernels must take advantage of subgroup ins
 - –: Most complex implementation
 - –: Unlikely to deliver good performance without subgroups, which present definite fragility challenges in the chained context
 
+(Gridwise has since added one non-chained primitive alongside the chained ones: `HierarchicalScan`, a reduce-then-scan for hardware without subgroups, where it is much faster than the chained `DLDFScan` with emulated subgroups. See [Scan and Reduce](../scan-and-reduce/).)
+
 ### Hybrid approach: sometimes use chained algorithms, sometimes don’t
 
 - +: Allows most flexible performance tradeoffs between performance and capabilities
@@ -93,6 +95,6 @@ To resolve this bottleneck, we evaluate three primary JIT architectural alternat
 
 | Alternative | Pros | Cons |
 | :--- | :--- | :--- |
-| **A: Unified Source with Compile-Time Templating (Implemented)** | <ul><li>Single maintainable `.mjs` file for JIT generation.</li><li>Common setup, data loading, and final scattering code are shared.</li><li>Maximum performance on hardware; correct cooperative fallbacks on emulation.</li></ul> | <ul><li>Complex JIT template conditionals (`${this.useSubgroups ? ... : ...}`) reduce source readability.</li></ul> |
+| **A: Unified Source with Swappable Subgroup Helpers (Implemented)** | <ul><li>Single maintainable `.mjs` file for JIT generation.</li><li>Common setup, data loading, and final scattering code are shared.</li><li>Maximum performance on hardware; correct cooperative fallbacks on emulation.</li></ul> | <ul><li>The kernel text is the same in both modes; only the subgroup helper functions differ (`wgslFunctions` vs. `wgslFunctionsWithoutSubgroupSupport`), so emulation performance is limited by what those helpers can do.</li></ul> |
 | **B: Pure Subgroup-Only Shaders** | <ul><li>Zero JIT complexity or templating overhead.</li><li>Cleanest, most readable WGSL code.</li></ul> | <ul><li>Zero portability; fails on all devices without `subgroups` feature support.</li></ul> |
 | **C: Two Separate Shaders (Native vs. Emulated)** | <ul><li>Clean separation of concerns.</li><li>No JIT template nesting; each WGSL shader is easy to write and audit.</li></ul> | <ul><li>High maintenance overhead; any algorithm or input/output bindings change must be manually duplicated across both files.</li></ul> |

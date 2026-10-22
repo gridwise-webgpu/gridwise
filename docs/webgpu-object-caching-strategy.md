@@ -9,7 +9,7 @@ order: 9
 
 ## Gridwise WebGPU Object Caching Strategy
 
-This document outlines the caching strategy used for WebGPU objects within Gridwise. Creating WebGPU objects is not free and is potentially expensive. Caching created objects so that they can be reused potentially helps performance. The downsides of caching are that caching itself is not free and that the WebGPU back end may do its own caching. In Gridwise, caching is enabled by default but can be disabled (by instantiating a primitive with the argument `webgpucache = "disabled"`).
+This document outlines the caching strategy used for WebGPU objects within Gridwise. Creating WebGPU objects is not free and is potentially expensive. Caching created objects so that they can be reused potentially helps performance. The downsides of caching are that caching itself is not free and that the WebGPU back end may do its own caching. In Gridwise, caching is enabled by default but can be disabled (by instantiating a primitive with the argument `webgpucache: "disable"`; `webgpucache: "enable"` turns it back on). The setting applies to the device's whole cache, so it affects every primitive on that device.
 
 ### Cacheable WebGPU Objects
 
@@ -24,7 +24,7 @@ Of these, `GPUShaderModule` is potentially independent of the `GPUDevice`, while
 
 ## Cache Implementation
 
-Every primitive shares a `\_\_deviceToWebGPUObjectCache`, which is a `WeakMap` that maps a `GPUDevice` to its corresponding cache. Each device's cache contains several individual caches for different object types. These are regular `Map` objects that map a generated key to the WebGPU object.
+Every primitive shares a `__deviceToWebGPUObjectCache`, which is a `WeakMap` that maps a `GPUDevice` to its corresponding cache. Each device's cache contains several individual caches for different object types. These are regular `Map` objects that map a generated key to the WebGPU object.
 
 The available caches are:
 
@@ -33,7 +33,7 @@ The available caches are:
 - `computeModules`
 - `computePipelines`
 
-Each of these caches can be individually enabled or disabled when a primitive is created.
+Internally, each of these caches can be individually enabled or disabled (`new WebGPUObjectCache({ enabled: [...] })`); the primitive's `webgpucache` argument enables or disables all of them.
 
 Here is a simplified code representation of the cache structure:
 
