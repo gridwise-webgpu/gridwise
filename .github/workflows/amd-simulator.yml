@@ -34,9 +34,6 @@ jobs:
     timeout-minutes: 120
     # A prototype: report, but do not block, until it has a baseline.
     continue-on-error: true
-    env:
-      # where the built rocjitsu is installed, and cached
-      ROCJITSU_PREFIX: ${{ runner.temp }}/rocjitsu
     strategy:
       fail-fast: false
       matrix:
@@ -46,6 +43,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      # where the built rocjitsu is installed, and cached (inside the runner's
+      # temp directory: actions/cache could not save a path reached through ..)
+      - name: Set the rocjitsu location
+        run: echo "ROCJITSU_PREFIX=$RUNNER_TEMP/rocjitsu" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
