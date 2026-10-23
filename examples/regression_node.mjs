@@ -196,7 +196,15 @@ BasePrimitive.prototype.execute = async function (args = {}) {
 };
 
 // Intercept console.log to track PASS/FAIL counts
-const testStatus = { passed: 0, failed: 0 };
+/* EXPECTED_FAILURES=sort,perm: failures of tests in these families (the first
+ * word of the test name) are known and counted separately, so they do not
+ * fail the run; any other failure still does. For a known gap on a particular
+ * device, e.g. OneSweep on 64-wide subgroups. */
+const expectedFailureFamilies = new Set(
+  (process.env.EXPECTED_FAILURES ?? "").split(",").map((s) => s.trim()).filter(Boolean)
+);
+const testStatus = { passed: 0, failed: 0, expectedFailed: 0, passedInExpected: 0 };
+const familyOf = (msgStr) => msgStr.replace(/^\[(PASS|FAIL)\]\s*/, "").split(/\s+/)[0];
 const originalConsoleLog = console.log;
 console.log = function (...msg) {
   if (enableTiming) {
@@ -204,8 +212,10 @@ console.log = function (...msg) {
     const msgStr = msg.join(" ");
     if (msgStr.startsWith("[PASS]")) {
       testStatus.passed++;
+      if (expectedFailureFamilies.has(familyOf(msgStr))) testStatus.passedInExpected++;
     } else if (msgStr.startsWith("[FAIL]")) {
-      testStatus.failed++;
+      if (expectedFailureFamilies.has(familyOf(msgStr))) testStatus.expectedFailed++;
+      else testStatus.failed++;
     }
   }
 };
@@ -313,7 +323,15 @@ if (updateBaseline && !emulated && !correctnessOnly) {
 }
 
 console.log("\n================ REGRESSION SUMMARY ================");
-console.log(`Correctness: ${testStatus.passed} passed, ${testStatus.failed} failed`);
+console.log(
+  `Correctness: ${testStatus.passed} passed, ${testStatus.failed} failed` +
+    (expectedFailureFamilies.size
+      ? `, ${testStatus.expectedFailed} expected failures (EXPECTED_FAILURES=${[...expectedFailureFamilies].join(",")})`
+      : "")
+);
+if (expectedFailureFamilies.size && testStatus.expectedFailed === 0) {
+  console.log(`Note: nothing in EXPECTED_FAILURES failed (${testStatus.passedInExpected} of those tests passed); remove it.`);
+}
 
 if (testStatus.failed > 0 || testStatus.passed === 0) {
   console.error(`FAIL: Functional correctness failures detected! (${testStatus.passed} passed, ${testStatus.failed} failed)`);
