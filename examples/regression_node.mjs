@@ -21,6 +21,9 @@ let mainFinished = new Promise((resolve) => {
 });
 
 let enableTiming = true;
+/* CORRECTNESS_ONLY=true: one pass, no warm-up, no timing, no performance
+ * comparison. For slow or timing-free devices such as GPU simulators. */
+const correctnessOnly = process.env.CORRECTNESS_ONLY === "true";
 let cachedDevice = null;
 
 const gpuCreateFeatures = [
@@ -134,7 +137,7 @@ BasePrimitive.prototype.execute = async function (args = {}) {
   /* A primitive run by another primitive (ExecutePrimitive) is timed as part
    * of its parent; timing it separately would read the parent's timing
    * helper before the parent has finished recording. */
-  if (!enableTiming || args.__timingSetUpByParent) {
+  if (!enableTiming || correctnessOnly || args.__timingSetUpByParent) {
     return await originalExecute.call(this, args);
   }
 
@@ -210,10 +213,12 @@ console.log = function (...msg) {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // 5a. Warmup run (JIT compiles everything silently)
-console.log("Warming up shaders (JIT compilation phase)...");
-enableTiming = false;
-await import(`./regression.mjs?warmup=true`);
-await mainFinished;
+if (!correctnessOnly) {
+  console.log("Warming up shaders (JIT compilation phase)...");
+  enableTiming = false;
+  await import(`./regression.mjs?warmup=true`);
+  await mainFinished;
+}
 
 // Reset mainFinished promise and log interceptors for timed run
 mainFinished = new Promise((resolve) => {
@@ -253,7 +258,8 @@ let regressionDetected = false;
  * are neither compared with nor written to the baseline. */
 const emulated = process.env.DISABLE_SUBGROUPS === "true";
 if (emulated) console.log("Subgroups disabled (emulated): skipping the performance comparison.");
-for (const res of emulated ? [] : perfResults) {
+if (correctnessOnly) console.log("CORRECTNESS_ONLY: skipping the performance comparison.");
+for (const res of emulated || correctnessOnly ? [] : perfResults) {
   const key = `${res.label}_${res.type || "default"}_${res.datatype}_size_${res.inputLength}`;
   newGpuBaseline[key] = { gpuTimeMs: res.gpuTimeMs, cpuTimeMs: res.cpuTimeMs };
 
@@ -300,7 +306,7 @@ for (const res of emulated ? [] : perfResults) {
   }
 }
 
-if (updateBaseline && !emulated) {
+if (updateBaseline && !emulated && !correctnessOnly) {
   baselineData[adapterDescription] = { ...gpuBaseline, ...newGpuBaseline };
   fs.writeFileSync(baselinePath, JSON.stringify(baselineData, null, 2), "utf8");
   console.log(`\nBaseline performance data for "${adapterDescription}" written to: ${baselinePath}`);

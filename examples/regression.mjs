@@ -497,7 +497,7 @@ export async function main(navigator) {
     device.queue.writeBuffer(inputBuffer, 0, input);
     const outputBuffer = device.createBuffer({
       size: size * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST /* zeroed below */,
     });
     const mappable = device.createBuffer({
       size: size * 4,
@@ -880,7 +880,10 @@ ${randomBitsWGSL(this.rng)}
       device.destroy();
     };
   } else {
-    await runLargeTests(null, null);
+    /* SKIP_LARGE=true (Node only) skips the large tests, e.g., on a GPU simulator */
+    if (globalThis.process?.env?.SKIP_LARGE !== "true") {
+      await runLargeTests(null, null);
+    }
     device.destroy();
   }
 }

@@ -1,0 +1,106 @@
+# Correctness on simulated AMD GPUs, without a GPU. See misc/run_amd_simulator.sh.
+#
+# rocjitsu (ROCm/rocm-systems, emulation/rocjitsu) executes AMD GPU
+# instructions on the CPU behind the amdgpu kernel-driver interface. Mesa's
+# Vulkan driver (RADV) drives the simulated GPU, and Node's webgpu package
+# (Dawn) runs on RADV. That covers RDNA3 (gfx1100) and RDNA4 (gfx1201); RADV
+# does not support the CDNA (Instinct) GPUs rocjitsu also simulates.
+name: AMD GPU simulator
+
+on:
+  workflow_dispatch:
+  # While this is a prototype, run on PRs only when the setup itself changes.
+  pull_request:
+    paths:
+      - ".github/workflows/amd-simulator.yml"
+      - "misc/run_amd_simulator.sh"
+      - "misc/list_adapters.mjs"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amd-simulator-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # rocm-systems commit whose rocjitsu is built and used
+  ROCM_SYSTEMS_REF: 8ccc5ce6cd8e983739470fcffc00eefedb28e312
+  ROCJITSU_PREFIX: ${{ github.workspace }}/../rocjitsu
+
+jobs:
+  simulate:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    # A prototype: report, but do not block, until it has a baseline.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [gfx1201, gfx1100]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Vulkan (Mesa RADV) and build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mesa-vulkan-drivers libvulkan1 libdrm-amdgpu1 ninja-build
+          dpkg -l mesa-vulkan-drivers libdrm-amdgpu1 | tail -2
+
+      - name: Restore rocjitsu build
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ROCJITSU_PREFIX }}
+          key: rocjitsu-${{ runner.os }}-${{ env.ROCM_SYSTEMS_REF }}-v1
+
+      - name: Build rocjitsu
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          src="$RUNNER_TEMP/rocm-systems"
+          git init -q "$src" && cd "$src"
+          git remote add origin https://github.com/ROCm/rocm-systems
+          git sparse-checkout set emulation/rocjitsu runtimes/api-headers
+          git fetch -q --depth 1 --filter=blob:none origin "$ROCM_SYSTEMS_REF"
+          git checkout -q FETCH_HEAD
+          cd emulation/rocjitsu
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+          # the generated ISA sources need a lot of memory per compile
+          # rocjitsu_bin is the launcher; rocjitsu_shared is librocjitsu.so,
+          # the driver interposer it preloads
+          cmake --build build --target rocjitsu_bin rocjitsu_shared rocjitsu_hooks -j 2
+          mkdir -p "$ROCJITSU_PREFIX/bin" "$ROCJITSU_PREFIX/lib"
+          cp build/tools/rocjitsu/rocjitsu "$ROCJITSU_PREFIX/bin/"
+          find build -name 'librocjitsu*.so' -exec cp {} "$ROCJITSU_PREFIX/lib/" \;
+          cp -r configs "$ROCJITSU_PREFIX/configs"
+          ls -l "$ROCJITSU_PREFIX"/bin "$ROCJITSU_PREFIX"/lib
+
+      - name: Install dependencies
+        run: PUPPETEER_SKIP_DOWNLOAD=true npm ci
+
+      - name: Run the correctness tests on a simulated ${{ matrix.target }}
+        env:
+          ROCJITSU: ${{ env.ROCJITSU_PREFIX }}/bin/rocjitsu
+          ROCJITSU_CONFIGS: ${{ env.ROCJITSU_PREFIX }}/configs
+        run: |
+          mkdir -p results
+          timeout --signal=TERM 100m \
+            misc/run_amd_simulator.sh ${{ matrix.target }} 2>&1 | tee "results/${{ matrix.target }}.log"
+          exit "${PIPESTATUS[0]}"
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: amd-simulator-${{ matrix.target }}
+          path: results/
+          retention-days: 14
