@@ -97,6 +97,22 @@ jobs:
             misc/run_amd_simulator.sh ${{ matrix.target }} 2>&1 | tee "results/${{ matrix.target }}.log"
           exit "${PIPESTATUS[0]}"
 
+      - name: Summarize
+        if: always()
+        run: |
+          log="results/${{ matrix.target }}.log"
+          [[ -f $log ]] || exit 0
+          {
+            echo "### Simulated ${{ matrix.target }}"
+            echo '```'
+            grep -E "^WebGPU adapter|^Correctness:" "$log" || true
+            echo '```'
+            echo "Failures by test family:"
+            echo '```'
+            grep '^\[FAIL\]' "$log" | awk '{print $2}' | sort | uniq -c || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload log
         if: always()
         uses: actions/upload-artifact@v4
