@@ -72,15 +72,10 @@ jobs:
           venv="$RUNNER_TEMP/rocm-venv"
           python3 -m venv "$venv"
           index=https://nightly.repo.amd.com/rocm/whl-next/
-          try "$venv/bin/python" -m pip install --pre --index-url "$index" "rocm==$ROCM_SDK_VERSION"
+          # rocm-sdk init (which unpacks the SDK, rocjitsu included) needs devel
+          try "$venv/bin/python" -m pip install --pre --index-url "$index" "rocm[devel]==$ROCM_SDK_VERSION"
           try "$venv/bin/rocm-sdk" init
           root=$("$venv/bin/rocm-sdk" path --root)
-          if [[ ! -x $root/bin/rocjitsu && ! -x $root/bin/mirage ]]; then
-            echo "::notice title=ROCm SDK::rocjitsu is not in the core SDK; adding rocm[devel]"
-            try "$venv/bin/python" -m pip install --pre --index-url "$index" "rocm[devel]==$ROCM_SDK_VERSION"
-            try "$venv/bin/rocm-sdk" init
-            root=$("$venv/bin/rocm-sdk" path --root)
-          fi
           sim=$(ls "$root/bin" | grep -E '^(rocjitsu|mirage)$' | tr '\n' ' ')
           cfgs=$(ls "$root/share/rocjitsu/configs" 2>/dev/null | grep -E 'gfx1100|gfx1201' | tr '\n' ' ')
           echo "::notice title=ROCm SDK::$("$venv/bin/rocm-sdk" version 2>&1 | head -1); simulator: ${sim:-none}; configs: ${cfgs:-none}"
