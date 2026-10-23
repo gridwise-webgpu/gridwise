@@ -26,7 +26,6 @@ concurrency:
 env:
   # rocm-systems commit whose rocjitsu is built and used
   ROCM_SYSTEMS_REF: 8ccc5ce6cd8e983739470fcffc00eefedb28e312
-  ROCJITSU_PREFIX: ${{ github.workspace }}/../rocjitsu
 
 jobs:
   simulate:
@@ -35,6 +34,9 @@ jobs:
     timeout-minutes: 120
     # A prototype: report, but do not block, until it has a baseline.
     continue-on-error: true
+    env:
+      # where the built rocjitsu is installed, and cached
+      ROCJITSU_PREFIX: ${{ runner.temp }}/rocjitsu
     strategy:
       fail-fast: false
       matrix:
@@ -63,7 +65,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.ROCJITSU_PREFIX }}
-          key: rocjitsu-${{ runner.os }}-${{ env.ROCM_SYSTEMS_REF }}-v1
+          key: rocjitsu-${{ runner.os }}-${{ env.ROCM_SYSTEMS_REF }}-v2
 
       - name: Build rocjitsu
         if: steps.cache.outputs.cache-hit != 'true'
