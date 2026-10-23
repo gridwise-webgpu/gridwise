@@ -44,25 +44,47 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Vulkan (Mesa RADV)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mesa-vulkan-drivers libvulkan1 libdrm-amdgpu1
+          dpkg -l mesa-vulkan-drivers libdrm-amdgpu1 | tail -2
+
       # rocjitsu ships with AMD's nightly ROCm SDK ("TheRock"), as used by
       # IREE's CI. Pinned to a release that includes RDNA Vulkan support.
       - name: Install the ROCm SDK (rocjitsu)
         run: |
+          # report a failing command's output as an annotation
+          try() {
+            local out="$RUNNER_TEMP/try.log"
+            if ! "$@" > "$out" 2>&1; then
+              cat "$out"
+              echo "::error title=ROCm SDK::$* failed: $(tail -c 600 "$out" | tr '\n' ' ')"
+              return 1
+            fi
+            cat "$out"
+          }
           venv="$RUNNER_TEMP/rocm-venv"
           python3 -m venv "$venv"
           index=https://nightly.repo.amd.com/rocm/whl-next/
-          "$venv/bin/python" -m pip install -q --pre --index-url "$index" "rocm==$ROCM_SDK_VERSION"
-          "$venv/bin/rocm-sdk" init
+          try "$venv/bin/python" -m pip install --pre --index-url "$index" "rocm==$ROCM_SDK_VERSION"
+          try "$venv/bin/rocm-sdk" init
           root=$("$venv/bin/rocm-sdk" path --root)
           if [[ ! -x $root/bin/rocjitsu && ! -x $root/bin/mirage ]]; then
-            echo "rocjitsu is not in the core SDK; adding the devel package"
-            "$venv/bin/python" -m pip install -q --pre --index-url "$index" "rocm[devel]==$ROCM_SDK_VERSION"
-            "$venv/bin/rocm-sdk" init
+            echo "::notice title=ROCm SDK::rocjitsu is not in the core SDK; adding rocm[devel]"
+            try "$venv/bin/python" -m pip install --pre --index-url "$index" "rocm[devel]==$ROCM_SDK_VERSION"
+            try "$venv/bin/rocm-sdk" init
             root=$("$venv/bin/rocm-sdk" path --root)
           fi
-          "$venv/bin/rocm-sdk" version
-          ls "$root/bin" | grep -E '^(rocjitsu|mirage)$'
-          ls "$root/share/rocjitsu/configs" | grep -E 'gfx1100|gfx1201'
+          sim=$(ls "$root/bin" | grep -E '^(rocjitsu|mirage)$' | tr '\n' ' ')
+          cfgs=$(ls "$root/share/rocjitsu/configs" 2>/dev/null | grep -E 'gfx1100|gfx1201' | tr '\n' ' ')
+          echo "::notice title=ROCm SDK::$("$venv/bin/rocm-sdk" version 2>&1 | head -1); simulator: ${sim:-none}; configs: ${cfgs:-none}"
+          [[ -n $sim && -n $cfgs ]]
           echo "ROCM_ROOT=$root" >> "$GITHUB_ENV"
 
       - name: Install dependencies
