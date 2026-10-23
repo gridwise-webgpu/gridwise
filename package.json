@@ -48,6 +48,6 @@
   "homepage": "https://github.com/gridwise-js/gridwise#readme",
   "devDependencies": {
     "puppeteer": "^25.9.0",
-    "webgpu": "^0.4.0"
+    "webgpu": "^0.6.2"
   }
 }
