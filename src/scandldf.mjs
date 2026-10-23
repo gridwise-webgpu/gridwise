@@ -545,6 +545,14 @@ fn main(builtinsUniform: BuiltinsUniform,
       this.adapterInfo?.subgroupMinSize ?? this.workgroupSize;
     const inputSize = this.getBuffer("inputBuffer").size; // bytes
     const inputLength = inputSize / 4; /* 4 is size of datatype */
+    if (inputLength % 4 !== 0) {
+      /* the shader reads and writes whole vec4s; a partial last vec4 would be
+       * out of bounds, and WebGPU's robustness rules leave its result undefined */
+      throw new Error(
+        `DLDFScan: input length (${inputLength}) must be a multiple of 4. ` +
+          "Pad the input with the binop's identity, or use HierarchicalScan, which takes any length."
+      );
+    }
     this.workgroupCount = Math.ceil(inputLength / this.PART_SIZE);
     this.vec_size = Math.ceil(inputLength / 4); /* 4 is sizeof vec4 */
     this.work_tiles = this.workgroupCount;
@@ -697,7 +705,6 @@ export const DLDFScanTestSuite = new BaseTestSuite({
     datatype: "u32",
     type: "inclusive",
     binop: BinOpMaxU32,
-    gputimestamps: true,
   },
   plots: [DLDFScanPlot],
 });
@@ -713,7 +720,6 @@ export const DLDFReduceTestSuite = new BaseTestSuite({
     datatype: "f32",
     type: "reduce",
     binop: BinOpAddF32,
-    gputimestamps: true,
   },
   plots: [DLDFScanPlot],
 });
