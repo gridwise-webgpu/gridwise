@@ -248,7 +248,12 @@ const newGpuBaseline = {};
 const updateBaseline = process.env.UPDATE_BASELINE === "true";
 let regressionDetected = false;
 
-for (const res of perfResults) {
+/* Subgroup emulation (DISABLE_SUBGROUPS=true) is checked for correctness only:
+ * its timings depend on how the GPU schedules spin-waiting workgroups, so they
+ * are neither compared with nor written to the baseline. */
+const emulated = process.env.DISABLE_SUBGROUPS === "true";
+if (emulated) console.log("Subgroups disabled (emulated): skipping the performance comparison.");
+for (const res of emulated ? [] : perfResults) {
   const key = `${res.label}_${res.type || "default"}_${res.datatype}_size_${res.inputLength}`;
   newGpuBaseline[key] = { gpuTimeMs: res.gpuTimeMs, cpuTimeMs: res.cpuTimeMs };
 
@@ -295,7 +300,7 @@ for (const res of perfResults) {
   }
 }
 
-if (updateBaseline) {
+if (updateBaseline && !emulated) {
   baselineData[adapterDescription] = { ...gpuBaseline, ...newGpuBaseline };
   fs.writeFileSync(baselinePath, JSON.stringify(baselineData, null, 2), "utf8");
   console.log(`\nBaseline performance data for "${adapterDescription}" written to: ${baselinePath}`);

@@ -57,9 +57,10 @@ await sortPrimitive.execute({
   encoder: encoder
 });
 
-// 2. Run Scan on the sorted keys (records passes into the same encoder)
+// 2. Run Scan on the sorted keys (records passes into the same encoder).
+//    Sort reports which of its two buffers holds the sorted keys.
 await scanPrimitive.execute({
-  inputBuffer: keysBuffer,
+  inputBuffer: sortPrimitive.outputIsInTemp ? tempBuffer : keysBuffer,
   outputBuffer: scannedBuffer,
   encoder: encoder
 });

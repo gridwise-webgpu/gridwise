@@ -210,7 +210,7 @@ export async function main(navigator) {
     return data;
   }
 
-  async function runSortTest({ type, datatype, direction, size }) {
+  async function runSortTest({ type, datatype, direction, size, keyBits, copyOutputToTemp = true }) {
     const TypedArray = datatypeToTypedArray(datatype);
     const memsrcKeys = generateSortInput(datatype, size);
     const isKeyValue = type === "keyvalue";
@@ -227,7 +227,10 @@ export async function main(navigator) {
       inputLength: size,
       type: isKeyValue ? "keyvalue" : "keysonly",
       direction,
-      copyOutputToTemp: true /* sorted output lands in keysTemp */,
+      /* true: output guaranteed in keysTemp. false: output stays wherever
+       * the last pass wrote it; read primitive.outputKeysBufferName. */
+      copyOutputToTemp,
+      ...(keyBits !== undefined ? { KEY_BITS: keyBits } : {}),
     });
 
     const keysInOut = device.createBuffer({
@@ -284,15 +287,19 @@ export async function main(navigator) {
 
     await primitive.execute(executeArgs);
 
+    const outKeys = { keysInOut, keysTemp }[primitive.outputKeysBufferName];
     const encoder = device.createCommandEncoder();
-    encoder.copyBufferToBuffer(keysTemp, 0, mappableKeys, 0, keysTemp.size);
+    encoder.copyBufferToBuffer(outKeys, 0, mappableKeys, 0, outKeys.size);
     if (isKeyValue) {
+      const outPayload = { payloadInOut, payloadTemp }[
+        primitive.outputPayloadBufferName
+      ];
       encoder.copyBufferToBuffer(
-        payloadTemp,
+        outPayload,
         0,
         mappablePayload,
         0,
-        payloadTemp.size
+        outPayload.size
       );
     }
     device.queue.submit([encoder.finish()]);
@@ -317,12 +324,55 @@ export async function main(navigator) {
       mappablePayload.destroy();
     }
 
+    if (keyBits !== undefined) {
+      return validatePartialKeySort({
+        keyBits, direction,
+        inputKeys: memsrcKeys, outputKeys: memdestKeys,
+        inputPayload: memsrcPayload, outputPayload: memdestPayload,
+      });
+    }
     const validateArgs = { inputKeys: memsrcKeys, outputKeys: memdestKeys };
     if (isKeyValue) {
       validateArgs.inputPayload = memsrcPayload;
       validateArgs.outputPayload = memdestPayload;
     }
     return primitive.validate(validateArgs);
+  }
+
+  /* A sort with KEY_BITS < key width. OneSweep runs ceil(KEY_BITS / 8)
+   * passes of 8-bit digits, so it sorts on the low 8 * ceil(KEY_BITS / 8)
+   * bits; the output must be ordered by those bits and must hold the same
+   * (key, payload) pairs as the input. Stability-agnostic: many keys share
+   * their low bits, and this does not depend on how ties are ordered.
+   * Returns "" on success, as primitive.validate() does. */
+  function validatePartialKeySort({ keyBits, direction, inputKeys, outputKeys, inputPayload, outputPayload }) {
+    const sortedBits = 8 * Math.ceil(keyBits / 8);
+    const mask = sortedBits >= 32 ? 0xffffffff : (2 ** sortedBits - 1);
+    const low = (k) => (k & mask) >>> 0;
+    let errors = "", budget = 5;
+    for (let i = 1; i < outputKeys.length && budget > 0; i++) {
+      const a = low(outputKeys[i - 1]), b = low(outputKeys[i]);
+      if (direction === "ascending" ? a > b : a < b) {
+        errors += `\nOrder error at ${i} (low ${sortedBits} bits): ${a} then ${b}`;
+        budget--;
+      }
+    }
+    /* same multiset of (key, payload) pairs, compared as sorted lists */
+    const pairs = (keys, vals) => {
+      const p = Array.from(keys, (k, i) => [k >>> 0, vals ? vals[i] : 0]);
+      p.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+      return p;
+    };
+    if (budget > 0) {
+      const pin = pairs(inputKeys, inputPayload), pout = pairs(outputKeys, outputPayload);
+      for (let i = 0; i < pin.length && budget > 0; i++) {
+        if (pin[i][0] !== pout[i][0] || pin[i][1] !== pout[i][1]) {
+          errors += `\nOutput is not a permutation of the input: sorted pair ${i} is (${pout[i]}), expected (${pin[i]})`;
+          budget--;
+        }
+      }
+    }
+    return errors;
   }
 
   /* ------------------------------------------------------------------ */
@@ -355,7 +405,7 @@ export async function main(navigator) {
     ["reduce", "u32", BinOpAdd, 65536],
   ];
 
-  /* [type, datatype, direction, size] */
+  /* [type, datatype, direction, size, keyBits (optional: sort on the low keyBits bits)] */
   const sortTests = [
     /* cover all datatypes ascending */
     ["keysonly", "u32", "ascending", 256],
@@ -373,6 +423,24 @@ export async function main(navigator) {
     ["keyvalue", "i32", "ascending", 256],
     ["keyvalue", "u32", "descending", 256],
     ["keyvalue", "i32", "descending", 256],
+    /* partial key widths (KEY_BITS < 32): only the low digits are sorted.
+     * 12 and 20 are not multiples of the 8-bit digit (rounded up to 16, 24) */
+    ["keysonly", "u32", "ascending", 1000, 8],
+    ["keysonly", "u32", "ascending", 1000, 12],
+    ["keysonly", "u32", "ascending", 4096, 16],
+    ["keysonly", "u32", "ascending", 4096, 24],
+    ["keyvalue", "u32", "ascending", 4096, 20],
+  ];
+
+  /* No copyOutputToTemp: the output stays in whichever buffer the last pass
+   * wrote (keysTemp for an odd pass count, keysInOut for even), and the test
+   * reads the buffer that outputKeysBufferName names.
+   * [type, datatype, direction, size, keyBits] */
+  const sortNoCopyTests = [
+    ["keysonly", "u32", "ascending", 4096, 8] /* 1 pass: keysTemp */,
+    ["keysonly", "u32", "ascending", 4096, 16] /* 2 passes: keysInOut */,
+    ["keyvalue", "u32", "ascending", 4096, 24] /* 3 passes: keysTemp */,
+    ["keyvalue", "u32", "ascending", 4096] /* 4 passes: keysInOut */,
   ];
 
   /* Large tests: MB-sized buffers (4 bytes/element), sizes divisible by 4,
@@ -388,6 +456,7 @@ export async function main(navigator) {
     ["reduce", "u32", BinOpAdd, 1_000_000],
     ["reduce", "f32", BinOpAdd, 1_000_000],
     ["exclusive", "i32", BinOpMin, 2_000_000],
+    ["exclusive", "u32", BinOpAdd, 16_777_216] /* one large scan: 2^24 elements */,
     ["exclusive", "i32", BinOpMax, 2_000_000],
     ["reduce", "u32", BinOpMin, 3_000_000],
     ["reduce", "u32", BinOpMax, 3_000_000],
@@ -404,6 +473,11 @@ export async function main(navigator) {
     ["keyvalue", "i32", "ascending",  2_000_000],
     ["keyvalue", "u32", "descending", 2_000_000],
     ["keyvalue", "i32", "descending", 2_000_000],
+    /* partial key widths at a size spanning many partitions */
+    ["keysonly", "u32", "ascending", 1_048_576, 12],
+    ["keyvalue", "u32", "ascending", 1_048_576, 20],
+    /* one large sort (2^24 elements, 64 MiB of keys) */
+    ["keysonly", "u32", "ascending", 16_777_216],
   ];
 
   /* ------------------------------------------------------------------ */
@@ -731,9 +805,16 @@ ${randomBitsWGSL(this.rng)}
     await runTest(name, () => runScanTest({ type, datatype, binop, size, Primitive: HierarchicalScan }));
   }
 
-  for (const [type, datatype, direction, size] of sortTests) {
-    const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}`;
-    await runTest(name, () => runSortTest({ type, datatype, direction, size }));
+  for (const [type, datatype, direction, size, keyBits] of sortTests) {
+    const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}${keyBits !== undefined ? ` keyBits=${keyBits}` : ""}`;
+    await runTest(name, () => runSortTest({ type, datatype, direction, size, keyBits }));
+  }
+
+  for (const [type, datatype, direction, size, keyBits] of sortNoCopyTests) {
+    const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}${keyBits !== undefined ? ` keyBits=${keyBits}` : ""} no-copy`;
+    await runTest(name, () =>
+      runSortTest({ type, datatype, direction, size, keyBits, copyOutputToTemp: false })
+    );
   }
 
   await runTest("primitive destroy() frees its own buffers, then re-executes", runDestroyTest);
@@ -773,9 +854,9 @@ ${randomBitsWGSL(this.rng)}
       await runLarge(name, () => runScanTest({ type, datatype, binop, size, Primitive: HierarchicalScan }));
     }
 
-    for (const [type, datatype, direction, size] of largeSortTests) {
-      const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}`;
-      await runLarge(name, () => runSortTest({ type, datatype, direction, size }));
+    for (const [type, datatype, direction, size, keyBits] of largeSortTests) {
+      const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}${keyBits !== undefined ? ` keyBits=${keyBits}` : ""}`;
+      await runLarge(name, () => runSortTest({ type, datatype, direction, size, keyBits }));
     }
 
     for (const [n, options] of largePermTests) {

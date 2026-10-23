@@ -32,3 +32,12 @@ jobs:
 
     - name: Run WGSL Functions Subgroup Emulation Tests
       run: npm run test:wgsl
+
+    # Correctness only: the same regression suite with subgroups emulated
+    # (DISABLE_SUBGROUPS). Emulation relies on spin-waits between invocations,
+    # so its timings are not compared, and a hang is bounded by the timeout.
+    - name: Run Node.js WebGPU Regression Tests (subgroups emulated, correctness only)
+      run: npm run test:node
+      timeout-minutes: 20
+      env:
+        DISABLE_SUBGROUPS: "true"

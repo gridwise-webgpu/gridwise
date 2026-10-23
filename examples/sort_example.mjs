@@ -70,7 +70,6 @@ export async function main(navigator) {
     device,
     datatype,
     inputLength: inputLength,
-    copyOutputToTemp: true /* output is in memdestBuffer */,
   });
 
   const primitive = sortKeysPrimitive;
@@ -110,12 +109,18 @@ export async function main(navigator) {
     keysTemp: memdestBuffer,
   });
 
+  /* The sorted keys are in whichever buffer the last radix pass wrote:
+   * keysTemp (memdestBuffer) or keysInOut (memsrcBuffer). The primitive
+   * reports which. (Constructing it with copyOutputToTemp: true would
+   * instead guarantee memdestBuffer, at the cost of a copy.) */
+  const sortedBuffer = primitive.outputIsInTemp ? memdestBuffer : memsrcBuffer;
+
   /* copy output back to host */
   const encoder = device.createCommandEncoder({
     label: "copy result CPU->GPU encoder",
   });
   encoder.copyBufferToBuffer(
-    memdestBuffer,
+    sortedBuffer,
     0,
     mappableMemdestBuffer,
     0,

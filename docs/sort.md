@@ -32,7 +32,7 @@ Given this computed address per key, we could directly scatter each key to its l
 
 Note that the chained scan in onesweep is a chained scan over an entire 256-entry histogram. Lookback on such a large data structure is more complicated than lookback on a single data value, as we see in [our scan implementation](../scan-and-reduce/), because we use an entire workgroup to look back. The additional complexity is that _any_ thread in the lookback may fail to find a ready value, and if this is the case, the entire workgroup must drop into fallback. Thus we have to keep track of both per-thread lookback success as well as per-subgroup lookback success, and only determine lookback is successful if all subgroups report success.
 
-Radix sort implementations (including ours) typically use a ping-pong pair of arrays: on each pass, one array is the input and one array is the output, and on each pass, their roles switch. Because we are sorting 32- or 64-bit keys at 8 bits per pass, this means the input will be overwritten by the output and the primitive's output will be produced in the same buffer as its original input. Overwriting the input is not ideal behavior but is probably preferable to approaches that hide it from the user (by, say, preemptively copying the input into a temporary buffer and copying the temporary input and output at the end of the computation).
+Radix sort implementations (including ours) typically use a ping-pong pair of arrays: on each pass, one array is the input and one array is the output, and on each pass, their roles switch. Which array holds the sorted result therefore depends on the number of passes. With 8 bits per pass, sorting full 32- or 64-bit keys takes an even number of passes (4 or 8), so the output lands back in the input buffer, overwriting it. Sorting fewer key bits (see `KEY_BITS` below) can take an odd number of passes, and then the output lands in the temporary buffer. Gridwise follows [CUB's `DoubleBuffer`](https://nvidia.github.io/cccl/cub/api/structcub_1_1DoubleBuffer.html) here: rather than always copying the result to a fixed place, the primitive tells you where it is (see [Finding the sorted output](#finding-the-sorted-output)). Either buffer may be overwritten.
 
 ## Configuring and Calling Gridwise Sort
 
@@ -78,6 +78,29 @@ testKeysBuffer = new Buffer({
 });
 oneSweepSortPrimitive.registerBuffer(testKeysBuffer);
 ```
+
+### Finding the sorted output
+
+After `execute()`, the sorted keys are in one of the two key buffers, and the sorted payload (for a key-value sort) is in the matching payload buffer. Ask the primitive which:
+
+- `primitive.outputKeysBufferName` is `"keysInOut"` or `"keysTemp"`;
+- `primitive.outputPayloadBufferName` is `"payloadInOut"` or `"payloadTemp"`;
+- `primitive.outputIsInTemp` is `true` when the output is in the temporary buffers.
+
+These are valid as soon as the primitive is constructed, since they depend only on the number of passes. Read the result with, for example, `primitive.getBuffer(primitive.outputKeysBufferName)`.
+
+If you would rather have the output in a fixed place, construct the primitive with `copyOutputToTemp: true`. The output is then always in `keysTemp` (and `payloadTemp`), so sort behaves like any other primitive with separate input and output buffers. That costs a buffer-to-buffer copy when the pass count is even. When it is odd, the output is already in the temporary buffers and nothing is copied. The default is `false`: no copy, and you read the buffer the primitive names.
+
+```js
+const sort = new OneSweepSort({ device, datatype: "u32", type: "keyvalue" });
+await sort.execute({ keysInOut, keysTemp, payloadInOut, payloadTemp });
+const sortedKeys = sort.getBuffer(sort.outputKeysBufferName);       // keysInOut here: 4 passes
+const sortedValues = sort.getBuffer(sort.outputPayloadBufferName);  // payloadInOut
+```
+
+### Sorting fewer key bits
+
+If only the low bits of `u32` keys vary (for instance, keys known to be below 2^20), pass `KEY_BITS` to the constructor to sort only those bits. That saves passes: `KEY_BITS: 20` takes 3 passes instead of 4. Because the pass count can then be odd, use `outputKeysBufferName` (or `copyOutputToTemp: true`) to find the result.
 
 ### Calling scan or reduce
 
