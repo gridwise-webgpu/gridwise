@@ -56,9 +56,11 @@ jobs:
             mesa-vulkan-drivers libvulkan1 libdrm-amdgpu1 ninja-build
           dpkg -l mesa-vulkan-drivers libdrm-amdgpu1 | tail -2
 
+      # restore and save separately: actions/cache saves only when the whole
+      # job succeeds, and this advisory job may fail
       - name: Restore rocjitsu build
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.ROCJITSU_PREFIX }}
           key: rocjitsu-${{ runner.os }}-${{ env.ROCM_SYSTEMS_REF }}-v1
@@ -83,6 +85,13 @@ jobs:
           find build -name 'librocjitsu*.so' -exec cp {} "$ROCJITSU_PREFIX/lib/" \;
           cp -r configs "$ROCJITSU_PREFIX/configs"
           ls -l "$ROCJITSU_PREFIX"/bin "$ROCJITSU_PREFIX"/lib
+
+      - name: Save rocjitsu build
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.ROCJITSU_PREFIX }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}
 
       - name: Install dependencies
         run: PUPPETEER_SKIP_DOWNLOAD=true npm ci
