@@ -121,6 +121,12 @@ jobs:
             grep '^\[FAIL\]' "$log" | awk '{print $2}' | sort | uniq -c || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          # the same, as annotations (visible on the PR and through the API)
+          t=${{ matrix.target }}
+          echo "::notice title=$t adapter::$(grep -m1 '^WebGPU adapter' "$log" || echo none)"
+          echo "::notice title=$t correctness::$(grep -m1 '^Correctness:' "$log" || echo 'no summary line')"
+          fails=$(grep '^\[FAIL\]' "$log" | awk '{print $2}' | sort | uniq -c | xargs || true)
+          [[ -z $fails ]] || echo "::warning title=$t failures by family::$fails"
 
       - name: Upload log
         if: always()
