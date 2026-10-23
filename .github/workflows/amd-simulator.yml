@@ -24,8 +24,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # rocm-systems commit whose rocjitsu is built and used
-  ROCM_SYSTEMS_REF: 8ccc5ce6cd8e983739470fcffc00eefedb28e312
+  # nightly ROCm SDK whose rocjitsu is used
+  ROCM_SDK_VERSION: 10.2.0a20261006
 
 jobs:
   simulate:
@@ -44,66 +44,31 @@ jobs:
         with:
           persist-credentials: false
 
-      # where the built rocjitsu is installed, and cached (inside the runner's
-      # temp directory: actions/cache could not save a path reached through ..)
-      - name: Set the rocjitsu location
-        run: echo "ROCJITSU_PREFIX=$RUNNER_TEMP/rocjitsu" >> "$GITHUB_ENV"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Install Vulkan (Mesa RADV) and build tools
+      # rocjitsu ships with AMD's nightly ROCm SDK ("TheRock"), as used by
+      # IREE's CI. Pinned to a release that includes RDNA Vulkan support.
+      - name: Install the ROCm SDK (rocjitsu)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            mesa-vulkan-drivers libvulkan1 libdrm-amdgpu1 ninja-build
-          dpkg -l mesa-vulkan-drivers libdrm-amdgpu1 | tail -2
-
-      # restore and save separately: actions/cache saves only when the whole
-      # job succeeds, and this advisory job may fail
-      - name: Restore rocjitsu build
-        id: cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.ROCJITSU_PREFIX }}
-          key: rocjitsu-${{ runner.os }}-${{ env.ROCM_SYSTEMS_REF }}-v2
-
-      - name: Build rocjitsu
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: |
-          src="$RUNNER_TEMP/rocm-systems"
-          git init -q "$src" && cd "$src"
-          git remote add origin https://github.com/ROCm/rocm-systems
-          git sparse-checkout set emulation/rocjitsu runtimes/api-headers
-          git fetch -q --depth 1 --filter=blob:none origin "$ROCM_SYSTEMS_REF"
-          git checkout -q FETCH_HEAD
-          cd emulation/rocjitsu
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
-          # the generated ISA sources need a lot of memory per compile
-          # rocjitsu_bin is the launcher; rocjitsu_shared is librocjitsu.so,
-          # the driver interposer it preloads
-          cmake --build build --target rocjitsu_bin rocjitsu_shared rocjitsu_hooks -j 2
-          mkdir -p "$ROCJITSU_PREFIX/bin" "$ROCJITSU_PREFIX/lib"
-          cp build/tools/rocjitsu/rocjitsu "$ROCJITSU_PREFIX/bin/"
-          find build -name 'librocjitsu*.so' -exec cp {} "$ROCJITSU_PREFIX/lib/" \;
-          cp -r configs "$ROCJITSU_PREFIX/configs"
-          ls -l "$ROCJITSU_PREFIX"/bin "$ROCJITSU_PREFIX"/lib
-
-      - name: Save rocjitsu build
-        if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ env.ROCJITSU_PREFIX }}
-          key: ${{ steps.cache.outputs.cache-primary-key }}
+          venv="$RUNNER_TEMP/rocm-venv"
+          python3 -m venv "$venv"
+          index=https://nightly.repo.amd.com/rocm/whl-next/
+          "$venv/bin/python" -m pip install -q --pre --index-url "$index" "rocm==$ROCM_SDK_VERSION"
+          "$venv/bin/rocm-sdk" init
+          root=$("$venv/bin/rocm-sdk" path --root)
+          if [[ ! -x $root/bin/rocjitsu && ! -x $root/bin/mirage ]]; then
+            echo "rocjitsu is not in the core SDK; adding the devel package"
+            "$venv/bin/python" -m pip install -q --pre --index-url "$index" "rocm[devel]==$ROCM_SDK_VERSION"
+            "$venv/bin/rocm-sdk" init
+            root=$("$venv/bin/rocm-sdk" path --root)
+          fi
+          "$venv/bin/rocm-sdk" version
+          ls "$root/bin" | grep -E '^(rocjitsu|mirage)$'
+          ls "$root/share/rocjitsu/configs" | grep -E 'gfx1100|gfx1201'
+          echo "ROCM_ROOT=$root" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: PUPPETEER_SKIP_DOWNLOAD=true npm ci
 
       - name: Run the correctness tests on a simulated ${{ matrix.target }}
-        env:
-          ROCJITSU: ${{ env.ROCJITSU_PREFIX }}/bin/rocjitsu
-          ROCJITSU_CONFIGS: ${{ env.ROCJITSU_PREFIX }}/configs
         run: |
           mkdir -p results
           timeout --signal=TERM 100m \
