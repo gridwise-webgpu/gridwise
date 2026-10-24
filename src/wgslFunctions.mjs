@@ -582,6 +582,84 @@ fn ${name}Add(b: u32, lidx: u32) {
 fn ${name}Count(b: u32) -> u32 { return ${count}; }`;
   }
 
+  /** Stable ranking by digit across a workgroup (the stable multisplit of
+   * Ashkiani et al., GPU Multisplit, TOPC 2017: ballot-based ranking within a
+   * subgroup, one counter row per subgroup). No atomic arrival order reaches
+   * the result, so it is the same on every GPU and in every run.
+   *
+   *   ${this.fnDeclarations.wgStableRank({ name: "rk", K: 16, bits: 8, shift: 24, workgroupSize: 256 })}
+   *
+   * declares
+   *
+   *   fn rkPos(k: u32, lidx: u32, sgid: u32, sgsz: u32) -> u32
+   *       the tile position of this invocation's k-th element. Positions are
+   *       subgroup-blocked (each subgroup holds K * sgsz consecutive
+   *       positions), so position order does not depend on the subgroup size.
+   *   fn rk(builtinsUniform, builtinsNonuniform, keys: array<u32, K>, len: u32) -> array<u32, K>
+   *       keys[k] is the key at rkPos(k, ...); its digit is bits
+   *       [shift, shift + bits). Positions >= len are not counted, and their
+   *       keys must have the last digit (e.g. 0xffffffff). Returns each
+   *       element's rank among the elements with its digit, in position
+   *       order. Call from uniform control flow; it contains barriers.
+   *   fn rkCount(d: u32) -> u32
+   *       after rk(): how many of the len elements have digit d
+   *
+   * A tile position is then (exclusive scan of the counts)[digit] + rank.
+   * Needs subgroups at least 32 wide (one row of 2^bits counters per
+   * subgroup). Emulated subgroups do not provide it. */
+  wgStableRank(args = {}) {
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    const { name, K, bits, shift } = env;
+    const W = env.workgroupSize;
+    const R = 1 << bits;
+    if (!(env.SUBGROUP_MIN_SIZE >= 32)) {
+      throw new Error(`wgStableRank: needs subgroups at least 32 wide (minimum here ${env.SUBGROUP_MIN_SIZE})`);
+    }
+    const rows = W / env.SUBGROUP_MIN_SIZE;
+    const digit = (key) => `((${key} >> ${shift}u) & ${R - 1}u)`;
+    return /* wgsl */ `
+var<workgroup> ${name}Rows: array<atomic<u32>, ${rows * R}>;   /* one row of counters per subgroup */
+var<workgroup> ${name}Counts: array<u32, ${R}>;
+fn ${name}Pos(k: u32, lidx: u32, sgid: u32, sgsz: u32) -> u32 { return (lidx - sgid) * ${K}u + k * sgsz + sgid; }
+fn ${name}Count(d: u32) -> u32 { return ${name}Counts[d]; }
+fn ${name}(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform,
+           keys: array<u32, ${K}>, len: u32) -> array<u32, ${K}> {
+  ${this.declareSubgroupVarsInsideHelper()}
+  let lidx = builtinsNonuniform.lidx;
+  let row = (lidx / sgsz) * ${R}u;
+  for (var i = lidx; i < ${rows * R}u; i += ${W}u) { atomicStore(&${name}Rows[i], 0u); }
+  workgroupBarrier();
+  let lane_mask_lt = ${this.subgroupLaneMaskLt(args)};
+  var ranks: array<u32, ${K}>;
+  for (var k = 0u; k < ${K}u; k++) {
+    let key = keys[k];
+${this.subgroupDigitMatch({ ...args, key: "key", shift: `${shift}u`, bits: `${bits}u` })}
+    /* the highest matching lane adds the subgroup's count for this digit. Only
+     * this subgroup touches its row, and every lane waits for the shuffle
+     * below, so rounds cannot overtake each other. */
+    var pre = 0u;
+    if (sgid == peer) { pre = atomicAdd(&${name}Rows[row + ${digit("key")}], rank + 1u); }
+    ranks[k] = rank + subgroupShuffle(pre, peer);
+  }
+  workgroupBarrier();
+  /* per digit: exclusive scan over the subgroup rows, in subgroup order */
+  let numRows = ${W}u / sgsz;
+  for (var d = lidx; d < ${R}u; d += ${W}u) {
+    var run = 0u;
+    for (var s = 0u; s < numRows; s++) {
+      let c = atomicLoad(&${name}Rows[s * ${R}u + d]);
+      atomicStore(&${name}Rows[s * ${R}u + d], run);
+      run += c;
+    }
+    if (d == ${R - 1}u) { run -= ${K * W}u - len; }   /* positions >= len carry the last digit */
+    ${name}Counts[d] = run;
+  }
+  workgroupBarrier();
+  for (var k = 0u; k < ${K}u; k++) { ranks[k] += atomicLoad(&${name}Rows[row + ${digit("keys[k]")}]); }
+  return ranks;
+}`;
+  }
+
   wgScan(args = {}) {
     const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /** Scan of one value per invocation across the workgroup, the scan

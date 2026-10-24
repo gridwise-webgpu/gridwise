@@ -794,9 +794,21 @@ ${randomBitsWGSL(this.rng)}
     [5000, { reproducible: true, localCap: 256 }] /* overflow path */,
     [16384, { reproducible: true, rng: { key: [1, 2], rounds: 7 }, carry: "pairs" }],
   ];
+  /* ranking "stable" needs real subgroups at least 32 wide */
+  const stableRanking = !useEmu && device.features.has("subgroups") && (device.adapterInfo?.subgroupMinSize ?? 0) >= 32;
+  if (stableRanking) {
+    permTests.push(
+      [65536, { ranking: "stable" }],
+      [100003, { ranking: "stable", carry: "indices", targetWorkgroups: 4 }] /* several tiles per workgroup */,
+      [131072, { ranking: "stable", split: "2+2+2" }] /* three passes */,
+      [5000, { ranking: "stable", localCap: 256 }] /* overflow path */,
+      [16384, { ranking: "stable", rng: { key: [1, 2], rounds: 7 }, carry: "pairs" }]
+    );
+  }
   const largePermTests = [
     [1 << 20, { reproducible: true }] /* CPU reference: keep it modest */,
     [1 << 24, {}],
+    ...(stableRanking ? [[1 << 20, { ranking: "stable" }]] : []),
   ];
 
   /* One DLDFScan executed on inputs of three sizes, then the first size again.

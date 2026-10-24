@@ -55,6 +55,13 @@
  *                     recomputed per pass; "pairs" (Philox only): elements
  *                     are (index, random word)
  *   reproducible      default false (see above)
+ *   ranking           "atomic" (default): rank with workgroup atomics, as
+ *                     above. "stable": rank with subgroup ballots (stable
+ *                     multisplit), each workgroup taking a contiguous run of
+ *                     tiles, and place sub-buckets in the finish the same way.
+ *                     Every group then arrives in index order, so the output
+ *                     is reproducible without sorting (reference() models it).
+ *                     Needs subgroups at least 32 wide.
  *   rng               null (keyed hash; see random.mjs) or
  *                     { key: [lo, hi], rounds = 10 } for Philox4x32
  *   tileK             elements per invocation per tile, default 16 (8 for pairs)
@@ -111,10 +118,11 @@ export function multisplitPermPassBits(groupBits, split = "even") {
 /** Group-size cap for the local finish: the mean group size plus 8 standard
  * deviations (a larger group takes the slow exact path, which for random
  * bucketing essentially never happens), rounded up to a multiple of 256,
- * limited by the device's workgroup memory. */
-export function localFinishCap(device, meanGroupSize = 4096, bytesPerElement = 4) {
+ * limited by the device's workgroup memory (less reservedBytes). */
+export function localFinishCap(device, meanGroupSize = 4096, bytesPerElement = 4, reservedBytes = 0) {
   const deviceMax =
-    Math.floor((device.limits.maxComputeWorkgroupStorageSize - 3328) / bytesPerElement / 256) * 256;
+    Math.floor((device.limits.maxComputeWorkgroupStorageSize - 3328 - reservedBytes) / bytesPerElement / 256) *
+    256;
   const wanted = Math.ceil((meanGroupSize + 8 * Math.sqrt(meanGroupSize)) / 256) * 256;
   return Math.min(deviceMax, wanted);
 }
@@ -130,11 +138,62 @@ export function localFinishCap(device, meanGroupSize = 4096, bytesPerElement = 4
  * canonical: sort each sub-bucket before Fisher-Yates, so the result depends
  * only on the set of values and the random streams (bit-reproducible on any
  * GPU). aux: each value comes with a random word in wgShufAux whose low byte
- * is its sub-bucket.
+ * is its sub-bucket. stable: place sub-buckets with wgStableRank instead
+ * of atomics, so each sub-bucket keeps wgShuf's order and the result depends
+ * only on that order and the random streams (needs subgroups >= 32 wide).
  *
  * env: a primitive (for fnDeclarations.wgScan, binop, workgroupSize). */
-export function wgShuffleWGSL(env, cap, { canonical = false, aux = false } = {}) {
+export function wgShuffleWGSL(env, cap, { canonical = false, aux = false, stable = false } = {}) {
   const W = WORKGROUP_SIZE;
+  const subBucket = (i) => `${aux ? `wgShufAux[${i}]` : `pm_rand(wgShuf[${i}], key, seed)`} & 255u`;
+  const place = stable
+    ? /* wgsl */ `
+  ${env.fnDeclarations.declareSubgroupVarsInsideHelper()}
+  var v: array<u32, SHUF_K>;
+  var d: array<u32, SHUF_K>;
+  for (var k = 0u; k < SHUF_K; k++) {
+    let idx = shufRankPos(k, lidx, sgid, sgsz);
+    d[k] = 255u;   /* past the end: the last sub-bucket, as shufRank needs */
+    if (idx < m) {
+      v[k] = wgShuf[idx];
+      d[k] = ${subBucket("idx")};
+    }
+  }
+  let r = shufRank(builtinsUniform, builtinsNonuniform, d, m);   /* its barriers also end the reads above */
+  var total = 0u;
+  let excl = wgExclusiveScan(shufRankCount(lidx), &total, builtinsUniform, builtinsNonuniform);
+  shufStart[lidx] = excl;
+  if (lidx == 0u) { shufStart[256] = total; }
+  workgroupBarrier();
+  for (var k = 0u; k < SHUF_K; k++) {
+    if (shufRankPos(k, lidx, sgid, sgsz) < m) { wgShuf[shufStart[d[k]] + r[k]] = v[k]; }
+  }
+  workgroupBarrier();`
+    : /* wgsl */ `
+  atomicStore(&shufCnt[lidx], 0u);
+  workgroupBarrier();
+  var v: array<u32, SHUF_K>;
+  var d: array<u32, SHUF_K>;
+  for (var k = 0u; k < SHUF_K; k++) {
+    let idx = lidx + k * ${W}u;
+    if (idx < m) {
+      v[k] = wgShuf[idx];
+      d[k] = ${subBucket("idx")};
+      atomicAdd(&shufCnt[d[k]], 1u);
+    }
+  }
+  workgroupBarrier();
+  var total = 0u;
+  let excl = wgExclusiveScan(atomicLoad(&shufCnt[lidx]), &total, builtinsUniform, builtinsNonuniform);
+  shufStart[lidx] = excl;
+  if (lidx == 0u) { shufStart[256] = total; }
+  atomicStore(&shufCnt[lidx], excl);
+  workgroupBarrier();
+  for (var k = 0u; k < SHUF_K; k++) {
+    let idx = lidx + k * ${W}u;
+    if (idx < m) { wgShuf[atomicAdd(&shufCnt[d[k]], 1u)] = v[k]; }
+  }
+  workgroupBarrier();`;
   const rankSubBuckets = /* wgsl */ `
   var dest: array<u32, SHUF_K>;
   for (var k = 0u; k < SHUF_K; k++) {
@@ -161,35 +220,16 @@ var<workgroup> wgShuf: array<u32, SHUF_CAP>;${
 var<workgroup> wgShufAux: array<u32, SHUF_CAP>;   /* sub-bucket = low byte */`
       : ""
   }
-var<workgroup> shufCnt: array<atomic<u32>, 256>;
+${
+    stable
+      ? `${env.fnDeclarations.subgroupLaneMasks()}
+${env.fnDeclarations.wgStableRank({ name: "shufRank", K: cap / W, bits: 8, shift: 0, workgroupSize: W })}`
+      : `var<workgroup> shufCnt: array<atomic<u32>, 256>;`
+  }
 var<workgroup> shufStart: array<u32, 257>;
 fn wgShuffle(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform,
              m: u32, key: u32, seed: u32) {
-  let lidx = builtinsNonuniform.lidx;
-  atomicStore(&shufCnt[lidx], 0u);
-  workgroupBarrier();
-  var v: array<u32, SHUF_K>;
-  var d: array<u32, SHUF_K>;
-  for (var k = 0u; k < SHUF_K; k++) {
-    let idx = lidx + k * ${W}u;
-    if (idx < m) {
-      v[k] = wgShuf[idx];
-      d[k] = ${aux ? "wgShufAux[idx]" : "pm_rand(v[k], key, seed)"} & 255u;
-      atomicAdd(&shufCnt[d[k]], 1u);
-    }
-  }
-  workgroupBarrier();
-  var total = 0u;
-  let excl = wgExclusiveScan(atomicLoad(&shufCnt[lidx]), &total, builtinsUniform, builtinsNonuniform);
-  shufStart[lidx] = excl;
-  if (lidx == 0u) { shufStart[256] = total; }
-  atomicStore(&shufCnt[lidx], excl);
-  workgroupBarrier();
-  for (var k = 0u; k < SHUF_K; k++) {
-    let idx = lidx + k * ${W}u;
-    if (idx < m) { wgShuf[atomicAdd(&shufCnt[d[k]], 1u)] = v[k]; }
-  }
-  workgroupBarrier();${canonical ? rankSubBuckets : ""}
+  let lidx = builtinsNonuniform.lidx;${place}${canonical ? rankSubBuckets : ""}
   {
     let a = shufStart[lidx];
     var k = shufStart[lidx + 1u] - a;
@@ -214,11 +254,16 @@ fn wgShuffle(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonun
  * group is arbitrary. One workgroup per group loads it into workgroup memory,
  * wgShuffles it, and writes it to outp[] (unmixed when unmix: keys are hashed
  * indices). Groups larger than cap take an exact single-invocation path in
- * global memory. canonical, rng, pairs: as in MultisplitPerm.
+ * global memory. canonical, rng, pairs: as in MultisplitPerm; stable: see
+ * wgShuffleWGSL.
  *
  * Bindings: keys (storage), outp (storage), groupStart (read-only-storage),
  * params (uniform: n, numGroups, stride, seed, seed2). */
-export function localFinishWGSL(env, cap, { unmix = true, canonical = false, rng = null, pairs = false } = {}) {
+export function localFinishWGSL(
+  env,
+  cap,
+  { unmix = true, canonical = false, rng = null, pairs = false, stable = false } = {}
+) {
   const W = WORKGROUP_SIZE;
   const sortGroup = /* wgsl */ `
       for (var i = 1u; i < m; i++) {   /* insertion sort: slow, but this path essentially never runs */
@@ -241,7 +286,7 @@ ${env.fnDeclarations.subgroupEmulation()}
 ${env.fnDeclarations.subgroupInclusiveOpScan()}
 ${env.fnDeclarations.wgScan()}
 ${randomBitsWGSL(rng)}
-${wgShuffleWGSL(env, cap, { canonical, aux: pairs })}
+${wgShuffleWGSL(env, cap, { canonical, aux: pairs, stable })}
 alias Elem = ${pairs ? "vec2u" : "u32"};   /* ${pairs ? "(index, random word)" : "index or hashed key"} */
 struct LF { n: u32, numGroups: u32, stride: u32, seed: u32, seed2: u32, p0: u32, p1: u32, p2: u32 };
 @group(0) @binding(0) var<storage, read_write> keys: array<Elem>;    /* arranged by group */
@@ -312,6 +357,14 @@ export class MultisplitPerm extends BasePrimitive {
     this.split ??= "auto";
     this.carry ??= "keys";
     this.reproducible ??= false;
+    this.ranking ??= "atomic";
+    if (!["atomic", "stable"].includes(this.ranking)) {
+      throw new Error(`MultisplitPerm: unknown ranking ${this.ranking}`);
+    }
+    this.stable = this.ranking === "stable";
+    if (this.stable && !(this.useSubgroups && this.SUBGROUP_MIN_SIZE >= 32)) {
+      throw new Error('MultisplitPerm: ranking "stable" needs subgroups at least 32 wide');
+    }
     this.rng ??= null;
     this.targetWorkgroups ??= 1024;
     if (this.rng && this.carry === "keys") this.carry = "indices"; /* Philox draws are not invertible */
@@ -319,11 +372,12 @@ export class MultisplitPerm extends BasePrimitive {
       throw new Error('MultisplitPerm: carry "pairs" needs rng (Philox)');
     }
     const n = this.n;
-    this.groupSize ??= this.reproducible && Math.ceil(Math.log2(n / 1024)) < 16 ? 1024 : 2048;
+    /* reproducible's sub-bucket sort grows with the group size; stable needs none */
+    this.groupSize ??= this.reproducible && !this.stable && Math.ceil(Math.log2(n / 1024)) < 16 ? 1024 : 2048;
     this.tileK ??= this.carry === "pairs" ? 8 : 16; /* pairs double the workgroup memory per staged element */
     this.rngJS = randomBitsJS(this.rng);
     if (!("label" in args)) {
-      this.label += this.makeParamString(["carry", "reproducible", "useSubgroups"]);
+      this.label += this.makeParamString(["carry", "reproducible", "ranking", "useSubgroups"]);
     }
 
     /* group bits. 9 bits would force a second pass for a single bit: use 8
@@ -333,13 +387,15 @@ export class MultisplitPerm extends BasePrimitive {
     /* the expected largest group (mean + 8 sd) must fit the local finish's
      * workgroup memory, or every group takes the slow overflow path */
     this.elementBytes = this.carry === "pairs" ? 8 : 4;
+    /* the stable finish's ranking rows and counts (see wgStableRank) */
+    this.finishReservedBytes = this.stable ? ((WORKGROUP_SIZE / this.SUBGROUP_MIN_SIZE) * 256 + 256) * 4 : 0;
     const needed = (G) => {
       const mean = n / 2 ** G;
       return Math.ceil((mean + 8 * Math.sqrt(mean)) / 256) * 256;
     };
     while (
       this.localCap === undefined &&
-      localFinishCap(device, n / 2 ** groupBits, this.elementBytes) < needed(groupBits)
+      localFinishCap(device, n / 2 ** groupBits, this.elementBytes, this.finishReservedBytes) < needed(groupBits)
     ) {
       groupBits++;
     }
@@ -367,7 +423,7 @@ export class MultisplitPerm extends BasePrimitive {
       return p;
     });
     this.numGroups = numSegs;
-    this.localCap ??= localFinishCap(device, n / numSegs, this.elementBytes);
+    this.localCap ??= localFinishCap(device, n / numSegs, this.elementBytes, this.finishReservedBytes);
 
     /* one scan primitive per pass, created once so that every compute()
      * returns the same objects */
@@ -393,6 +449,7 @@ export class MultisplitPerm extends BasePrimitive {
       localCap: this.localCap,
       carry: this.carry,
       reproducible: this.reproducible,
+      ranking: this.ranking,
       rng: this.rng ? `philox-${this.rng.rounds ?? 10}` : "hash32",
       tileK: this.tileK,
       targetWorkgroups: this.targetWorkgroups,
@@ -468,9 +525,28 @@ fn myWork(wid: u32, lidx: u32) -> Work {
   }
   return Work(seg, wid % ms.slots, workgroupUniformLoad(&wBegin), workgroupUniformLoad(&wEnd));
 }
+/* this workgroup's tiles: base = first, first + step, ... < end. ${
+      this.stable
+        ? `Blocked: a
+ * contiguous run of tiles, so that tiles (and a stable ranking) keep index order. */
+fn myTiles(w: Work) -> vec3u {
+  let perSlot = ((w.end - w.begin + TILE - 1u) / TILE + ms.slots - 1u) / ms.slots;
+  let first = w.begin + w.slot * perSlot * TILE;
+  return vec3u(first, min(w.end, first + perSlot * TILE), TILE);
+}`
+        : `Strided:
+ * tiles slot, slot + slots, ... */
+fn myTiles(w: Work) -> vec3u { return vec3u(w.begin + w.slot * TILE, w.end, ms.slots * TILE); }`
+    }
 
 /* per-digit counts: the histogram (hist_main), then each tile's ranks (scatter_main) */
-${this.fnDeclarations.wgHistogram({ name: "cnt", numBins: RADIX, workgroupSize: W })}
+${this.fnDeclarations.wgHistogram({ name: "cnt", numBins: RADIX, workgroupSize: W })}${
+      this.stable
+        ? `
+${this.fnDeclarations.subgroupLaneMasks()}
+${this.fnDeclarations.wgStableRank({ name: "stableRank", K, bits: radixBits, shift, workgroupSize: W })}`
+        : ""
+    }
 
 @compute @workgroup_size(${W})
 fn hist_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
@@ -478,12 +554,13 @@ fn hist_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonun
   let lidx = builtinsNonuniform.lidx;
   if (wgid >= ms.numSegs * ms.slots) { return; }
   let w = myWork(wgid, lidx);
+  let t = myTiles(w);
   cntClear(lidx);
   workgroupBarrier();
-  for (var base = w.begin + w.slot * TILE; base < w.end; base += ms.slots * TILE) {
+  for (var base = t.x; base < t.y; base += t.z) {
     for (var k = 0u; k < K; k++) {
       let idx = base + lidx + k * ${W}u;
-      if (idx < w.end) { cntAdd(digitOf(elemAt(idx)), lidx); }
+      if (idx < t.y) { cntAdd(digitOf(elemAt(idx)), lidx); }
     }
   }
   workgroupBarrier();
@@ -503,14 +580,31 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
   if (wgid >= ms.numSegs * ms.slots) { return; }
   let w = myWork(wgid, lidx);
   for (var d = lidx; d < RADIX; d += ${W}u) { cursor[d] = hist[histIndex(w.seg, d, w.slot)]; }
-  for (var base = w.begin + w.slot * TILE; base < w.end; base += ms.slots * TILE) {
-    let tileLen = min(TILE, w.end - base);
+  let t = myTiles(w);${this.stable ? `
+  ${this.fnDeclarations.initializeSubgroupVars()}` : ""}
+  for (var base = t.x; base < t.y; base += t.z) {
+    let tileLen = min(TILE, t.y - base);
+    var elem: array<Elem, K>;
+    var digit: array<u32, K>;
+    var rank: array<u32, K>;${this.stable ? `
+    /* 1. load (subgroup-blocked); rank within digit, stably, by subgroup ballots */
+    var key: array<u32, K>;
+    for (var k = 0u; k < K; k++) {
+      let j = stableRankPos(k, lidx, sgid, sgsz);
+      key[k] = 0xffffffffu;   /* past the end: the last digit, as stableRank needs */
+      if (j < tileLen) {
+        elem[k] = elemAt(base + j);
+        key[k] = keyOf(elem[k]);
+        digit[k] = radixDigit(key[k]);
+      }
+    }
+    rank = stableRank(builtinsUniform, builtinsNonuniform, key, tileLen);
+    /* 2. tile offsets per digit */
+    var count = 0u;
+    if (lidx < RADIX) { count = stableRankCount(lidx); }` : `
     /* 1. load; rank within digit by workgroup atomics (any order is fine) */
     cntClear(lidx);
     workgroupBarrier();
-    var elem: array<Elem, K>;
-    var digit: array<u32, K>;
-    var rank: array<u32, K>;
     for (var k = 0u; k < K; k++) {
       let j = lidx + k * ${W}u;
       if (j < tileLen) {
@@ -522,14 +616,14 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
     workgroupBarrier();
     /* 2. tile offsets per digit */
     var count = 0u;
-    if (lidx < RADIX) { count = cntCount(lidx); }
+    if (lidx < RADIX) { count = cntCount(lidx); }`}
     var tileTotal = 0u;
     let start = wgExclusiveScan(count, &tileTotal, builtinsUniform, builtinsNonuniform);
     if (lidx < RADIX) { tileStart[lidx] = start; }
     workgroupBarrier();
     /* 3. stage the tile grouped by digit */
     for (var k = 0u; k < K; k++) {
-      let j = lidx + k * ${W}u;
+      let j = ${this.stable ? "stableRankPos(k, lidx, sgid, sgsz)" : `lidx + k * ${W}u`};
       if (j < tileLen) { stage[tileStart[digit[k]] + rank[k]] = elem[k]; }
     }
     workgroupBarrier();
@@ -634,7 +728,8 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
         kernel: () =>
           localFinishWGSL(this, this.localCap, {
             unmix: this.carry === "keys",
-            canonical: this.reproducible,
+            canonical: this.reproducible && !this.stable /* a stable multisplit needs no sort */,
+            stable: this.stable,
             rng: this.rng,
             pairs: this.carry === "pairs",
           }),
@@ -664,13 +759,18 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
     return this.keyOf(i) >>> (32 - this.groupBits);
   }
 
-  /** The permutation a reproducible MultisplitPerm writes, computed on the
-   * CPU by mirroring the local finish: per group (in order), each element
-   * gets a sub-bucket from (value, group, seed2); each sub-bucket is sorted by
-   * value and Fisher-Yates-shuffled with its own stream; sub-buckets are
-   * concatenated in order. */
+  /** The permutation a reproducible (or stable-ranking) MultisplitPerm
+   * writes, computed on the CPU by mirroring the local finish: per group (in
+   * order), each element gets a sub-bucket from (value, group, seed2); each
+   * sub-bucket is put in canonical order and Fisher-Yates-shuffled with its
+   * own stream; sub-buckets are concatenated in order. Canonical order is
+   * sorted by value, or, with ranking "stable", index order (the order in
+   * which a stable multisplit delivers the group). */
   reference() {
-    if (!this.reproducible) throw new Error("reference() needs reproducible: true");
+    if (!this.reproducible && !this.stable) {
+      throw new Error('reference() needs reproducible: true or ranking: "stable"');
+    }
+    const order = this.stable ? (a) => a : (a) => a.sort();
     const { n, seed, groupBits } = this;
     const cap = this.localCap;
     const seed2 = (seed ^ 0x5bd1e995) >>> 0;
@@ -698,14 +798,14 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
       let shuffled;
       if (vals.length > cap) {
         /* overflow path: sort, then one Fisher-Yates over the group */
-        shuffled = Uint32Array.from(vals).sort();
+        shuffled = order(Uint32Array.from(vals));
         fisherYates(shuffled, g ^ 0x80000000, seed2 ^ 0x2f8e33a1);
       } else {
         const sub = Array.from({ length: 256 }, () => []);
         for (const v of vals) sub[(this.carry === "pairs" ? R.elem(v) : R.rand(v, g, seed2)) & 255].push(v);
         shuffled = [];
         sub.forEach((b, d) => {
-          const a = Uint32Array.from(b).sort();
+          const a = order(Uint32Array.from(b));
           fisherYates(a, g * 256 + d, seed2 ^ 0x6c8e9cf5);
           shuffled.push(...a);
         });
@@ -716,7 +816,7 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
   }
 
   /** Checks that the output is a permutation of 0..n-1 whose positions are
-   * in group order and, when reproducible, that it equals reference().
+   * in group order and, when reproducible or stable, that it equals reference().
    * Returns "" on success, else a description of the first problems. */
   validate = (args = {}) => {
     const out = args.outputBuffer?.cpuBuffer ?? args.outputBuffer ?? this.getBuffer("outputBuffer").cpuBuffer;
@@ -735,7 +835,7 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
         prevGroup = g;
       }
     }
-    if (problems.length === 0 && this.reproducible) {
+    if (problems.length === 0 && (this.reproducible || this.stable)) {
       const ref = this.reference();
       for (let p = 0; p < n && problems.length < 5; p++) {
         if (out[p] !== ref[p]) problems.push(`position ${p}: expected ${ref[p]} (reference), saw ${out[p]}`);
