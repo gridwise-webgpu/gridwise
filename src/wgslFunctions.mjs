@@ -463,6 +463,78 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
 }`;
     return fn;
   }
+  /** Ballot-based digit matching across a subgroup: Algorithm 3 of Ashkiani
+   * et al., "GPU Multisplit" (TOPC 2017), and the core of OneSweep's WLMS.
+   * With one ballot per bit of the digit, each invocation finds the lanes of
+   * its subgroup whose digit equals its own, how many of them are below it,
+   * and the highest of them.
+   *
+   * Lane masks are u32, or vec4<u32> (lane i is bit i % 32 of word i / 32)
+   * when the device's subgroups can be wider than 32 (env.wideSubgroups);
+   * that choice is made when the WGSL is generated, so 32-wide devices get
+   * the cheaper 32-bit code.
+   *
+   *   ${this.fnDeclarations.subgroupLaneMasks()}     at module scope: fn laneMaskBelow (wide only)
+   *   let lane_mask_lt = ${this.fnDeclarations.subgroupLaneMaskLt()};   lanes below me
+   *   ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RADIX_LOG" })}
+   *
+   * subgroupDigitMatch emits statements (not a function), so a caller's
+   * generated code is the same as if written inline. They declare, in the
+   * caller's scope: eq_mask (the matching lanes, me included), var <rank>
+   * (default "rank": matching lanes below me) and let <peer> (default
+   * "peer": the highest matching lane). They read sgsz, and lane_mask_lt
+   * (or the name given as laneMaskLt). The digit is bits [shift, shift +
+   * bits) of key; every invocation of the subgroup must take part. */
+  subgroupLaneMasks(args = {}) {
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    if (!env.wideSubgroups) return "";
+    return /* wgsl */ `
+    fn laneMaskBelow(n: u32) -> vec4<u32> {
+      /* bits set for lanes 0..n-1 */
+      var m = vec4<u32>(0u);
+      for (var i = 0u; i < 4u; i += 1u) {
+        let lo = i * 32u;
+        m[i] = select(select((1u << (n - lo)) - 1u, 0xffffffffu, n >= lo + 32u), 0u, n <= lo);
+      }
+      return m;
+    }`;
+  }
+  subgroupLaneMaskLt(args = {}) {
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    return env.wideSubgroups ? "laneMaskBelow(sgid)" : "(1u << sgid) - 1u";
+  }
+  subgroupDigitMatch(args = {}) {
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    const { key, shift, bits } = args;
+    const rank = args.rank ?? "rank";
+    const peer = args.peer ?? "peer";
+    const lt = args.laneMaskLt ?? "lane_mask_lt";
+    const loop = (word) => /* wgsl */ `
+      /* loop through the bits in this digit place */
+      for (var k = 0u; k < ${bits}; k += 1u) {
+        let curr_bit = 1u << (k + ${shift});
+        let pred = (${key} & curr_bit) != 0u;
+        let ballot = subgroupBallot(pred);
+        eq_mask &= select(~${word}, ${word}, pred);
+      }
+      /* eq_mask marks the lanes that have the same digit as me (me included) */`;
+    if (!env.wideSubgroups) {
+      return /* wgsl */ `
+      var eq_mask = 0xffffffffu;${loop("ballot.x")}
+      var ${rank} = countOneBits(eq_mask & ${lt});
+      /* the highest lane with my digit */
+      let ${peer} = sgsz - countLeadingZeros(eq_mask) - 1u;`;
+    }
+    return /* wgsl */ `
+      /* start from the lanes that exist, so ~ballot cannot mark lanes past sgsz */
+      var eq_mask = laneMaskBelow(sgsz);${loop("ballot")}
+      let below = eq_mask & ${lt};
+      var ${rank} = countOneBits(below.x) + countOneBits(below.y) + countOneBits(below.z) + countOneBits(below.w);
+      /* the highest lane with my digit (eq_mask includes me, so it is never zero) */
+      let top_word = select(select(select(0u, 1u, eq_mask.y != 0u), 2u, eq_mask.z != 0u), 3u, eq_mask.w != 0u);
+      let ${peer} = top_word * 32u + firstLeadingBit(eq_mask[top_word]);`;
+  }
+
   /** A histogram in workgroup memory: the shared core of Histogram,
    * MultisplitPerm's histogram pass and similar kernels. It needs no
    * subgroups, so both function classes use this version.

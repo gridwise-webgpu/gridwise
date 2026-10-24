@@ -223,6 +223,15 @@ export class BasePrimitive {
     return this.adapter?.info ?? this.device.adapterInfo;
   }
 
+  /** Can this device's subgroups be wider than 32 lanes (e.g., AMD RDNA,
+   * 32-64)? Then lane masks need more than one u32 (subgroupBallot returns
+   * up to 128 bits). Emulated subgroups are 32 wide. Known before the WGSL
+   * is generated, so devices whose subgroups are at most 32 wide get 32-bit
+   * code. */
+  get wideSubgroups() {
+    return this.useSubgroups && (this.SUBGROUP_MAX_SIZE ?? 0) > 32;
+  }
+
   makeParamString(params) {
     let str = " [";
     for (const param of params) {
