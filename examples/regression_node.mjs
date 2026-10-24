@@ -135,6 +135,23 @@ import { BasePrimitive } from "../src/primitive.mjs";
 const perfResults = [];
 const originalExecute = BasePrimitive.prototype.execute;
 
+/* Keep the GPU busy with this primitive for 200 ms before its timed trials.
+ * GPUs lower their clocks when they look idle, and single executes separated
+ * by CPU work look idle: a V100 fell from 1,297 to 180 MHz ("GPU Idle")
+ * during such a run, slowing every kernel up to 10x. trials doubles until
+ * one execute keeps the GPU busy for 20 ms. */
+async function warmUp(primitive, args) {
+  const { enableCPUTiming, enableGPUTiming, ...plain } = args; // eslint-disable-line no-unused-vars
+  const end = performance.now() + 200;
+  let trials = 1;
+  while (performance.now() < end) {
+    const start = performance.now();
+    await originalExecute.call(primitive, { ...plain, trials });
+    await primitive.device.queue.onSubmittedWorkDone();
+    if (performance.now() - start < 20) trials *= 2;
+  }
+}
+
 // Intercept BasePrimitive execute method to collect performance metrics
 BasePrimitive.prototype.execute = async function (args = {}) {
   /* A primitive run by another primitive (ExecutePrimitive) is timed as part
@@ -183,6 +200,9 @@ BasePrimitive.prototype.execute = async function (args = {}) {
     // Break early if it's a small test (only run 1 trial)
     if (inputLength === undefined || inputLength === null || inputLength < 1000000) {
       break;
+    }
+    if (t === 0) {
+      await warmUp(this, args);
     }
   }
 
