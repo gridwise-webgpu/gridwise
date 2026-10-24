@@ -167,6 +167,55 @@ export class HierarchicalScan extends BasePrimitive {
   });
 }
 
+/** zero the buffer named label (needs COPY_DST usage), in encoder order */
+export class ClearBuffer {
+  constructor(args: { label: string; enable?: boolean });
+}
+
+/** A bin function: which histogram bin a sample falls in (see bins.mjs) */
+export class Bins {
+  datatype: "u32" | "i32" | "f32";
+  numBins: number;
+  /** WGSL declaring fn name(x: datatype) -> u32 (BIN_NONE for no bin) */
+  wgsl(name?: string): string;
+  /** the JavaScript mirror; -1 for no bin */
+  binOf(x: number): number;
+}
+export const BIN_NONE: number;
+/** numBins equal-width bins over [lower, upper); integer types need (upper - lower) % numBins == 0 */
+export class EvenBins extends Bins {
+  constructor(args: { datatype: "u32" | "i32" | "f32"; numBins: number; lower: number; upper: number });
+}
+/** bin i is [levels[i], levels[i+1]); levels strictly increasing */
+export class RangeBins extends Bins {
+  levels: Uint32Array | Int32Array | Float32Array;
+  constructor(args: { datatype: "u32" | "i32" | "f32"; levels: ArrayLike<number> });
+}
+/** 2^bits bins by bits [shift, shift + bits) of a u32 */
+export class RadixBins extends Bins {
+  constructor(args: { bits: number; shift?: number });
+}
+
+/** counts of samples per bin, like CUB's DeviceHistogram; samples in no bin are not counted */
+export class Histogram extends BasePrimitive {
+  bins: Bins;
+  numBins: number;
+  /** whether the bins fit in workgroup memory (otherwise counted in the output directly) */
+  readonly workgroupBins: boolean;
+  constructor(args: {
+    device: GPUDevice;
+    bins: Bins;
+    datatype?: string;
+    workgroupSize?: number;
+    itemsPerThread?: number;
+    copies?: number;
+    maxWorkgroups?: number;
+    label?: string;
+  });
+  /** the counts computed on the CPU */
+  reference(input: ArrayLike<number>): Uint32Array;
+}
+
 export class OneSweepSort extends BasePrimitive {
   datatype: string;
   direction: "ascending" | "descending";

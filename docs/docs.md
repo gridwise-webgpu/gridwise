@@ -14,6 +14,9 @@ Comprehensive guide to scan (prefix sum) and reduce operations in Gridwise: the 
 ### [Sort]({{ "/sort/" | relative_url }})
 Complete documentation for Gridwise's OneSweepSort implementation. Covers key-only and key-value pair sorting, configuring sort direction (ascending/descending), which buffer holds the sorted output, sorting fewer key bits, and performance characteristics.
 
+### [Histogram]({{ "/histogram/" | relative_url }})
+Counts of samples per bin, modeled on CUB's DeviceHistogram: equal-width or level-bounded bins (bin functions `EvenBins`, `RangeBins`, `RadixBins`), the workgroup-histogram helper shared with permutations, and options.
+
 ### [Binary Operations]({{ "/binop/" | relative_url }})
 Guide to binary operations (monoids) used in Gridwise's scan and reduce. Documents standard operators (Add, Min, Max, Multiply) and shows how to specialize them by datatype or implement custom binary operators by extending the `BinOp` class.
 

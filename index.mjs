@@ -1,8 +1,10 @@
-export { BasePrimitive, Kernel, AllocateBuffer, WriteGPUBuffer, ExecutePrimitive } from "./src/primitive.mjs";
+export { BasePrimitive, Kernel, AllocateBuffer, WriteGPUBuffer, ExecutePrimitive, ClearBuffer } from "./src/primitive.mjs";
 export { Buffer } from "./src/buffer.mjs";
 export { DLDFScan } from "./src/scandldf.mjs";
 export { HierarchicalScan } from "./src/scan.mjs";
 export { OneSweepSort } from "./src/onesweep.mjs";
+export { Histogram } from "./src/histogram.mjs";
+export { Bins, EvenBins, RangeBins, RadixBins, BIN_NONE } from "./src/bins.mjs";
 export {
   MultisplitPerm,
   tuneMultisplitPerm,

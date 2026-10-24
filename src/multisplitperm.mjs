@@ -74,6 +74,7 @@ import { BasePrimitive, Kernel, AllocateBuffer, ExecutePrimitive } from "./primi
 import { DLDFScan } from "./scandldf.mjs";
 import { BinOpAdd } from "./binop.mjs";
 import { randomBitsWGSL, randomBitsJS, pmMixJS } from "./random.mjs";
+import { RadixBins } from "./bins.mjs";
 
 const WORKGROUP_SIZE = 256; /* the finish's 256 sub-buckets assume it */
 
@@ -445,13 +446,13 @@ alias Elem = ${pairs ? "vec2u" : "u32"};
 @group(0) @binding(3) var<storage, read> segStart: array<u32>;       /* segment s begins at segStart[s * segStride] */
 @group(0) @binding(4) var<uniform> ms: MS;
 const RADIX = ${RADIX}u;
-const SHIFT = ${shift}u;
 const K = ${K}u;
 const TILE = ${K * W}u;
 
 fn elemAt(idx: u32) -> Elem { return ${elemAt}; }
 fn keyOf(e: Elem) -> u32 { return ${keyOf}; }
-fn digitOf(e: Elem) -> u32 { return (keyOf(e) >> SHIFT) & (RADIX - 1u); }
+${new RadixBins({ shift, bits: radixBits }).wgsl("radixDigit")}
+fn digitOf(e: Elem) -> u32 { return radixDigit(keyOf(e)); }
 fn histIndex(seg: u32, d: u32, slot: u32) -> u32 { return (seg * RADIX + d) * ms.slots + slot; }
 
 /* This workgroup's segment and slot, and the segment's range, broadcast so
@@ -468,7 +469,8 @@ fn myWork(wid: u32, lidx: u32) -> Work {
   return Work(seg, wid % ms.slots, workgroupUniformLoad(&wBegin), workgroupUniformLoad(&wEnd));
 }
 
-var<workgroup> cnt: array<atomic<u32>, RADIX>;
+/* per-digit counts: the histogram (hist_main), then each tile's ranks (scatter_main) */
+${this.fnDeclarations.wgHistogram({ name: "cnt", numBins: RADIX, workgroupSize: W })}
 
 @compute @workgroup_size(${W})
 fn hist_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
@@ -476,16 +478,16 @@ fn hist_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonun
   let lidx = builtinsNonuniform.lidx;
   if (wgid >= ms.numSegs * ms.slots) { return; }
   let w = myWork(wgid, lidx);
-  for (var d = lidx; d < RADIX; d += ${W}u) { atomicStore(&cnt[d], 0u); }
+  cntClear(lidx);
   workgroupBarrier();
   for (var base = w.begin + w.slot * TILE; base < w.end; base += ms.slots * TILE) {
     for (var k = 0u; k < K; k++) {
       let idx = base + lidx + k * ${W}u;
-      if (idx < w.end) { atomicAdd(&cnt[digitOf(elemAt(idx))], 1u); }
+      if (idx < w.end) { cntAdd(digitOf(elemAt(idx)), lidx); }
     }
   }
   workgroupBarrier();
-  for (var d = lidx; d < RADIX; d += ${W}u) { hist[histIndex(w.seg, d, w.slot)] = atomicLoad(&cnt[d]); }
+  for (var d = lidx; d < RADIX; d += ${W}u) { hist[histIndex(w.seg, d, w.slot)] = cntCount(d); }
 }
 
 var<workgroup> stage: array<Elem, TILE>;
@@ -504,7 +506,7 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
   for (var base = w.begin + w.slot * TILE; base < w.end; base += ms.slots * TILE) {
     let tileLen = min(TILE, w.end - base);
     /* 1. load; rank within digit by workgroup atomics (any order is fine) */
-    for (var d = lidx; d < RADIX; d += ${W}u) { atomicStore(&cnt[d], 0u); }
+    cntClear(lidx);
     workgroupBarrier();
     var elem: array<Elem, K>;
     var digit: array<u32, K>;
@@ -520,7 +522,7 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
     workgroupBarrier();
     /* 2. tile offsets per digit */
     var count = 0u;
-    if (lidx < RADIX) { count = atomicLoad(&cnt[lidx]); }
+    if (lidx < RADIX) { count = cntCount(lidx); }
     var tileTotal = 0u;
     let start = wgExclusiveScan(count, &tileTotal, builtinsUniform, builtinsNonuniform);
     if (lidx < RADIX) { tileStart[lidx] = start; }

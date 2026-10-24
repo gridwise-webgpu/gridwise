@@ -38,6 +38,7 @@ class TestWGSLFunctionsPrimitive extends BasePrimitive {
       ${this.fnDeclarations.subgroupInclusiveOpScan()}
       ${this.fnDeclarations.wgScan()}
       ${this.fnDeclarations.wgScan({ scanType: "inclusive" })}
+      ${this.fnDeclarations.wgHistogram({ name: "hist", numBins: 16, copies: 2 })}
 
       @compute @workgroup_size(${this.workgroupSize}) fn main(
         builtinsNonuniform: BuiltinsNonuniform,
@@ -202,6 +203,15 @@ export async function runSuite(device, resultsCallback) {
       },
     },
   ];
+
+  /* wgHistogram: bin lidx % 7 for every invocation, plus one sample in no
+   * bin; bins 0..6 count 37, 37, 37, 37, 36, 36, 36 of 256 */
+  tests.push({
+    name: "wgHistogram (2 copies, BIN_NONE ignored)",
+    kernelBody:
+      "let l = builtinsNonuniform.lidx; histClear(l); workgroupBarrier(); histAdd(l % 7u, l); histAdd(0xffffffffu, l); workgroupBarrier(); outputBuffer[gid] = select(0u, histCount(l), l < 16u);",
+    expected: (lidx) => (lidx >= 7 ? 0 : 36 + (lidx < 256 % 7 ? 1 : 0)),
+  });
 
   const hasSubgroups = device.features.has("subgroups");
   const modes = [
