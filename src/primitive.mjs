@@ -98,8 +98,8 @@ function generateCacheKey(obj) {
  * skipped. That matters for primitives executed many times in one command
  * buffer (benchmarks), where every queue.writeBuffer is a copy the GPU runs.
  * Storage buffers are always re-uploaded: a kernel may have changed them. */
-const lastUniformUpload = new WeakMap(); /* GPUBuffer -> Uint8Array */
-function uniformContentsUnchanged(gpuBuffer, data) {
+const lastUniformUpload = new WeakMap(); /* GPUBuffer -> Map(offset -> Uint8Array) */
+function uniformContentsUnchanged(gpuBuffer, data, offset = 0) {
   const isUniform =
     typeof GPUBufferUsage !== "undefined" &&
     gpuBuffer.usage !== undefined &&
@@ -111,11 +111,13 @@ function uniformContentsUnchanged(gpuBuffer, data) {
   const bytes = ArrayBuffer.isView(data)
     ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
     : new Uint8Array(data);
-  const last = lastUniformUpload.get(gpuBuffer);
+  if (!lastUniformUpload.has(gpuBuffer)) lastUniformUpload.set(gpuBuffer, new Map());
+  const uploads = lastUniformUpload.get(gpuBuffer);
+  const last = uploads.get(offset);
   if (last && last.length === bytes.length && last.every((b, i) => b === bytes[i])) {
     return true;
   }
-  lastUniformUpload.set(gpuBuffer, bytes.slice());
+  uploads.set(offset, bytes.slice());
   return false;
 }
 
@@ -946,18 +948,8 @@ dispatchGeometry: ${dispatchGeometry}`);
           break;
         }
         case WriteGPUBuffer: {
-          if (!this.hasBuffer(action.label)) {
-            console.warn(
-              "Primitive::WriteGPUBuffer: Primitive has no knowledge of buffer",
-              action.label
-            );
-          }
-          const gpuBuffer = this.getBuffer(action.label).buffer;
-          this.device.queue.writeBuffer(
-            gpuBuffer.buffer,
-            action.offset ?? 0,
-            action.cpuSource
-          );
+          /* a queue write: it lands before this execute()'s GPU work runs */
+          this.__writeBuffer(action.label, action.cpuSource, action.offset ?? 0);
           break;
         }
         case ClearBuffer: {
@@ -1096,12 +1088,21 @@ dispatchGeometry: ${dispatchGeometry}`);
         ...(action.datatype && { datatype: action.datatype }),
       });
     }
-    /* todo: combine this with WriteGPUBuffer below */
     if (action.populateWith) {
-      const gpuBuffer = this.getBuffer(action.label).buffer.buffer;
-      if (!uniformContentsUnchanged(gpuBuffer, action.populateWith)) {
-        this.device.queue.writeBuffer(gpuBuffer, 0, action.populateWith);
-      }
+      this.__writeBuffer(action.label, action.populateWith);
+    }
+  }
+
+  /** Upload data into the buffer named label at byte offset, as AllocateBuffer's
+   * populateWith and WriteGPUBuffer do: a queue write (queue.writeBuffer),
+   * skipped for a uniform buffer whose bytes there are unchanged. */
+  __writeBuffer(label, data, offset = 0) {
+    if (!this.hasBuffer(label)) {
+      throw new Error(`Primitive ${this.label}: cannot write unknown buffer ${label}`);
+    }
+    const gpuBuffer = this.getBuffer(label).buffer.buffer;
+    if (!uniformContentsUnchanged(gpuBuffer, data, offset)) {
+      this.device.queue.writeBuffer(gpuBuffer, offset, data);
     }
   }
 
@@ -1403,25 +1404,52 @@ export class InitializeMemoryBlock {
   }
 }
 
+/* When actions take effect. execute() records the primitive's GPU work into
+ * one command encoder and submits it at the end, so encoder commands run on
+ * the GPU in action order: Kernel, ClearBuffer, CopyBufferToBuffer, and
+ * ExecutePrimitive (whose actions are recorded in place). Data uploads are
+ * different: AllocateBuffer's populateWith and WriteGPUBuffer are queue
+ * writes (queue.writeBuffer), performed while execute() is still recording,
+ * so they land before ANY of this execute()'s GPU work runs, wherever they
+ * appear in the list. To change a buffer between two kernels, use an encoder
+ * command (ClearBuffer, CopyBufferToBuffer) or a kernel. */
+
+/** Allocate a buffer named label (or reuse it if already allocated at this
+ * size):
+ *   new AllocateBuffer({ label, size, usage, populateWith, clearBufferOnReuse, datatype })
+ * usage defaults to STORAGE | COPY_SRC | COPY_DST. populateWith (a typed
+ * array) is uploaded into it, a queue write (see above). A reused buffer
+ * without populateWith is cleared unless clearBufferOnReuse is false. */
 export class AllocateBuffer {
   constructor(args) {
     Object.assign(this, args);
   }
 }
 
+/** Upload CPU data into a buffer the primitive knows (one it allocated, or
+ * one the caller passed in), at a byte offset:
+ *   new WriteGPUBuffer({ label: "inputBuffer", cpuSource: typedArray, offset: 0 })
+ * A queue write: it lands before any of this execute()'s GPU work runs, not
+ * in action order (see above). For a buffer the primitive allocates and
+ * fills whole, AllocateBuffer's populateWith does the same in one action.
+ * Uploads of unchanged data into a uniform buffer are skipped. */
 export class WriteGPUBuffer {
   constructor(args) {
     Object.assign(this, args);
   }
 }
 
-/** Zero the buffer named label: new ClearBuffer({ label: "outputBuffer" }) */
+/** Zero the buffer named label: new ClearBuffer({ label: "outputBuffer" }).
+ * An encoder command: it runs in action order. */
 export class ClearBuffer {
   constructor(args) {
     Object.assign(this, args);
   }
 }
 
+/** Copy buffer source to buffer destination (by name):
+ *   new CopyBufferToBuffer({ source, destination })
+ * An encoder command: it runs in action order. */
 export class CopyBufferToBuffer {
   constructor(args) {
     Object.assign(this, args);

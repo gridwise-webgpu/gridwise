@@ -62,6 +62,19 @@ return [
 
 Each entry has `name` (the WGSL variable), `buffer` (the primitive's buffer bound to it, default `name`), `access` (`"read"`, `"read_write"` or `"uniform"`) and `type`, or `uniform` (a `UniformStruct`) in place of `access` and `type`. A list of lists gives one list per bind group. `UniformStruct.allocate()` returns an `AllocateBuffer` whose upload is skipped when the values have not changed. When several kernels each need their own values (OneSweep's passes), `allocateSlots(label, valuesList, alignment)` packs them into one buffer at offsets aligned to `device.limits.minUniformBufferOffsetAlignment`, and `slot(label, i, alignment)` is the `buffer` entry that binds set `i`. The older form, with `bufferTypes` and `bindings` given as parallel lists and the declarations written in the WGSL, still works. A function that returns a whole WGSL module for others to bind (such as `localFinishWGSL`) can declare its buffers with `declareBuffers(list)`, and its own `Kernel` then uses `...bufferLayout(list)` in place of `buffers`, so the list is still written once.
 
+### Actions, and when they take effect
+
+`compute()` returns a list of actions: `Kernel`, `AllocateBuffer`, `WriteGPUBuffer`, `ClearBuffer`, `CopyBufferToBuffer` and `ExecutePrimitive`. `execute()` records the GPU work into one command encoder and submits it at the end, so the encoder commands (`Kernel`, `ClearBuffer`, `CopyBufferToBuffer`, and the actions of an `ExecutePrimitive`) run on the GPU in list order.
+
+Uploads of CPU data are different. `AllocateBuffer`'s `populateWith` and `WriteGPUBuffer` are queue writes (`queue.writeBuffer`), performed while `execute()` is still recording, so they land before any of that `execute()`'s GPU work, wherever they appear in the list:
+
+```js
+[ new Kernel(A), new WriteGPUBuffer({ label: "x", cpuSource }), new Kernel(B) ]
+// runs as: write x, then A, then B
+```
+
+To change a buffer between two kernels, use an encoder command or a kernel. `populateWith` fills a buffer the primitive allocates; `WriteGPUBuffer` writes into any buffer the primitive knows (including one the caller passed in), optionally at a byte offset. Both skip uploading unchanged data into a uniform buffer.
+
 ### Composing primitives
 
 A primitive's work is a list of actions returned by its `compute()` method: `Kernel`s to dispatch, `AllocateBuffer`s for internal buffers, copies and writes. One of those actions can be another primitive. `ExecutePrimitive` runs a child primitive at that point in the list, on the same encoder, with the child's buffers bound to the parent's by name, so a new primitive can reuse an existing one (for example, a scan) as one of its steps and still be a single primitive to execute, time and test. [Composing Primitives](../composing-primitives/) describes why this exists and how it works.
