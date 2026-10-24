@@ -22,6 +22,14 @@ We record a separate timing value for each kernel in the primitive and thus retu
 
 `primitive.execute`'s argument object also takes a `trials` argument that defaults to 1. If `trials` is _n_, then every kernel dispatch within the primitive is replaced with _n_ consecutive dispatches. Running more trials is helpful for more reliable timing measurements.
 
+### Timestamp resolution
+
+Dawn, Chrome's WebGPU implementation, rounds GPU timestamps down to multiples of 65.536 µs (2^16 ns) by default, to limit timing side channels. This happens on every GPU. Each kernel's time is the difference of two rounded timestamps, so a kernel faster than about 0.1 ms reads as 0, 65.536 µs or 131.072 µs. To time short kernels:
+
+- **Node (`webgpu` package):** create the GPU with `create(["disable-dawn-features=timestamp_quantization"])`. `examples/regression_node.mjs` does this.
+- **Chrome (and other Chromium browsers):** launch it with `--disable-dawn-features=timestamp_quantization`, the same Dawn toggle.
+- **Otherwise:** use `trials` so that each kernel's timed span is much longer than 65.536 µs. One kernel's `trials` dispatches are timed together, so the rounding error is spread over all of them.
+
 ## CPU timing
 
 CPU timing is only possible if the primitive creates its own encoder to ensure that the resulting command buffer only reflects the work within the primitive. It is enabled in a similar way to GPU timing (`primitive.execute({ enableCPUTiming: true, ... })`). In our internal discussions, we have settled on the following way to best measure CPU timing, which is what is implemented within Gridwise, but we are open to better suggestions here. Our strategy is to clear the device's queue, record the current time as `cpuStartTime`, submit the command buffer and wait for the queue to clear, then record the current time as `cpuEndTime`. The elapsed time is the time between the two CPU time stamps.

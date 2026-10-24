@@ -28,6 +28,9 @@ let cachedDevice = null;
 
 const gpuCreateFeatures = [
   "enable-dawn-features=use_user_defined_labels_in_backend",
+  /* full-resolution GPU timestamps: by default Dawn rounds them down to
+   * multiples of 65.536 us, coarser than most single executes here */
+  "disable-dawn-features=timestamp_quantization",
 ];
 let adapterDescription = "unknown_gpu";
 
