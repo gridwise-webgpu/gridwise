@@ -1,15 +1,9 @@
-import { globals, create } from "webgpu";
+import { nodeGPU } from "../misc/node_device.mjs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// 1. Polyfill WebGPU globals (GPUBufferUsage, etc.)
-Object.assign(globalThis, globals);
-
-// 2. Setup dawn.node features
-const gpuCreateFeatures = [
-  "enable-dawn-features=use_user_defined_labels_in_backend",
-];
-const gpuInstance = create(gpuCreateFeatures);
+// 1-2. WebGPU globals and a GPU instance kept referenced (misc/node_device.mjs)
+const gpuInstance = nodeGPU();
 
 // 3. Mock navigator
 const navigatorMock = {

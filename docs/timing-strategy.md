@@ -30,6 +30,21 @@ Dawn, Chrome's WebGPU implementation, rounds GPU timestamps down to multiples of
 - **Chrome (and other Chromium browsers):** launch it with `--disable-dawn-features=timestamp_quantization`, the same Dawn toggle.
 - **Otherwise:** use `trials` so that each kernel's timed span is much longer than 65.536 µs. One kernel's `trials` dispatches are timed together, so the rounding error is spread over all of them.
 
+## Benchmarking a primitive
+
+`primitive.benchmark()` does the steps a reliable measurement needs:
+
+```js
+const r = await primitive.benchmark({ inputBuffer, outputBuffer }); // execute()'s arguments
+// r.ns: median time per execute; r.kernels: [{ label, ns }, ...] per kernel (GPU timing)
+```
+
+1. **Warm up** (`primitive.warmUp()`): run the primitive back to back for 200 ms (`warmMs`), doubling `trials` until one execute keeps the GPU busy for at least 20 ms. GPUs lower their clocks when they look idle, and executes separated by CPU work look idle. On a V100 the SM clock fell from 1,297 to 180 MHz ("GPU Idle" the only reason) during such a run, and every kernel slowed by up to 10×.
+2. **Time** `repeats` (5) executes with `trials` dispatches each (by default, the number the warm-up reached), with GPU timestamps if the device has them (per kernel, labeled by `kernelLabels()`), else CPU timing.
+3. **Report** medians per trial.
+
+For measurements that must be comparable between runs, also lock the GPU's clocks where you can, and use full-resolution timestamps (above). In Node, `misc/node_device.mjs` (`createNodeDevice()`) sets up a device that way, and `misc/benchmark_node.mjs` benchmarks the main primitives with `benchmark()`.
+
 ## CPU timing
 
 CPU timing is only possible if the primitive creates its own encoder to ensure that the resulting command buffer only reflects the work within the primitive. It is enabled in a similar way to GPU timing (`primitive.execute({ enableCPUTiming: true, ... })`). In our internal discussions, we have settled on the following way to best measure CPU timing, which is what is implemented within Gridwise, but we are open to better suggestions here. Our strategy is to clear the device's queue, record the current time as `cpuStartTime`, submit the command buffer and wait for the queue to clear, then record the current time as `cpuEndTime`. The elapsed time is the time between the two CPU time stamps.
