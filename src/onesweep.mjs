@@ -8,8 +8,8 @@ import { range } from "./util.mjs";
 import {
   Kernel,
   AllocateBuffer,
-  WriteGPUBuffer,
   CopyBufferToBuffer,
+  UniformStruct,
 } from "./primitive.mjs";
 import { BaseTestSuite } from "./testsuite.mjs";
 import { divRoundUp } from "./util.mjs";
@@ -63,6 +63,14 @@ export class OneSweepSort extends BaseSort {
     if (args.type === "keyvalue") {
       this.knownBuffers.push("payloadInOut", "payloadTemp");
     }
+
+    this.params = new UniformStruct("SortParameters", {
+      length: "u32",
+      shift: "u32",
+      thread_blocks: "u32" /* number of tiles in the onesweep_pass kernel */,
+      seed: "u32",
+      last_pass: "u32" /* 1 on the last onesweep_pass (descending sorts flip direction there) */,
+    });
 
     /* we need a binary operator to do subgroup operations when they
      * are being emulated. Fortunately throughout these kernels, the only
@@ -151,124 +159,6 @@ export class OneSweepSort extends BaseSort {
     /* enables subgroups ONLY IF it was requested when creating device */
     /* WGSL requires this declaration is first in the shader */
     ${this.fnDeclarations.enableSubgroupsIfAppropriate()}
-    struct SortParameters {
-        length: u32,
-        shift: u32,
-        thread_blocks: u32, // number of tiles in the onesweep_pass kernel
-        seed: u32,
-        last_pass: u32, /* 1 if this is the last call of onesweep_pass
-                         * used for descending sort to flip direction */
-    };
-
-    @group(0) @binding(0)
-    var<storage, read> keysIn: array<${this.keyDatatype.wgslDatatype}>;
-
-    @group(0) @binding(1)
-    var<storage, read_write> keysOut: array<${this.keyDatatype.wgslDatatype}>;
-
-    @group(0) @binding(2)
-    var<storage, read_write> sortBump: array<atomic<u32>>;
-
-    @group(0) @binding(3)
-    var<storage, read_write> hist: array<atomic<u32>>;
-    /**
-     * hist keeps NUM_PASSES histograms, one per digit, each having RADIX entries
-     * Structure of hist:
-     *   hist[  0,  256) has 256 buckets that count keysIn[7:0]
-     *   hist[256,  512) has 256 buckets that count keysIn[15:8]
-     *   hist[512,  768) has 256 buckets that count keysIn[23:16]
-     *   hist[768, 1024) has 256 buckets that count keysIn[31:24]
-     * Extending to 64b adds 4x256 more buckets
-     */
-
-    @group(0) @binding(4)
-    var<storage, read_write> passHist: array<atomic<u32>>;
-    /**
-     * Structure of passHist:
-     * (note we don't store anything for the last workgroup
-     *  because no other workgroup needs it)
-     * - We have NUM_PASSES segments, one per digit-place
-     * - Each segment has:
-     *   - One global histogram for its digit-place
-     *   - One local histogram for each thread block in the
-     *     onesweep_pass kernel. We chained-scan through these
-     *     histograms.
-     * - We compute the global histogram in onesweep_scan
-     *   and tag it with FLAG_INCLUSIVE.
-     * Why is it structured like this? In chained-scan, we look at
-     *   the previous workgroup's result. Workgroup 0 instead looks
-     *   back at the _global_ histogram, which it must add into the
-     *   per-key address anyway. Thus the global histogram is placed
-     *   in memory directly before workgroup 0's local histogram.
-     *   Control is simpler because we need not specialize workgroup 0.
-     * Consequence: When we start looking back, we look back at our
-     *   own partition ID, because that corresponds to the block
-     *   written by the previous workgroup.
-     *
-     * Global Hist Post Scan*** SORT PASS_0:
-     * +------------------------------------------+
-     * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
-     * |   ?    |   ?    |   ?    | ... |   ?     |
-     * +------------------------------------------+
-     * Workgroup 0 SORT_PASS_0:
-     * +------------------------------------------+
-     * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
-     * |   ?    |   ?    |   ?    | ... |   ?     |
-     * +------------------------------------------+
-     * ... (repeat up to Workgroup last-1)
-     *
-     * Global Hist Post Scan*** SORT PASS_1:
-     * +------------------------------------------+
-     * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
-     * |   ?    |   ?    |   ?    | ... |   ?     |
-     * +------------------------------------------+
-     * Workgroup 0 SORT_PASS_1:
-     * +------------------------------------------+
-     * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
-     * |   ?    |   ?    |   ?    | ... |   ?     |
-     * +------------------------------------------+
-     * ...
-     * Global Hist Post Scan*** SORT PASS_2:
-     * +------------------------------------------+
-     * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
-     * |   ?    |   ?    |   ?    | ... |   ?     |
-     * +------------------------------------------+
-     * Workgroup 0 SORT_PASS_2:
-     * +------------------------------------------+
-     * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
-     * |   ?    |   ?    |   ?    | ... |   ?     |
-     * +------------------------------------------+
-     * ...
-     * Global Hist Post Scan*** SORT PASS_3:
-     * +------------------------------------------+
-     * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
-     * |   ?    |   ?    |   ?    | ... |   ?     |
-     * +------------------------------------------+
-     * Workgroup 0 SORT_PASS_3:
-     * +------------------------------------------+
-     * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
-     * |   ?    |   ?    |   ?    | ... |   ?     |
-     * +------------------------------------------+
-     * ... (64b keys require 4 more sort passes)
-     */
-    ${
-      /* much easier to put the payload buffers at the end since they're
-       * the only ones that differ between keysonly and keyvalue */
-      this.type === "keyvalue"
-        ? /* WGSL */ `
-    /** payload{In,Out}: we do no computation with these, we simply
-     * copy them around, so use u32 no matter what the underlying
-     * datatype is */
-    @group(0) @binding(5)
-    var<storage, read> payloadIn: array<u32>;
-
-    @group(0) @binding(6)
-    var<storage, read_write> payloadOut: array<u32>;`
-        : ""
-    }
-
-    @group(1) @binding(0)
-    var<uniform> sortParameters : SortParameters;
 
     /** Constants are mostly set in finalizeRuntimeParameters and
      * pasted in here; this is mostly to make sure they don't get
@@ -1267,38 +1157,15 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
       this.inputLength,
       this.REDUCE_PART_SIZE,
     );
-    /* let's pack all uniform buffers (sortParameters) into one buffer
-     * sortParameters[0]: for global_hist
-     * sortParameters[1]: for onesweep_scan
-     * sortParameters[2,3,4,5]: for onesweep_pass[0,1,2,3]
-     * sortParameters is size, shift, thread_blocks, seed, last_pass [all u32]
-     *
-     * In the below calculations, we are using _length_ (in elements)
-     *   not _size_ (in bytes)
-     */
-    this.uniformBufferLength = 5; // 5 elements in uniformBuffer
-    this.uniformBufferOffsetLength = Math.max(
-      /* how much space per entry? BUT it better be at least minUniform... */
-      this.uniformBufferLength,
-      this.device.limits.minUniformBufferOffsetAlignment /
-        Uint32Array.BYTES_PER_ELEMENT,
-    );
-    this.uniformBufferOffsetSize =
-      /* used in creating bindings below */
-      this.uniformBufferOffsetLength * Uint32Array.BYTES_PER_ELEMENT;
-    this.sortParameters = new Uint32Array(
-      (this.SORT_PASSES + 2) * this.uniformBufferOffsetLength,
-    );
-    for (var i = 0; i < this.SORT_PASSES + 2; i++) {
-      const offset = i * this.uniformBufferOffsetLength;
-      this.sortParameters[offset] = this.inputLength;
-      this.sortParameters[offset + 1] = i <= 1 ? 0 : (i - 2) * this.RADIX_LOG;
-      this.sortParameters[offset + 2] =
-        i === 0 ? this.reduceWorkgroupCount : this.passWorkgroupCount;
-      this.sortParameters[offset + 3] = 0;
-      // set to 1 ONLY on last sort pass
-      this.sortParameters[offset + 4] = i === this.SORT_PASSES + 1 ? 1 : 0;
-    }
+    /* one set of sort parameters per kernel, in one uniform buffer (slots):
+     *   [0] global_hist, [1] onesweep_scan, [2..] onesweep_pass 0, 1, ... */
+    this.sortParameterValues = Array.from({ length: this.SORT_PASSES + 2 }, (_, i) => ({
+      length: this.inputLength,
+      shift: i <= 1 ? 0 : (i - 2) * this.RADIX_LOG,
+      thread_blocks: i === 0 ? this.reduceWorkgroupCount : this.passWorkgroupCount,
+      seed: 0,
+      last_pass: i === this.SORT_PASSES + 1 ? 1 : 0 /* only on the last sort pass */,
+    }));
     // these three all hold u32s no matter what the datatype is
     this.sortBumpSize = this.SORT_PASSES * 4; // 1 x u32 per pass
     this.histSize = this.DIGITS_PER_KEY * this.RADIX * 4; // (((DIGITS_PER_KEY * RADIX) as usize) * std::mem::size_of::<u32>())
@@ -1310,52 +1177,105 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
   }
   compute() {
     this.finalizeRuntimeParameters();
-    const bufferTypes = [
-      ["read-only-storage", "storage", "storage", "storage", "storage"],
-      ["uniform"],
-    ];
-    const bindings0Even = [
-      "keysInOut",
-      "keysTemp",
-      "sortBump",
-      "hist",
-      "passHist",
-    ];
-    const bindings0Odd = [
-      "keysTemp",
-      "keysInOut",
-      "sortBump",
-      "hist",
-      "passHist",
-    ];
-    if (this.type === "keyvalue") {
-      bufferTypes[0].push("read-only-storage", "storage");
-      bindings0Even.push("payloadInOut", "payloadTemp");
-      bindings0Odd.push("payloadTemp", "payloadInOut");
-    }
-    const sortParameterBinding = new Array(this.SORT_PASSES + 2);
-    for (var i = 0; i < sortParameterBinding.length; i++) {
-      sortParameterBinding[i] = {
-        buffer: "sortParameters",
-        offset: i * this.uniformBufferOffsetSize,
-        size: this.uniformBufferSize,
-      };
-    }
-    let actions = [
-      new AllocateBuffer({
-        label: "sortParameters",
-        size: this.sortParameters.byteLength,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        clearBufferOnReuse: false /* we will write into this next */,
-      }),
-      new WriteGPUBuffer({
-        /** should be able to include this WriteGPUBuffer into the
-         * above AllocateBuffer with `populateWith: this.sortParameters`,
-         * but leaving it like this to show the use of WriteGPUBuffer
+    const alignment = this.device.limits.minUniformBufferOffsetAlignment;
+    /* the kernels' buffers: group 0 as below (keys and payloads swap roles on
+     * odd passes), group 1 this kernel's slot of sortParameters */
+    const sortBuffers = (odd, slot) => [
+      [
+        { name: "keysIn", buffer: odd ? "keysTemp" : "keysInOut", access: "read", type: `array<${this.keyDatatype.wgslDatatype}>` },
+        { name: "keysOut", buffer: odd ? "keysInOut" : "keysTemp", access: "read_write", type: `array<${this.keyDatatype.wgslDatatype}>` },
+        { name: "sortBump", access: "read_write", type: "array<atomic<u32>>" },
+        /**
+         * hist keeps NUM_PASSES histograms, one per digit, each having RADIX entries
+         * Structure of hist:
+         *   hist[  0,  256) has 256 buckets that count keysIn[7:0]
+         *   hist[256,  512) has 256 buckets that count keysIn[15:8]
+         *   hist[512,  768) has 256 buckets that count keysIn[23:16]
+         *   hist[768, 1024) has 256 buckets that count keysIn[31:24]
+         * Extending to 64b adds 4x256 more buckets
          */
-        label: "sortParameters",
-        cpuSource: this.sortParameters,
-      }),
+        { name: "hist", access: "read_write", type: "array<atomic<u32>>" },
+        /**
+         * Structure of passHist:
+         * (note we don't store anything for the last workgroup
+         *  because no other workgroup needs it)
+         * - We have NUM_PASSES segments, one per digit-place
+         * - Each segment has:
+         *   - One global histogram for its digit-place
+         *   - One local histogram for each thread block in the
+         *     onesweep_pass kernel. We chained-scan through these
+         *     histograms.
+         * - We compute the global histogram in onesweep_scan
+         *   and tag it with FLAG_INCLUSIVE.
+         * Why is it structured like this? In chained-scan, we look at
+         *   the previous workgroup's result. Workgroup 0 instead looks
+         *   back at the _global_ histogram, which it must add into the
+         *   per-key address anyway. Thus the global histogram is placed
+         *   in memory directly before workgroup 0's local histogram.
+         *   Control is simpler because we need not specialize workgroup 0.
+         * Consequence: When we start looking back, we look back at our
+         *   own partition ID, because that corresponds to the block
+         *   written by the previous workgroup.
+         *
+         * Global Hist Post Scan*** SORT PASS_0:
+         * +------------------------------------------+
+         * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
+         * |   ?    |   ?    |   ?    | ... |   ?     |
+         * +------------------------------------------+
+         * Workgroup 0 SORT_PASS_0:
+         * +------------------------------------------+
+         * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
+         * |   ?    |   ?    |   ?    | ... |   ?     |
+         * +------------------------------------------+
+         * ... (repeat up to Workgroup last-1)
+         *
+         * Global Hist Post Scan*** SORT PASS_1:
+         * +------------------------------------------+
+         * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
+         * |   ?    |   ?    |   ?    | ... |   ?     |
+         * +------------------------------------------+
+         * Workgroup 0 SORT_PASS_1:
+         * +------------------------------------------+
+         * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
+         * |   ?    |   ?    |   ?    | ... |   ?     |
+         * +------------------------------------------+
+         * ...
+         * Global Hist Post Scan*** SORT PASS_2:
+         * +------------------------------------------+
+         * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
+         * |   ?    |   ?    |   ?    | ... |   ?     |
+         * +------------------------------------------+
+         * Workgroup 0 SORT_PASS_2:
+         * +------------------------------------------+
+         * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
+         * |   ?    |   ?    |   ?    | ... |   ?     |
+         * +------------------------------------------+
+         * ...
+         * Global Hist Post Scan*** SORT PASS_3:
+         * +------------------------------------------+
+         * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
+         * |   ?    |   ?    |   ?    | ... |   ?     |
+         * +------------------------------------------+
+         * Workgroup 0 SORT_PASS_3:
+         * +------------------------------------------+
+         * | Bin  0 | Bin  1 | Bin  2 | ... | Bin 255 |
+         * |   ?    |   ?    |   ?    | ... |   ?     |
+         * +------------------------------------------+
+         * ... (64b keys require 4 more sort passes)
+         */
+        { name: "passHist", access: "read_write", type: "array<atomic<u32>>" },
+        /* payloads: copied around, never computed on, so u32 whatever their datatype */
+        ...(this.type === "keyvalue"
+          ? [
+              { name: "payloadIn", buffer: odd ? "payloadTemp" : "payloadInOut", access: "read", type: "array<u32>" },
+              { name: "payloadOut", buffer: odd ? "payloadInOut" : "payloadTemp", access: "read_write", type: "array<u32>" },
+            ]
+          : []),
+      ],
+      [{ name: "sortParameters", buffer: this.params.slot("sortParameters", slot, alignment), uniform: this.params }],
+    ];
+    let actions = [
+      this.params.allocateSlots("sortParameters", this.sortParameterValues, alignment),
       new AllocateBuffer({
         label: "sortBump",
         size: this.sortBumpSize,
@@ -1384,8 +1304,7 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
       new Kernel({
         kernel: this.sortOneSweepWGSL,
         entryPoint: "global_hist",
-        bufferTypes,
-        bindings: [bindings0Even, [sortParameterBinding[0]]],
+        buffers: sortBuffers(false, 0),
         label: `OneSweep sort (${this.type}, ${this.direction}) global_hist [subgroups: ${this.useSubgroups}]`,
         resetBuffersForBenchmarkingOnly: ["hist", "passHist"],
         logKernelCodeToConsole: false,
@@ -1396,8 +1315,7 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
       new Kernel({
         kernel: this.sortOneSweepWGSL,
         entryPoint: "onesweep_scan",
-        bufferTypes,
-        bindings: [bindings0Even, [sortParameterBinding[1]]],
+        buffers: sortBuffers(false, 1),
         label: `OneSweep sort (${this.type}, ${this.direction}) onesweep_scan [subgroups: ${this.useSubgroups}]`,
         logKernelCodeToConsole: false,
         getDispatchGeometry: () => {
@@ -1410,11 +1328,7 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
         new Kernel({
           kernel: this.sortOneSweepWGSL,
           entryPoint: "onesweep_pass",
-          bufferTypes,
-          bindings: [
-            (pass & 1) === 0 ? bindings0Even : bindings0Odd,
-            [sortParameterBinding[pass + 2]],
-          ],
+          buffers: sortBuffers((pass & 1) === 1, pass + 2),
           label: `OneSweep sort (${this.type}, ${this.direction}) onesweep_pass shift ${pass} [subgroups: ${this.useSubgroups}]`,
           logKernelCodeToConsole: pass === 0 ? false : false,
           logLaunchParameters: pass === 0 ? false : false,

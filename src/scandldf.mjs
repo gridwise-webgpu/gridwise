@@ -6,7 +6,7 @@
  */
 
 import { range } from "./util.mjs";
-import { Kernel, AllocateBuffer } from "./primitive.mjs";
+import { Kernel, AllocateBuffer, UniformStruct } from "./primitive.mjs";
 import { BaseTestSuite } from "./testsuite.mjs";
 import {
   BinOpAdd,
@@ -41,6 +41,12 @@ export class DLDFScan extends BaseScan {
         "useSubgroups",
       ]);
     }
+    this.params = new UniformStruct("ScanParameters", {
+      size: "u32" /* input length; not used in the shader currently */,
+      vec_size: "u32",
+      work_tiles: "u32",
+      simulate_mask: "u32",
+    });
   }
 
   scandldfWGSL = () => {
@@ -48,44 +54,6 @@ export class DLDFScan extends BaseScan {
 /* enables subgroups ONLY IF it was requested when creating device */
 /* WGSL requires this declaration is first in the shader */
 ${this.fnDeclarations.enableSubgroupsIfAppropriate()}
-struct ScanParameters
-{
-  size: u32,
-  vec_size: u32,
-  work_tiles: u32,
-  simulate_mask: u32,
-};
-
-@group(0) @binding(0)
-var<storage, read> inputBuffer: array<vec4<${this.datatype}>>;
-
-@group(0) @binding(1)
-/* for scan output: array<vec4<${this.datatype}>>;
- * for reduce output: array<${this.datatype}>;
- */
-var<storage, read_write> outputBuffer: ${
-      this.type === "exclusive" || this.type === "inclusive"
-        ? "array<vec4<"
-        : "array<"
-    }${this.datatype}${
-      this.type === "exclusive" || this.type === "inclusive" ? ">>" : ">"
-    };
-
-@group(0) @binding(2)
-var<uniform> scanParameters: ScanParameters;
-
-@group(0) @binding(3)
-var<storage, read_write> scanBump: atomic<u32>;
-
-@group(0) @binding(4)
-var<storage, read_write> spine: array<array<atomic<u32>, 2>>;
-/** The reason why we don't use a struct is because a WGSL vector cannot accept
- * atomic types, nor can you make an atomic vector. You CAN dynamically index
- * into vectors.
- */
-
-@group(0) @binding(5)
-var<storage, read_write> misc: array<u32>;
 
 const BLOCK_DIM: u32 = ${this.workgroupSize};
 const SPLIT_MEMBERS = 2u;
@@ -561,22 +529,17 @@ fn main(builtinsUniform: BuiltinsUniform,
     this.spineSize = 4 * this.workgroupCount * datatypeToBytes(this.datatype);
     this.miscSize = 5 * datatypeToBytes(this.datatype);
 
-    // scanParameters is: size: u32, vec_size: u32, work_tiles: u32
-    this.scanParameters = new Uint32Array([
-      inputLength, // this isn't used in the shader currently
-      this.vec_size,
-      this.workgroupCount,
-      this.simulate_mask,
-    ]);
+    this.inputLength = inputLength;
   }
   compute() {
     this.finalizeRuntimeParameters();
+    const T = this.datatype;
     return [
-      new AllocateBuffer({
-        label: "scanParameters",
-        size: this.scanParameters.byteLength,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        populateWith: this.scanParameters,
+      this.params.allocate("scanParameters", {
+        size: this.inputLength,
+        vec_size: this.vec_size,
+        work_tiles: this.workgroupCount,
+        simulate_mask: this.simulate_mask ?? 0,
       }),
       new AllocateBuffer({
         label: "scanBump",
@@ -595,25 +558,15 @@ fn main(builtinsUniform: BuiltinsUniform,
       }),
       new Kernel({
         kernel: this.scandldfWGSL,
-        bufferTypes: [
-          [
-            "read-only-storage",
-            "storage",
-            "uniform",
-            "storage",
-            "storage",
-            "storage",
-          ],
-        ],
-        bindings: [
-          [
-            "inputBuffer",
-            "outputBuffer",
-            "scanParameters",
-            "scanBump",
-            "spine",
-            "misc",
-          ],
+        buffers: [
+          { name: "inputBuffer", access: "read", type: `array<vec4<${T}>>` },
+          /* a scan writes vec4s; a reduce writes one value */
+          { name: "outputBuffer", access: "read_write", type: this.type === "reduce" ? `array<${T}>` : `array<vec4<${T}>>` },
+          { name: "scanParameters", uniform: this.params },
+          { name: "scanBump", access: "read_write", type: "atomic<u32>" },
+          /* not a struct: a WGSL vector cannot hold atomics, and an array can be indexed dynamically */
+          { name: "spine", access: "read_write", type: "array<array<atomic<u32>, 2>>" },
+          { name: "misc", access: "read_write", type: "array<u32>" },
         ],
         label: `Thomas Smith's scan (${this.type}) with decoupled lookback/decoupled fallback [subgroups: ${this.useSubgroups}]`,
         resetBuffersForBenchmarkingOnly: ["spine"],
