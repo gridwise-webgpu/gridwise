@@ -699,6 +699,9 @@ execute with e = ${e}: got [${out}], expected [${want}]`;
       ...(useEmu && { disableSubgroups: true }),
     });
     const fd = scan.fnDeclarations;
+    /* emulated when the device has no subgroups (in Node, DISABLE_SUBGROUPS
+     * hides them from the device; useEmu is the browser's URL switch) */
+    const emulated = !scan.useSubgroups;
     const code = fd.include(
       "wgScan",
       ["wgScan", { scanType: "inclusive" }],
@@ -718,10 +721,10 @@ execute with e = ${e}: got [${out}], expected [${want}]`;
     for (const [what, re] of Object.entries(expectOnce)) {
       if (count(re) !== 1) errors += `\n${what} appears ${count(re)} times, expected once`;
     }
-    if (!useEmu && !code.trimStart().startsWith("enable subgroups;")) errors += "\ninclude() does not start with enable subgroups;";
+    if (!emulated && !code.trimStart().startsWith("enable subgroups;")) errors += "\ninclude() does not start with enable subgroups;";
     const info = await device.createShaderModule({ code: code + "\n@compute @workgroup_size(1) fn main() {}" }).getCompilationInfo();
     for (const m of info.messages.filter((m) => m.type === "error")) errors += `\ncompile error: ${m.message}`;
-    const scanBytes = useEmu ? 256 * 4 : 64 * 4; /* one entry per invocation, or per smallest subgroup */
+    const scanBytes = emulated ? 256 * 4 : 64 * 4; /* one entry per invocation, or per smallest subgroup */
     const want = 2 * scanBytes + 64 * 4;
     const got = fd.workgroupBytes("wgScan", ["wgScan", { scanType: "inclusive" }], ["wgHistogram", { name: "h", numBins: 64, workgroupSize: 256 }]);
     if (got !== want) errors += `\nworkgroupBytes ${got}, expected ${want}`;
