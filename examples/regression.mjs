@@ -16,6 +16,8 @@ import {
 } from "../src/primitive.mjs";
 import { OneSweepSort } from "../src/onesweep.mjs";
 import { MultisplitPerm } from "../src/multisplitperm.mjs";
+import { Histogram } from "../src/histogram.mjs";
+import { EvenBins, RangeBins, RadixBins } from "../src/bins.mjs";
 
 export async function main(navigator) {
   const isNode = typeof window === "undefined";
@@ -726,6 +728,63 @@ ${randomBitsWGSL(this.rng)}
     return result;
   }
 
+  /* Histogram: counts on the GPU against the bins' JavaScript mirror.
+   * gen(i) gives sample i; repeat > 1 executes into the same output again,
+   * which must not accumulate (the output is cleared each time). */
+  async function runHistogramTest({ bins, n, gen, repeat = 1 }) {
+    const TypedArray = datatypeToTypedArray(bins.datatype);
+    const input = TypedArray.from({ length: n }, (_, i) => gen(i));
+    const inputBuffer = device.createBuffer({
+      size: input.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(inputBuffer, 0, input);
+    const outputBuffer = device.createBuffer({
+      size: bins.numBins * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+    });
+    const mappable = device.createBuffer({
+      size: bins.numBins * 4,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    const primitive = new Histogram({ device, bins });
+    for (let r = 0; r < repeat; r++) await primitive.execute({ inputBuffer, outputBuffer });
+    const encoder = device.createCommandEncoder();
+    encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, bins.numBins * 4);
+    device.queue.submit([encoder.finish()]);
+    await mappable.mapAsync(GPUMapMode.READ);
+    const output = new Uint32Array(mappable.getMappedRange().slice());
+    mappable.unmap();
+    let errors = primitive.validate({ inputBuffer: input, outputBuffer: output });
+    if (primitive.workgroupBins !== (bins.numBins * primitive.copies * 4 <= device.limits.maxComputeWorkgroupStorageSize)) {
+      errors += "\nworkgroupBins does not match the device limit";
+    }
+    primitive.destroy();
+    for (const b of [inputBuffer, outputBuffer, mappable]) b.destroy();
+    return errors;
+  }
+  /* a deterministic pseudo-random value in [0, 1) for sample i */
+  const unit = (i) => ((Math.imul(i, 0x9e3779b1) >>> 0) ^ (Math.imul(i >>> 7, 0x85ebca6b) >>> 0)) / 2 ** 32;
+  /* [name, bins, n, gen, repeat] */
+  const histogramTests = [
+    ["even f32 256 bins [0,1), samples in [-0.25,1.25)", new EvenBins({ datatype: "f32", numBins: 256, lower: 0, upper: 1 }), 100003, (i) => unit(i) * 1.5 - 0.25],
+    ["even f32 10 bins [-5,5)", new EvenBins({ datatype: "f32", numBins: 10, lower: -5, upper: 5 }), 65536, (i) => (unit(i) + unit(i + 1) - 1) * 6],
+    ["even u32 1024 bins [0,2^20)", new EvenBins({ datatype: "u32", numBins: 1024, lower: 0, upper: 2 ** 20 }), 65536, (i) => Math.floor(unit(i) * 2 ** 21)],
+    ["even u32 16 bins [0,2^32)", new EvenBins({ datatype: "u32", numBins: 16, lower: 0, upper: 2 ** 32 }), 65536, (i) => Math.floor(unit(i) * 2 ** 32)],
+    ["even i32 100 bins [-1000,1000)", new EvenBins({ datatype: "i32", numBins: 100, lower: -1000, upper: 1000 }), 50000, (i) => Math.floor(unit(i) * 3000) - 1500],
+    ["even u32 16384 bins (global-memory bins)", new EvenBins({ datatype: "u32", numBins: 16384, lower: 0, upper: 16384 }), 100000, (i) => Math.floor(unit(i) * 17000)],
+    ["range f32 7 uneven bins", new RangeBins({ datatype: "f32", levels: [-1, -0.5, 0, 0.1, 0.2, 0.5, 1, 10] }), 65536, (i) => (unit(i) - 0.2) * 3],
+    ["range u32 powers of two", new RangeBins({ datatype: "u32", levels: Array.from({ length: 21 }, (_, k) => (k === 0 ? 0 : 2 ** (k - 1))) }), 65536, (i) => Math.floor(unit(i) * 2 ** 21)],
+    ["range i32", new RangeBins({ datatype: "i32", levels: [-100, -10, -1, 0, 1, 10, 100] }), 4099, (i) => Math.floor(unit(i) * 300) - 150],
+    ["radix u32 bits [8,16)", new RadixBins({ shift: 8, bits: 8 }), 65536, (i) => Math.floor(unit(i) * 2 ** 32)],
+    ["radix u32 bits [4,20) (65536 bins, global-memory bins)", new RadixBins({ shift: 4, bits: 16 }), 100000, (i) => Math.floor(unit(i) * 2 ** 32)],
+    ["even f32 256 bins, executed twice into one output", new EvenBins({ datatype: "f32", numBins: 256, lower: 0, upper: 1 }), 4096, (i) => unit(i), 2],
+  ];
+  const largeHistogramTests = [
+    ["even f32 256 bins [0,1)", new EvenBins({ datatype: "f32", numBins: 256, lower: 0, upper: 1 }), 1 << 24, (i) => unit(i)],
+    ["radix u32 bits [0,8)", new RadixBins({ shift: 0, bits: 8 }), 1 << 24, (i) => i],
+  ];
+
   /* [n, options] */
   const permTests = [
     [65536, {}],
@@ -828,6 +887,10 @@ ${randomBitsWGSL(this.rng)}
     await runTest(name, () => runPermTest({ n, options }));
   }
 
+  for (const [label, bins, n, gen, repeat] of histogramTests) {
+    await runTest(`hist  ${label} n=${n}`, () => runHistogramTest({ bins, n, gen, repeat }));
+  }
+
   summarize();
 
   /* ------------------------------------------------------------------ */
@@ -862,6 +925,10 @@ ${randomBitsWGSL(this.rng)}
     for (const [n, options] of largePermTests) {
       const name = `perm  MultisplitPerm n=${n} ${JSON.stringify(options)}`;
       await runLarge(name, () => runPermTest({ n, options }));
+    }
+
+    for (const [label, bins, n, gen] of largeHistogramTests) {
+      await runLarge(`hist  ${label} n=${n}`, () => runHistogramTest({ bins, n, gen }));
     }
 
     summarizeLarge();

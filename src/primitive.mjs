@@ -964,6 +964,14 @@ dispatchGeometry: ${dispatchGeometry}`);
           );
           break;
         }
+        case ClearBuffer: {
+          /* zero a buffer (it needs COPY_DST usage), in order with the rest
+           * of the encoder's commands */
+          if (action.enable === false) break;
+          const binding = this.getBuffer(action.label).buffer;
+          encoder.clearBuffer(binding.buffer, binding.offset ?? 0, binding.size);
+          break;
+        }
         case CopyBufferToBuffer: {
           /* copy GPU buffer action.source to action.destination */
           for (const b of ["source", "destination"]) {
@@ -1226,6 +1234,13 @@ export class AllocateBuffer {
 }
 
 export class WriteGPUBuffer {
+  constructor(args) {
+    Object.assign(this, args);
+  }
+}
+
+/** Zero the buffer named label: new ClearBuffer({ label: "outputBuffer" }) */
+export class ClearBuffer {
   constructor(args) {
     Object.assign(this, args);
   }

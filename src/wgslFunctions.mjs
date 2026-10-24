@@ -463,6 +463,53 @@ fn ${fnName}(// in: ptr<storage, array<${env.datatype}>, read>,
 }`;
     return fn;
   }
+  /** A histogram in workgroup memory: the shared core of Histogram,
+   * MultisplitPerm's histogram pass and similar kernels. It needs no
+   * subgroups, so both function classes use this version.
+   *
+   *   ${this.fnDeclarations.wgHistogram({ name: "bins", numBins: 256, copies: 2 })}
+   *
+   * declares
+   *
+   *   var<workgroup> bins: array<atomic<u32>, numBins * copies>;
+   *   fn binsClear(lidx: u32)          zero the bins; then workgroupBarrier()
+   *   fn binsAdd(b: u32, lidx: u32)    count one sample in bin b (b >= numBins,
+   *                                    e.g. BIN_NONE, is not counted)
+   *   fn binsCount(b: u32) -> u32      after workgroupBarrier(): the
+   *                                    workgroup's count for bin b
+   *
+   * copies > 1 gives each block of workgroupSize / copies invocations its
+   * own copy of the bins, which cuts atomic contention when there are few
+   * bins; binsCount sums the copies. Callers flush the counts themselves
+   * (atomicAdd into a global histogram, or a store at an index of their
+   * choosing), typically for (var b = lidx; b < numBins; b += workgroupSize). */
+  wgHistogram(args = {}) {
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    const name = env.name ?? "wgBins";
+    const N = env.numBins;
+    const C = env.copies ?? 1;
+    const W = env.workgroupSize;
+    if (!(N >= 1) || !(C >= 1) || W % C !== 0) {
+      throw new Error(
+        `wgHistogram: need numBins >= 1 and copies dividing the workgroup size (numBins ${N}, copies ${C}, workgroup ${W})`
+      );
+    }
+    const slot = C > 1 ? `(lidx / ${W / C}u) * ${N}u + b` : "b";
+    const count =
+      C > 1
+        ? Array.from({ length: C }, (_, c) => `atomicLoad(&${name}[${c * N}u + b])`).join(" + ")
+        : `atomicLoad(&${name}[b])`;
+    return /* wgsl */ `
+var<workgroup> ${name}: array<atomic<u32>, ${N * C}>;
+fn ${name}Clear(lidx: u32) {
+  for (var i = lidx; i < ${N * C}u; i += ${W}u) { atomicStore(&${name}[i], 0u); }
+}
+fn ${name}Add(b: u32, lidx: u32) {
+  if (b < ${N}u) { atomicAdd(&${name}[${slot}], 1u); }
+}
+fn ${name}Count(b: u32) -> u32 { return ${count}; }`;
+  }
+
   wgScan(args = {}) {
     const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
     /** Scan of one value per invocation across the workgroup, the scan
