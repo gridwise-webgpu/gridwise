@@ -1,4 +1,4 @@
-import { globals, create } from "webgpu";
+import { nodeGPU } from "../misc/node_device.mjs";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -11,8 +11,7 @@ process.on("warning", (warning) => {
   console.warn(warning.name + ": " + warning.message);
 });
 
-// 1. Polyfill WebGPU globals (GPUBufferUsage, etc.)
-Object.assign(globalThis, globals);
+// 1. WebGPU globals (GPUBufferUsage, etc.) are set by misc/node_device.mjs
 
 // 2. Setup dawn.node features
 let resolveMain;
@@ -26,15 +25,10 @@ let enableTiming = true;
 const correctnessOnly = process.env.CORRECTNESS_ONLY === "true";
 let cachedDevice = null;
 
-const gpuCreateFeatures = [
-  "enable-dawn-features=use_user_defined_labels_in_backend",
-  /* full-resolution GPU timestamps: by default Dawn rounds them down to
-   * multiples of 65.536 us, coarser than most single executes here */
-  "disable-dawn-features=timestamp_quantization",
-];
 let adapterDescription = "unknown_gpu";
 
-const gpuInstance = create(gpuCreateFeatures);
+/* full-resolution timestamps, kept referenced (misc/node_device.mjs) */
+const gpuInstance = nodeGPU();
 const originalRequestAdapter = gpuInstance.requestAdapter;
 gpuInstance.requestAdapter = async function (...args) {
   const adapter = await originalRequestAdapter.apply(this, args);
@@ -135,29 +129,13 @@ import { BasePrimitive } from "../src/primitive.mjs";
 const perfResults = [];
 const originalExecute = BasePrimitive.prototype.execute;
 
-/* Keep the GPU busy with this primitive for 200 ms before its timed trials.
- * GPUs lower their clocks when they look idle, and single executes separated
- * by CPU work look idle: a V100 fell from 1,297 to 180 MHz ("GPU Idle")
- * during such a run, slowing every kernel up to 10x. trials doubles until
- * one execute keeps the GPU busy for 20 ms. */
-async function warmUp(primitive, args) {
-  const { enableCPUTiming, enableGPUTiming, ...plain } = args; // eslint-disable-line no-unused-vars
-  const end = performance.now() + 200;
-  let trials = 1;
-  while (performance.now() < end) {
-    const start = performance.now();
-    await originalExecute.call(primitive, { ...plain, trials });
-    await primitive.device.queue.onSubmittedWorkDone();
-    if (performance.now() - start < 20) trials *= 2;
-  }
-}
-
 // Intercept BasePrimitive execute method to collect performance metrics
 BasePrimitive.prototype.execute = async function (args = {}) {
   /* A primitive run by another primitive (ExecutePrimitive) is timed as part
    * of its parent; timing it separately would read the parent's timing
    * helper before the parent has finished recording. */
-  if (!enableTiming || correctnessOnly || args.__timingSetUpByParent) {
+  /* primitive.warmUp()'s executes (args.__warmUp) are not timed either */
+  if (!enableTiming || correctnessOnly || args.__timingSetUpByParent || args.__warmUp) {
     return await originalExecute.call(this, args);
   }
 
@@ -202,7 +180,8 @@ BasePrimitive.prototype.execute = async function (args = {}) {
       break;
     }
     if (t === 0) {
-      await warmUp(this, args);
+      /* keep the GPU at full clock for the timed trials (see BasePrimitive.warmUp) */
+      await this.warmUp(args);
     }
   }
 

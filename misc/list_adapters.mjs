@@ -2,9 +2,8 @@
  * description, subgroup sizes and whether it has subgroups and timestamps.
  * EXPECT_VENDOR=<vendor> makes it fail if the adapter is someone else's
  * (e.g., a software renderer standing in for a simulated GPU). */
-import { create, globals } from "webgpu";
-Object.assign(globalThis, globals);
-const adapter = await create([]).requestAdapter();
+import { nodeGPU } from "./node_device.mjs";
+const adapter = await nodeGPU().requestAdapter();
 if (!adapter) {
   console.error("No WebGPU adapter found");
   process.exit(1);
