@@ -13,14 +13,17 @@
  *
  * `this.fnDeclarations = new wgslFunctionsWithoutSubgroupSupport(this);`
  *
- * Then, within a kernel, the kernel programmer can include individual
- * functions, such as:
+ * Then, at the top of a kernel, list the helpers it uses:
  *
- * `${this.fnDeclarations.vec4InclusiveScan}`
+ * `${this.fnDeclarations.include("wgScan", "computeLinearizedGridParametersSplit")}`
  *
- * which declares the function `vec4InclusiveScan`.
+ * include() emits each helper and everything it depends on (enabling
+ * subgroups, their emulation, binop, the builtins structs) once, in a valid
+ * order; workgroupBytes() with the same list says how much workgroup memory
+ * they declare. Helpers that take arguments are listed as [name, args].
  *
- * More detailed usage:
+ * The steps include() takes care of, for reference (and for helpers called
+ * directly, e.g. `${this.fnDeclarations.vec4InclusiveScan()}`):
  *
  * 1. At the top of the kernel, place the following:
  *    `${this.fnDeclarations.enableSubgroupsIfAppropriate}`
@@ -119,8 +122,113 @@ function wgScanNames(env) {
 }
 
 export class wgslFunctions {
+  /** What each helper needs elsewhere in the module. "binop" is the
+   * primitive's binop.wgslfn. Inline helpers (INLINE) emit statements inside
+   * a function, so include() adds only what they need at module scope. */
+  static DEPENDENCIES = {
+    binop: [],
+    commonDefinitions: [],
+    subgroupEmulation: [],
+    roundUpDivU32: [],
+    vec4InclusiveScan: ["binop"],
+    vec4ExclusiveScan: ["binop"],
+    vec4InclusiveToExclusive: [],
+    vec4Reduce: ["binop"],
+    vec4ScalarBinopV4: ["binop"],
+    subgroupZero: ["subgroupEmulation"],
+    subgroupShuffle: ["subgroupEmulation"],
+    subgroupShuffleXor: ["subgroupEmulation"],
+    subgroupBallot: ["subgroupEmulation"],
+    subgroupMax: ["subgroupEmulation"],
+    subgroupAdd: ["subgroupEmulation"],
+    subgroupAny: ["subgroupEmulation"],
+    subgroupAll: ["subgroupEmulation"],
+    subgroupInclusiveOpScan: ["binop", "subgroupEmulation"],
+    subgroupReduce: ["binop", "subgroupEmulation"],
+    subgroupLaneMasks: [],
+    wgReduce: ["commonDefinitions", "binop", "subgroupReduce"],
+    wgScan: ["commonDefinitions", "binop", "subgroupInclusiveOpScan"],
+    wgHistogram: [],
+    /* inline */
+    computeLinearizedGridParameters: ["commonDefinitions"],
+    computeLinearizedGridParametersSplit: ["commonDefinitions"],
+    initializeSubgroupVars: ["commonDefinitions", "subgroupEmulation"],
+    subgroupLaneMaskLt: ["subgroupLaneMasks"],
+    subgroupDigitMatch: ["subgroupLaneMasks"],
+  };
+  static INLINE = new Set([
+    "computeLinearizedGridParameters",
+    "computeLinearizedGridParametersSplit",
+    "initializeSubgroupVars",
+    "subgroupLaneMaskLt",
+    "subgroupDigitMatch",
+  ]);
+  /** Workgroup memory each helper declares (bytes), for workgroupBytes().
+   * Gridwise's scan and reduce datatypes are 4 bytes. */
+  static WORKGROUP_BYTES = {
+    wgScan: (env) => Math.ceil(env.workgroupSize / 4) * 4,
+    wgReduce: (env) => (env.wgTempIsArgument ? 0 : ((2 * env.workgroupSize) / env.SUBGROUP_MIN_SIZE) * 4),
+    wgHistogram: (env) => env.numBins * (env.copies ?? 1) * 4,
+  };
+
   constructor(args) {
     this.env = args;
+  }
+
+  /** Module-scope WGSL for the helpers a kernel uses, and everything they
+   * depend on, each once. Put it at the top of the module: it starts with
+   * enableSubgroupsIfAppropriate, which WGSL requires first.
+   *
+   *   ${this.fnDeclarations.include(
+   *     "wgScan",                                        // and commonDefinitions, binop, subgroupInclusiveOpScan, ...
+   *     ["wgHistogram", { name: "cnt", numBins: 256 }],  // a helper with arguments
+   *     "computeLinearizedGridParametersSplit",          // inline: adds only what it needs
+   *   )}
+   *
+   * A dependency is satisfied by any earlier inclusion of that helper,
+   * whatever its arguments; helpers listed explicitly are each emitted once
+   * per distinct set of arguments (e.g. exclusive and inclusive wgScan). */
+  include(...uses) {
+    return this.__resolve(uses)
+      .map(({ name, args }) => (name === "binop" ? this.env.binop.wgslfn : this[name](args)))
+      .join("\n");
+  }
+
+  /** Workgroup memory (bytes) declared by include(...uses): what is left for
+   * a kernel's own arrays is device.limits.maxComputeWorkgroupStorageSize
+   * minus this and those arrays. A declaration counts only if the entry point
+   * uses it, so this can overestimate. */
+  workgroupBytes(...uses) {
+    const sizes = this.constructor.WORKGROUP_BYTES;
+    return this.__resolve(uses).reduce((total, { name, args }) => {
+      const env = Object.assign(Object.create(this.env), args);
+      return total + (sizes[name] ? sizes[name](env) : 0);
+    }, 0);
+  }
+
+  __resolve(uses) {
+    const deps = this.constructor.DEPENDENCIES;
+    const inline = this.constructor.INLINE;
+    const included = []; /* { name, args } in order */
+    const keys = new Set();
+    const has = (name) => included.some((u) => u.name === name);
+    const add = (name, args = {}, explicit = false) => {
+      if (!(name in deps)) {
+        throw new Error(`wgslFunctions.include: unknown helper ${name}`);
+      }
+      for (const d of deps[name]) if (!has(d)) add(d);
+      if (inline.has(name)) return;
+      const key = `${name} ${JSON.stringify(args)}`;
+      if (explicit ? keys.has(key) : has(name)) return;
+      keys.add(key);
+      included.push({ name, args });
+    };
+    included.push({ name: "enableSubgroupsIfAppropriate", args: {} });
+    for (const u of uses) {
+      const [name, args] = Array.isArray(u) ? u : [u, {}];
+      add(name, args, true);
+    }
+    return included;
   }
   commonDefinitions(args = {}) {
     // eslint-disable-next-line no-unused-vars
@@ -670,6 +778,17 @@ fn ${fnName}(in: ${T},
  */
 
 export class wgslFunctionsWithoutSubgroupSupport extends wgslFunctions {
+  static DEPENDENCIES = {
+    ...wgslFunctions.DEPENDENCIES,
+    /* a Hillis-Steele scan in workgroup memory: no (emulated) subgroups */
+    wgScan: ["commonDefinitions", "binop"],
+  };
+  static WORKGROUP_BYTES = {
+    ...wgslFunctions.WORKGROUP_BYTES,
+    wgScan: (env) => env.workgroupSize * 4,
+    /* wg_sw_subgroups, two 6-step arrays of atomics, wg_thread_shuffle_count */
+    subgroupEmulation: (env) => Number(env.workgroupSize) * (4 + 2 * 6 * 4 + 4),
+  };
   constructor(env) {
     super(env);
   }

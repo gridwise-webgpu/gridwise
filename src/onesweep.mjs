@@ -156,9 +156,26 @@ export class OneSweepSort extends BaseSort {
      *   improves the throughput of the global scatter.
      */
     let kernel = /* wgsl */ `
-    /* enables subgroups ONLY IF it was requested when creating device */
-    /* WGSL requires this declaration is first in the shader */
-    ${this.fnDeclarations.enableSubgroupsIfAppropriate()}
+    /* the helpers below, and what they need, each once; include() must come
+     * first.
+     * Emulated subgroups (no subgroup hardware) are declared for u32 at
+     * BLOCK_DIM. This is kludgey, because we need to use this declaration in
+     * two kernels: onesweep_pass and onesweep_scan. We are lucky they both
+     * have the same workgroup size and datatype. The challenge is not naming
+     * (we could name wg_sw_subgroups anything and allocate more than one),
+     * it's that the subgroup calls in each kernel assume a hardwired name of
+     * wg_sw_subgroups, and that's hard to fix. */
+    ${this.fnDeclarations.include(
+      ["subgroupEmulation", { datatype: "u32", workgroupSize: `${this.BLOCK_DIM}` }],
+      "subgroupZero",
+      "subgroupBallot",
+      ["subgroupShuffle", { datatype: "u32" }],
+      "subgroupAny",
+      "subgroupAll",
+      "commonDefinitions",
+      "binop",
+      "initializeSubgroupVars",
+    )}
 
     /** Constants are mostly set in finalizeRuntimeParameters and
      * pasted in here; this is mostly to make sure they don't get
@@ -207,25 +224,6 @@ export class OneSweepSort extends BaseSort {
     const REDUCE_PART_SIZE = REDUCE_KEYS_PER_THREAD * REDUCE_BLOCK_DIM;
 
     var<workgroup> wg_globalHist: array<atomic<u32>, REDUCE_HIST_SIZE>;
-
-    /** If we're making subgroup calls and we don't have subgroup hardware,
-      * this sets up necessary declarations (workgroup memory, subgroup vars) */
-    /** This is kludgey, because we need to use this declaration in two kernels:
-     *    onesweep_pass and onesweep_scan. We are lucky they both have the same
-     *    workgroup size and datatype. The challenge is not here (we can easily
-     *    name wg_sw_subgroups anything we want, and allocate more than one),
-     *    it's instead that the subgroup calls in each kernel assume a hardwired
-     *    name of wg_sw_subgroups, and that's hard to fix.
-     */
-    ${this.fnDeclarations.subgroupEmulation({
-      datatype: "u32",
-      workgroupSize: `${this.BLOCK_DIM}`,
-    })}
-    ${this.fnDeclarations.subgroupZero()}
-    ${this.fnDeclarations.subgroupBallot()}
-    ${this.fnDeclarations.subgroupShuffle({ datatype: "u32" })}
-    ${this.fnDeclarations.subgroupAny()}
-    ${this.fnDeclarations.subgroupAll()}
 
     /** OneSweepSort internally sorts u32 keys
      * The following functions convert ${this.datatype} keys <-> u32 keys
@@ -364,8 +362,6 @@ export class OneSweepSort extends BaseSort {
     const SCAN_MEM_SIZE = RADIX / SUBGROUP_MIN_SIZE;
     var<workgroup> wg_scan: array<u32, SCAN_MEM_SIZE>;
 
-    ${this.fnDeclarations.commonDefinitions()}
-    ${this.binop.wgslfn}
 
     /**
      * Input: global hist[4*256] of u32s

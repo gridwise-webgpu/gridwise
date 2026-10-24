@@ -48,10 +48,15 @@ export class Histogram extends BasePrimitive {
     this.params = new UniformStruct("HistogramParameters", { n: "u32" });
   }
 
+  /** the workgroup histogram's include() entry */
+  get wgHistogramHelper() {
+    return ["wgHistogram", { name: "wgBins", numBins: this.numBins, copies: this.copies, workgroupSize: this.workgroupSize }];
+  }
+
   /** do the bins (all copies) fit in workgroup memory? */
   get workgroupBins() {
     const limit = this.device.limits.maxComputeWorkgroupStorageSize;
-    return this.numBins * this.copies * 4 <= limit;
+    return this.fnDeclarations.workgroupBytes(this.wgHistogramHelper) <= limit;
   }
 
   get bytesTransferred() {
@@ -72,8 +77,8 @@ export class Histogram extends BasePrimitive {
     const N = this.numBins;
     const wg = this.workgroupBins;
     return /* wgsl */ `
+${this.fnDeclarations.include(...(wg ? [this.wgHistogramHelper] : []))}
 ${this.bins.wgsl("binOf")}
-${wg ? this.fnDeclarations.wgHistogram({ name: "wgBins", numBins: N, copies: this.copies, workgroupSize: W }) : ""}
 
 @compute @workgroup_size(${W})
 fn histogram(@builtin(local_invocation_index) lidx: u32,

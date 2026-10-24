@@ -281,12 +281,7 @@ export class HierarchicalScan extends BaseScan {
     const W = this.workgroupSize;
     const inclusive = this.type === "inclusive";
     return /* wgsl */ `
-${this.fnDeclarations.enableSubgroupsIfAppropriate()}
-${this.fnDeclarations.commonDefinitions()}
-${this.fnDeclarations.subgroupEmulation()}
-${this.binop.wgslfn}
-${this.fnDeclarations.subgroupInclusiveOpScan()}
-${this.fnDeclarations.wgScan()}
+${this.fnDeclarations.include("wgScan", "computeLinearizedGridParametersSplit")}
 
 const K = ${K}u;
 
