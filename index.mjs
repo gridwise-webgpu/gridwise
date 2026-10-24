@@ -1,4 +1,4 @@
-export { BasePrimitive, Kernel, AllocateBuffer, WriteGPUBuffer, ExecutePrimitive, ClearBuffer } from "./src/primitive.mjs";
+export { BasePrimitive, Kernel, AllocateBuffer, WriteGPUBuffer, ExecutePrimitive, ClearBuffer, UniformStruct } from "./src/primitive.mjs";
 export { Buffer } from "./src/buffer.mjs";
 export { DLDFScan } from "./src/scandldf.mjs";
 export { HierarchicalScan } from "./src/scan.mjs";

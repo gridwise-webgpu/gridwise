@@ -13,6 +13,7 @@ import {
   Kernel,
   AllocateBuffer,
   ExecutePrimitive,
+  UniformStruct,
 } from "../src/primitive.mjs";
 import { OneSweepSort } from "../src/onesweep.mjs";
 import { MultisplitPerm } from "../src/multisplitperm.mjs";
@@ -618,6 +619,74 @@ export async function main(navigator) {
 
   /* random.mjs: the JS Philox against Random123's known-answer vectors, then
    * the WGSL functions against their JS mirrors for 4096 inputs. */
+  /* Core: a Kernel's declared buffers (two bind groups, a buffer bound under
+   * another name) and a UniformStruct with u32, i32 and f32 fields and
+   * padding. The kernel copies the parameters out; a second execute with one
+   * value changed must upload it. */
+  class DeclaredBuffersTest extends BasePrimitive {
+    constructor(args) {
+      super(args);
+      this.knownBuffers = ["outputBuffer"];
+      this.params = new UniformStruct("TestParams", { a: "u32", b: "i32", c: "f32", d: "u32", e: "u32" });
+    }
+    compute() {
+      return [
+        this.params.allocate("testParams", this.values),
+        new AllocateBuffer({
+          label: "scale",
+          size: 16,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+          populateWith: new Uint32Array([10, 0, 0, 0]),
+        }),
+        new Kernel({
+          kernel: /* wgsl */ `
+@compute @workgroup_size(1) fn main() {
+  out[0] = params.a * scale[0];
+  out[1] = bitcast<u32>(params.b);
+  out[2] = bitcast<u32>(params.c);
+  out[3] = params.d;
+  out[4] = params.e;
+}`,
+          buffers: [
+            [
+              { name: "out", buffer: "outputBuffer", access: "read_write", type: "array<u32>" },
+              { name: "params", buffer: "testParams", uniform: this.params },
+            ],
+            [{ name: "scale", access: "read", type: "array<u32>" }],
+          ],
+          getDispatchGeometry: () => [1],
+        }),
+      ];
+    }
+  }
+
+  async function runDeclaredBuffersTest() {
+    const outputBuffer = device.createBuffer({ size: 32, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const mappable = device.createBuffer({ size: 32, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const primitive = new DeclaredBuffersTest({ device });
+    let errors = "";
+    if (primitive.params.byteLength !== 32) errors += `
+UniformStruct byteLength ${primitive.params.byteLength}, expected 32`;
+    const f32bits = (x) => new Uint32Array(Float32Array.of(x).buffer)[0];
+    for (const e of [42, 43]) {
+      primitive.values = { a: 7, b: -3, c: 1.5, d: 0xffffffff, e };
+      await primitive.execute({ outputBuffer });
+      const encoder = device.createCommandEncoder();
+      encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, 32);
+      device.queue.submit([encoder.finish()]);
+      await mappable.mapAsync(GPUMapMode.READ);
+      const out = Array.from(new Uint32Array(mappable.getMappedRange().slice(0, 20)));
+      mappable.unmap();
+      const want = [70, -3 >>> 0, f32bits(1.5), 0xffffffff, e];
+      if (out.join() !== want.join()) errors += `
+execute with e = ${e}: got [${out}], expected [${want}]`;
+    }
+    primitive.destroy();
+    outputBuffer.destroy();
+    mappable.destroy();
+    return errors;
+  }
+
   class RandomBitsTest extends BasePrimitive {
     constructor(args) {
       super(args);
@@ -879,6 +948,7 @@ ${randomBitsWGSL(this.rng)}
   await runTest("primitive destroy() frees its own buffers, then re-executes", runDestroyTest);
   await runTest("ExecutePrimitive: scan nested in another primitive", runExecutePrimitiveTest);
   await runTest("re-execute one scan at changing sizes (uniform uploads)", runReexecuteTest);
+  await runTest("core: Kernel buffers and UniformStruct (two bind groups; values re-uploaded on change)", runDeclaredBuffersTest);
   await runTest("random bits: keyed hash, WGSL = JS; Philox known answers", () => runRandomBitsTest(null));
   await runTest("random bits: Philox4x32-7, WGSL = JS", () => runRandomBitsTest({ key: [0x12345678, 0x9abcdef0], rounds: 7 }));
 

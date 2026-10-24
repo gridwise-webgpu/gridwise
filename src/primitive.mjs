@@ -569,21 +569,8 @@ export class BasePrimitive {
             /* don't run this kernel at all */
             break;
           }
-          /* action.kernel can be a string or a function */
-          let kernelString;
-          switch (typeof action.kernel) {
-            case "string":
-              kernelString = action.kernel;
-              break;
-            case "function":
-              /* have never used kernelArgs, but let's support it anyway */
-              kernelString = action.kernel(action.kernelArgs);
-              break;
-            default:
-              throw new Error(
-                "Primitive::Kernel: kernel must be a function or a string"
-              );
-          }
+          /* the kernel's WGSL, with its declared buffers (if any) */
+          const kernelString = action.wgsl();
           if (action?.logKernelCodeToConsole) {
             console.log(
               action.label ? `/*** ${action.label} ***/\n` : "",
@@ -1184,7 +1171,89 @@ dispatchGeometry: ${dispatchGeometry}`);
   }
 }
 
+/** A uniform parameter struct, declared once for both WGSL and JavaScript.
+ *
+ *   this.params = new UniformStruct("HistogramParameters", { n: "u32", scale: "f32" });
+ *   // in compute():
+ *   this.params.allocate("histogramParameters", { n: this.inputLength, scale: 0.5 })
+ *   // in a Kernel's buffers:
+ *   { name: "params", buffer: "histogramParameters", uniform: this.params }
+ *
+ * Fields are u32, i32 or f32, in the given order; the struct is padded to a
+ * multiple of 16 bytes, as uniform buffers need. A Kernel that binds it
+ * declares the struct in its WGSL (see Kernel's buffers), so kernels use
+ * params.n without declaring anything. allocate() returns an AllocateBuffer
+ * whose upload is skipped when the values have not changed. */
+export class UniformStruct {
+  static TYPES = { u32: "setUint32", i32: "setInt32", f32: "setFloat32" };
+  constructor(name, fields) {
+    this.name = name;
+    this.fields = Object.entries(fields);
+    for (const [field, type] of this.fields) {
+      if (!(type in UniformStruct.TYPES)) {
+        throw new Error(`UniformStruct ${name}: field ${field} has type ${type}; use u32, i32 or f32`);
+      }
+    }
+    this.byteLength = Math.max(16, Math.ceil((this.fields.length * 4) / 16) * 16);
+  }
+  /** the WGSL struct declaration */
+  get wgsl() {
+    const pad = Array.from({ length: this.byteLength / 4 - this.fields.length }, (_, i) => `_pad${i}: u32`);
+    const members = [...this.fields.map(([field, type]) => `${field}: ${type}`), ...pad];
+    return `struct ${this.name} { ${members.join(", ")} };`;
+  }
+  /** values packed in the struct's layout */
+  pack(values) {
+    const bytes = new Uint8Array(this.byteLength);
+    const view = new DataView(bytes.buffer);
+    this.fields.forEach(([field, type], i) => {
+      if (!(field in values)) {
+        throw new Error(`UniformStruct ${this.name}: no value for field ${field}`);
+      }
+      view[UniformStruct.TYPES[type]](i * 4, values[field], true);
+    });
+    return bytes;
+  }
+  /** an AllocateBuffer action for a uniform buffer named label, holding values */
+  allocate(label, values) {
+    return new AllocateBuffer({
+      label,
+      size: this.byteLength,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      populateWith: this.pack(values),
+    });
+  }
+}
+
+/** A Kernel action: one compute pass running one entry point.
+ *
+ *   new Kernel({ kernel, entryPoint, buffers, label, getDispatchGeometry, ... })
+ *
+ * kernel is the WGSL (a string, or a function returning it). Its buffers can
+ * be declared in one place, `buffers`, a list in binding order (or a list of
+ * such lists, one per bind group):
+ *
+ *   buffers: [
+ *     { name: "inputBuffer", access: "read", type: "array<f32>" },
+ *     { name: "outputBuffer", access: "read_write", type: "array<atomic<u32>>" },
+ *     { name: "params", buffer: "histogramParameters", uniform: this.params },
+ *   ]
+ *
+ *   name     the variable's name in WGSL
+ *   buffer   the primitive's buffer bound to it (default: name); may also be
+ *            { buffer, offset, size }, as in bindings
+ *   access   "read" (read-only storage), "read_write" (storage) or "uniform"
+ *   type     its WGSL type
+ *   uniform  a UniformStruct: access "uniform", type the struct, and the
+ *            struct's declaration is added too
+ *
+ * Gridwise derives the bind group layout, the bind groups and the WGSL
+ * declarations from this list; the declarations are appended to the kernel's
+ * code (WGSL allows module-scope declarations in any order). The older form,
+ * parallel lists bufferTypes and bindings with the declarations written in
+ * the WGSL, still works. */
 export class Kernel {
+  static ACCESS = { read: "read-only-storage", read_write: "storage", uniform: "uniform" };
   constructor(args) {
     this.label = "kernel"; // default
     if (typeof args === "function") {
@@ -1203,10 +1272,61 @@ export class Kernel {
       }
       Object.assign(this, args);
     }
+    if (this.buffers) {
+      if (this.bufferTypes || this.bindings) {
+        throw new Error(`Kernel ${this.label}: give either buffers or bufferTypes and bindings, not both`);
+      }
+      const groups = Array.isArray(this.buffers[0]) ? this.buffers : [this.buffers];
+      this.__bufferGroups = groups.map((group) =>
+        group.map((b) => {
+          const access = b.uniform ? "uniform" : b.access;
+          if (!(access in Kernel.ACCESS)) {
+            throw new Error(`Kernel ${this.label}: buffer ${b.name} needs access "read", "read_write" or "uniform"`);
+          }
+          const type = b.uniform ? b.uniform.name : b.type;
+          if (!b.name || !type) {
+            throw new Error(`Kernel ${this.label}: each buffer needs a name and a type (or a uniform)`);
+          }
+          return { ...b, access, type };
+        })
+      );
+      this.bufferTypes = this.__bufferGroups.map((group) => group.map((b) => Kernel.ACCESS[b.access]));
+      this.bindings = this.__bufferGroups.map((group) => group.map((b) => b.buffer ?? b.name));
+    }
   }
   enabled() {
     /* default: enabled */
     return this.enable ?? true;
+  }
+  /** WGSL declarations of the buffers given in `buffers` ("" without them) */
+  get bufferDeclarations() {
+    if (!this.__bufferGroups) return "";
+    const space = { read: "storage, read", read_write: "storage, read_write", uniform: "uniform" };
+    const structs = new Map();
+    const vars = [];
+    this.__bufferGroups.forEach((group, g) =>
+      group.forEach((b, i) => {
+        if (b.uniform) structs.set(b.uniform.name, b.uniform.wgsl);
+        vars.push(`@group(${g}) @binding(${i}) var<${space[b.access]}> ${b.name}: ${b.type};`);
+      })
+    );
+    return ["/* buffers (declared by the Kernel) */", ...structs.values(), ...vars].join("\n");
+  }
+  /** the kernel's complete WGSL: its code, then its buffers' declarations */
+  wgsl() {
+    let code;
+    switch (typeof this.kernel) {
+      case "string":
+        code = this.kernel;
+        break;
+      case "function":
+        code = this.kernel(this.kernelArgs);
+        break;
+      default:
+        throw new Error("Primitive::Kernel: kernel must be a function or a string");
+    }
+    const declarations = this.bufferDeclarations;
+    return declarations ? `${code}\n${declarations}\n` : code;
   }
 }
 
