@@ -7,15 +7,16 @@ permalink: /
 # Gridwise
 
 Gridwise is a JavaScript library of high-performance GPU compute primitives built on WebGPU. It
-provides three core operations — **scan** (prefix sum), **reduce**, and **sort** — that run
-directly in the browser or in Node.js via node-webgpu, with no native dependencies. The API is
+provides three core operations — **scan** (prefix sum), **reduce**, and **sort** — plus a
+**random permutation**. They run directly in the browser with no dependencies, or in Node.js
+through the [`webgpu`](https://www.npmjs.com/package/webgpu) package (Dawn). The API is
 intentionally minimal: instantiate a primitive configured with a WebGPU device and parameters,
 then call `execute` with GPU buffers. Gridwise supports `u32`, `i32`, and `f32` data types;
 configurable binary operations (add, min, max, multiply); and ascending and descending radix sort
 with optional key-value payload support.
 
 Gridwise targets primitives with the highest performance. Achieving this goal is complex because
-WebGPU has modest forward-progress guarantees. Gridwise's sort and scan primitives leverage a
+WebGPU makes no forward-progress guarantees. Gridwise's sort and scan primitives leverage a
 decoupled lookback and fallback (DLDF) strategy to achieve top performance. Interested readers
 can find ample detail on this approach in [_Decoupled Fallback: A Portable Single-Pass
 GPU Scan_](https://doi.org/10.1145/3694906.3743326).

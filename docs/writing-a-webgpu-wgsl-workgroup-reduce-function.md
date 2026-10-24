@@ -3,11 +3,11 @@ layout: page
 title: "Abstraction Challenges in Writing a WebGPU/WGSL Workgroup Reduce Function"
 category: gridwise
 permalink: /writing-a-webgpu-wgsl-workgroup-reduce-function/
-excerpt: "A practical walkthrough of implementing a workgroupReduce function in WGSL, exploring language challenges and abstraction pain points."
-order: 11
+excerpt: "A practical walkthrough of implementing a reduceWorkgroup function in WGSL, exploring language challenges and abstraction pain points."
+order: 12
 ---
 
-In this post, we'll walk through the process of writing a `workgroupReduce` function in WGSL. We write this function as if we were a library writer who would implement `workgroupReduce` with the intent that other unknown developers will call our function. Our goal is to explore the WGSL issues facing the library writer. Through this practical example of creating a `reduceWorkgroup` function, we will identify and discuss several pain points in the language.
+In this post, we'll walk through the process of writing a `reduceWorkgroup` function in WGSL. We write this function as if we were a library writer who would implement `reduceWorkgroup` with the intent that other unknown developers will call our function. Our goal is to explore the WGSL issues facing the library writer. Through this practical example of creating a `reduceWorkgroup` function, we will identify and discuss several pain points in the language.
 
 ---
 
@@ -30,7 +30,7 @@ We will focus on creating a `reduceWorkgroup` function that will be incorporated
 
 The semantics of the function are as follows: consider a workgroup of N invocations (e.g., N = 128); workgroup W will compute the sum of `input[W*N:W*(N+1))`, and each invocation in the workgroup will receive this sum as the return value of a function call.
 
-### Desired Function Call: Caller (WGSL Definition)
+### Desired Function Call: The Call
 
 Ideally, making the function call from within a WGSL kernel would be simple, with the minimal call looking something like
 
@@ -40,7 +40,7 @@ val = reduceWorkgroup(ptr);
 ...
 ```
 
-Here we assume that `ptr` is an address pointing to an item within a linear input array, and that the private variable `val` and the deferenced value at `ptr` have the same datatype. If the workgroup has `W` invocations, then `val`, for every invocation in workgroup `W`, will assume the value `reduce(ptr[W*N:W*(N+1)))`.
+Here we assume that `ptr` is an address pointing to an item within a linear input array, and that the private variable `val` and the dereferenced value at `ptr` have the same datatype. If workgroups have `N` invocations, then `val`, for every invocation in workgroup `W`, will assume the value `reduce(ptr[W*N:W*(N+1)))`.
 
 This interface does not specify the reduction operation (for instance, addition, max, or min), nor the datatype. Possible options to address the former include:
 
@@ -50,9 +50,9 @@ This interface does not specify the reduction operation (for instance, addition,
 
 However, we do not further discuss this issue in this document.
 
-### Desired Function Call: Callee
+### Desired Function Call: The Calling Kernel
 
-We would also like the callee function/kernel to be as simple as possible. The minimum kernel that calls our function, and places the output into an output array, would look something like this:
+We would also like the calling kernel to be as simple as possible. The minimum kernel that calls our function, and places the output into an output array, would look something like this:
 
 ```wgsl
 @compute @workgroup_size(128) fn reduceKernel(
@@ -70,7 +70,7 @@ We would also like the callee function/kernel to be as simple as possible. The m
 
 #### Builtins must be explicitly declared
 
-The above kernel has 5 lines of code. 2 of them are declaring built-ins. WGSL requires these declarations, but other languages have made different choices. Why are variables like `local_invocation_index` and `workgroup_id` not available within a kernel without the need for these declarations?
+The body of the above kernel is four lines of code, and the kernel also needs two lines that declare built-ins. WGSL requires these declarations, but other languages have made different choices. Why are variables like `local_invocation_index` and `workgroup_id` not available within a kernel without the need for these declarations?
 
 Possible ways to remove the need for these declarations include
 
@@ -129,7 +129,7 @@ What we want is for each individual instance (thread) to fetch the input value t
   @builtin(global_invocation_id) gid: vec3u,
   @builtin(local_invocation_index) lidx: u32,
   @builtin(workgroup_id) wgid: vec3u) {
-  let r = reduceWorkgroup(&in, gid.x);
+  let r = reduceWorkgroup(&in, gid);
   if (lidx == 0) {
     out[wgid.x] = r;
   }
@@ -149,7 +149,7 @@ Kernel (WGSL) code:
   @builtin(global_invocation_id) gid: vec3u,
   @builtin(local_invocation_index) lidx: u32,
   @builtin(workgroup_id) wgid: vec3u) {
-  let r = reduceWorkgroup(&in, gid.x);
+  let r = reduceWorkgroup(&in, gid);
   if (lidx == 0) {
     out[wgid.x] = r;
   }
@@ -213,7 +213,7 @@ fn reduceWorkgroup(input: ptr<storage, array<u32>, read>,
 Let's consider a `reduceWorkgroup` that instead stored its input in workgroup memory. It would be ideal if we could support inputs in either global (storage) or workgroup memory without any changes to the code.
 
 ```wgsl
-fn reduceWorkgroup(input: ptr<workgroup, array<u32>, SIZE>,
+fn reduceWorkgroup(input: ptr<workgroup, array<u32, SIZE>>,
                    gid: vec3u) -> u32 {
   atomicAdd(&wg_temp[0], input[gid.x]);
   workgroupBarrier();
@@ -229,7 +229,7 @@ The above functions are simple but not high-performance, because all instances m
 
 One of the challenges of subgroups is that their size is not constant within WebGPU. In fact, different kernels running within the same application on some WebGPU-capable hardware may not even share the same subgroup size. If we wish to write a subgroup-size-agnostic kernel, we must support all possible subgroup sizes within that kernel. The challenge with such an implementation is that any allocation that depends on the subgroup size must perform a worst-case allocation that works with any subgroup size.
 
-WebGPU provides two adapter properties---`MIN_SUBGROUP_SIZE` and `MAX_SUBGROUP_SIZE`---that we can use to perform allocations. Below is the start of a high-performance workgroup-reduce kernel that requires a workgroup-memory allocation for partial reductions. The size of the workgroup-memory allocation is directly proportional to the workgroup size (variable: `{$workgroupSize}`) and inversely proportional to the subgroup size (variable: `${MIN_SUBGROUP_SIZE}`).
+WebGPU provides two adapter properties---`subgroupMinSize` and `subgroupMaxSize` (in `adapter.info`), which we call `MIN_SUBGROUP_SIZE` and `MAX_SUBGROUP_SIZE` below---that we can use to perform allocations. Below is the start of a high-performance workgroup-reduce kernel that requires a workgroup-memory allocation for partial reductions. The size of the workgroup-memory allocation is directly proportional to the workgroup size (variable: `${workgroupSize}`) and inversely proportional to the subgroup size (variable: `${MIN_SUBGROUP_SIZE}`).
 
 ```wgsl
 const BLOCK_DIM: u32 = ${workgroupSize};
@@ -278,8 +278,6 @@ One remedy is to pass every builtin into every function. This is verbose and qui
 ### Packing Built-ins into Structs
 
 To simplify the function signatures, we pack built-ins into structs:
-
-Code snippet
 
 ```wgsl
 struct Builtins {

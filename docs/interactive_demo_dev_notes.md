@@ -23,8 +23,8 @@ During the porting process, we resolved three tricky WebGPU memory alignment iss
 * **The Fix**: We eliminated all `vec2` types in uniform structs and replaced them with individual 32-bit floats (`mouseX`, `mouseY`, `canvasWidth`, `canvasHeight`). This ensures a flat, layout-safe 4-byte aligned memory map that exactly matches host-side arrays without compiler-generated padding.
 
 ### B. Vector-Block Output Mapping (`DLDFScan` vec4 format)
-* **The Bug**: Gridwise's `DLDFScan` class is optimized to run WebGPU operations in vector groups of 4 elements. Because of this, it outputs the prefix scan results as an array of `vec4<u32>` elements (not a flat array of `u32` elements).
-* **The Impact**: Declaring the scanned input buffer as `array<u32>` inside the shader caused index coordinates to read out-of-bounds and read incorrect values, disabling the Scan wave animations.
+* **The Bug**: Gridwise's `DLDFScan` class is optimized to run WebGPU operations in vector groups of 4 elements, so its shader declares its output as an array of `vec4<u32>` elements.
+* **The Impact**: The Scan wave animations read incorrect values. (Note for future readers: the *memory layout* of `array<vec4<u32>>` and `array<u32>` is identical, since a `vec4<u32>` is four consecutive `u32`s with no padding, so declaring the scanned buffer as `array<u32>` and indexing it with `idx` reads the same values. The vec4 declaration below works, but the root cause of this bug was probably something else, such as the indexing or the bound buffer.)
 * **The Fix**: Declared the binding as `array<vec4<u32>>` in `applyScanWGSL` and updated the thread indexing to calculate component offsets:
   * Value at index `idx` = `scannedValues[idx / 4u][idx % 4u]`
   * Maximum value = `scannedValues[(count - 1u) / 4u][(count - 1u) % 4u]`

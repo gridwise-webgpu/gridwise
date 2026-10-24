@@ -9,7 +9,7 @@ order: 8
 
 WGSL's [subgroup built-in functions](https://gpuweb.github.io/gpuweb/wgsl/#subgroup-builtin-functions) have the potential to significantly improve performance on subgroup-capable hardware. A [large (and growing) fraction of WebGPU devices](https://web3dsurvey.com/webgpu) support subgroups. However, writing high-performance code that supports both using subgroups when available _and_ falls back to code with no subgroups is a challenge. This document describes my experience attempting to do exactly that.
 
-In the below discussion, we use the term "hw" to indicate "the development experience that targets hardware-supported subgroups" and "emu" for the development experience that targets non-hardware-supported subgroups, which are not supported by WGSL and thus must be emulated".
+In the below discussion, we use the term "hw" to indicate "the development experience that targets hardware-supported subgroups" and "emu" for the development experience that targets non-hardware-supported subgroups, which are not supported by WGSL and thus must be emulated.
 
 ## Goals of this effort
 
@@ -22,7 +22,7 @@ In an ideal world, this effort would have resulted in the following outcomes:
 - For developers of primitives:
   - Minimal additional complexity. This was not entirely achieved.
 
-The checked-in code does not work out of the box for emu. It would not be excessively difficult to make it work, but it would take several hours of grungy effort. I priorized hw development, not emu development, during our scan implementation; scan is already quite complicated and keeping it working for both during active development was just not a priority.
+When this was first written, the checked-in code did not work out of the box for emu; I prioritized hw development, not emu development, during our scan implementation, since scan is already quite complicated and keeping it working for both during active development was just not a priority. Emu now works: the full regression suite passes with subgroups disabled, and CI runs it that way (correctness only) on every pull request.
 
 ## Initial goal: subgroupShuffle
 
@@ -59,19 +59,20 @@ Our second challenge is ensuring that our `fn subgroupShuffle` definition is onl
 
 First, the WebGPU call `device.features.has("subgroups")` tells us if subgroups are supported. We can use the result of this call to declare one of two sets of functions: one that assumes subgroups are available (hw) and one that does not (emu). In our implementation, this set of functions is called `fnDeclarations`. Our syntax is not important here; what is important is what happens in hw and what happens in emu.
 
-At the top of the kernel, we require `${this.fnDeclarations.enableSubgroupsIfAppropriate}`. If we are hw, this emits `enable subgroups;`; if we are emu, this emits nothing.
+At the top of the kernel, we require `${this.fnDeclarations.enableSubgroupsIfAppropriate()}`. If we are hw, this emits `enable subgroups;`; if we are emu, this emits nothing.
 
-With our next declaration, we partially solve the problem we identified above, where the subgroup size and subgroup id builtins are available in hw but not in emu. If the kernel is using any subgroup calls, we require `${this.fnDeclarations.subgroupEmulation}`. In hw, this emits nothing. In emu, this declares workgroup memory (for performing the subgroup operations) and subgroup variables (subgroup size and subgroup id), all at module scope:
+With our next declaration, we partially solve the problem we identified above, where the subgroup size and subgroup id builtins are available in hw but not in emu. If the kernel is using any subgroup calls, we require `${this.fnDeclarations.subgroupEmulation()}`. In hw, this emits nothing. In emu, this declares workgroup memory (for performing the subgroup operations) and subgroup variables (subgroup size and subgroup id), all at module scope. Abbreviated:
 
 ```wgsl
 var<workgroup> wg_sw_subgroups: array<${env.datatype}, ${env.workgroupSize}>;
-const sgsz: u32 = ${env.workgroupSize};
+/* ... plus per-step atomic flag arrays used to coordinate the emulated operations */
+const sgsz: u32 = 32u; /* the emulated subgroup size; see below */
 var<private> sgid: u32;
 ```
 
-However, it does not actually assign values to `sgsz` and `sgid`.
+However, it does not actually assign a value to `sgid`.
 
-Next, for each subgroup call we want to make, we "declare" the call. For subgroup shuffle, in hw, we emit nothing, because `subgroupShuffle` is builtin. In emu (note we use the `sgid` variable we declared at module scope above):
+Next, for each subgroup call we want to make, we "declare" the call. For subgroup shuffle, in hw, we emit nothing, because `subgroupShuffle` is builtin. In emu, our first version looked like this (note we use the `sgid` variable we declared at module scope above). The current version replaces the barriers with per-invocation atomic flags, for the reasons in the next sections:
 
 ```wgsl
 fn subgroupShuffle(x: u32, source: u32) -> u32 {
@@ -87,14 +88,14 @@ fn subgroupShuffle(x: u32, source: u32) -> u32 {
 
 In hw, each supported subgroup call emits nothing, but we also define other useful functions that are not already defined and emit different implementations for hw and emu. (Example: WGSL supports both inclusive (`subgroupInclusiveAdd`) and exclusive subgroup (`subgroupExclusiveAdd`) scans, but only if the scan operator is addition. Our function library has support for non-addition inclusive and exclusive subgroup scans for both hw and emu.)
 
-Finally, we need to assign values to `sgsz` and `sgid` to functions wehre they are used. Here we use a declaration within each function, `      ${this.fnDeclarations.initializeSubgroupVars()}`. For hw, this does nothing. For emu, this emits `let sgsz: u32 = builtinsUniform.sgsz;\nlet sgid: u32 = builtinsNonuniform.sgid;`.
+Finally, we need to give `sgsz` and `sgid` values in the functions where they are used. Here we use a declaration within each function, `${this.fnDeclarations.initializeSubgroupVars()}`. For hw, this emits `let sgsz: u32 = builtinsUniform.sgsz;` and `let sgid: u32 = builtinsNonuniform.sgid;`, copying the hardware builtins. For emu, it assigns the module-scope variables, for instance `sgid = builtinsNonuniform.lidx % 32u;`.
 
 The burden on the programmer is to (1) declare necessary functions at the top of the module and (2) initialize subgroup variables at the top of each function that uses subgroups, but not to change kernel code. For a hypothetical module/kernel whose only subgroup operation is `subgroupShuffle`, that code looks like:
 
 ```wgsl
-${this.fnDeclarations.enableSubgroupsIfAppropriate} // must be first line of kernel
-${this.fnDeclarations.subgroupEmulation}
-${this.fnDeclarations.subgroupShuffle}
+${this.fnDeclarations.enableSubgroupsIfAppropriate()} // must be first line of kernel
+${this.fnDeclarations.subgroupEmulation()}
+${this.fnDeclarations.subgroupShuffle()}
 
 fn kernel() {
   ${this.fnDeclarations.initializeSubgroupVars()}
@@ -152,7 +153,7 @@ WebGPU/WGSL provides no guarantee of lockstep execution and requires explicit sy
 * However, WGSL restricts `workgroupBarrier()` to strictly **uniform control flow** across the entire workgroup.
 
 We resolve this dilemma using two different strategies depending on the code pattern:
-1. **Barrier-Free Emulation**: For simple subgroup shuffles/ballots within uniform code paths, we omit internal `workgroupBarrier()` calls. This relies on the assumption that the 32 threads in the virtual subgroup are scheduled such that their memory writes are visible without explicit synchronization. Note that this is a spec violation and technically a data race under the WebGPU specification, as WebGPU makes no guarantees about lockstep execution or implicit memory visibility across threads. We do this purely as a pragmatic workaround to avoid uniformity compilation errors on current compilers, but it is not spec-compliant.
+1. **Barrier-Free Emulation**: For subgroup shuffles, ballots and scans, we omit internal `workgroupBarrier()` calls. Instead, each invocation publishes its value and a per-invocation step counter in workgroup memory with atomics, and waits (spins) until the other invocations of its virtual subgroup have reached the same step. The atomics avoid data races, but the waiting assumes that the 32 invocations of a virtual subgroup make progress concurrently, which WebGPU does not guarantee (see "SwiftShader and CPU Spin-Loop Starvation" below). Each spin loop gives up after a fixed bound (`SPIN_TIMEOUT`) rather than hang forever, at the cost of a wrong result if the bound is ever reached. We do this as a pragmatic workaround: barriers would be spec-compliant but are only allowed in uniform control flow.
 2. **Workgroup-Uniform Coordination**: For loop-based primitives (like Decoupled Lookback in `DLDFScan`), we restructure the loop to run workgroup-uniformly. All subgroups enter the loop together and participate in the barriers. Subgroup 0 computes the lookback conditions and broadcasts the results (e.g., loop exit states) to the rest of the workgroup using shared workgroup memory. All threads then read the shared variables to exit the loop in unison, maintaining 100% uniform control flow and spec-compliance.
 
 ## Summary
@@ -161,7 +162,7 @@ On an Apple M4 GPU, the performance difference for large inputs (1M to 3M elemen
 - **Prefix Scans (`DLDFScan`)**: Emulation (EMU) is **11x to 28x slower** than native subgroups (HW).
 - **Radix Sort (`OneSweepSort`)**: Emulation (EMU) is **9x to 37x slower** than native subgroups (HW).
 
-An open question is whether it is better to write different _kernels_ for hw and emu as opposed to what we did: writing different versions of subgroup functions and keeping the same kernel. The answer probably depends on the nature of the kernels. We did not explore the latter alternative at all.
+An open question is whether it is better to write different _kernels_ for hw and emu as opposed to what we did: writing different versions of subgroup functions and keeping the same kernel. The answer probably depends on the nature of the kernels. For scan, `HierarchicalScan` is one data point: it is a different, non-chained algorithm whose no-subgroup version uses only barriers, and on an Apple M1 Max with subgroups disabled it runs roughly 20–30× faster than the emulated `DLDFScan`.
 
 ## Further Discussion
 
@@ -209,13 +210,13 @@ However, on a CPU-based software renderer like SwiftShader:
 1. Workgroups are mapped to standard CPU/OS threads.
 2. The CPU has a very limited number of physical cores/hardware execution threads.
 3. If a thread i enters an atomic spin loop waiting for another thread j in the same workgroup to write its data, thread i will consume 100% CPU time on its core.
-4. Because WebGPU makes no execution progress guarantees and has no concept of thread yielding or OS-level preemption for compute shaders, the spinning thread i starves thread j on the CPU core. Thread j is never scheduled to run, so it can never update the flag, leading to a permanent CPU deadlock/hang.
+4. Because WebGPU makes no execution progress guarantees and has no concept of thread yielding or OS-level preemption for compute shaders, the spinning thread i starves thread j on the CPU core. Thread j may not be scheduled until thread i gives up, so without a bound on the spin this is a permanent CPU deadlock/hang. (Gridwise's spin loops stop after `SPIN_TIMEOUT` iterations, which turns the hang into a very long stall, and a wrong result if the timeout expires.)
 
 To prevent this deadlock on CPU-based emulators, any emulation layer relying on shared-memory synchronization must use explicit `workgroupBarrier()` calls rather than atomic spin-loops. However, introducing `workgroupBarrier()` into the emulation functions forces those functions to be called strictly in statically uniform control flow, which conflicts with standard hardware-subgroup usage where subgroup instructions can run inside divergent conditional branches.
 
 ### Host-Side JS Templating as a Preprocessor
 
-In our codebase, we utilize Javascript string interpolation (e.g., `${this.useSubgroups ? '...' : '...'}`) to dynamically generate the WGSL shader source before passing it to the WebGPU device. This acts as a host-side preprocessor (similar to `#ifdef` in C/C++).
+In our codebase, we utilize JavaScript string interpolation to dynamically generate the WGSL shader source before passing it to the WebGPU device; for subgroups, `${this.fnDeclarations.xxx()}` emits different WGSL depending on whether the primitive's `fnDeclarations` is a `wgslFunctions` or a `wgslFunctionsWithoutSubgroupSupport`. This acts as a host-side preprocessor (similar to `#ifdef` in C/C++).
 
 This templating allows us to keep a single **host-side codebase** (a single Javascript class/file per primitive) while branching the actual **device-side WGSL codebase** during runtime compilation. It enables us to implement loop restructures (like Alternative 2) or generate entirely different shader blocks (like Alternative 3) without forcing the user to load different files or manage separate execution classes.
 

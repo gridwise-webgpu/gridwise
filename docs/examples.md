@@ -16,17 +16,18 @@ primitive end-to-end: device setup, buffer allocation, GPU execution, and result
 
 ### Scan / Reduce
 
-Runs exclusive scan, inclusive scan, and reduce over random input arrays using the add, min, and
-max binary operations. Output is plotted against a CPU-computed reference.
+Runs an exclusive add-scan over 2<sup>24</sup> i32 values and validates it against a CPU
+reference. The scan type, datatype and binary operation are set at the top of the source and
+are easy to change.
 
 <a href="{{ "/examples/scan_example.html" | relative_url }}" class="doc-btn">Open Example</a>
 <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_example.mjs" target="_blank" class="doc-btn">Source</a>
 
 ### Sort
 
-Sorts an array of random keys on the GPU using the OneSweep radix sort. Demonstrates keysonly and
-key-value sorting in both ascending and descending directions across u32, i32, and f32 types.
-Results are validated against a CPU reference.
+Sorts 2<sup>24</sup> random i32 keys (keys only, ascending) on the GPU using the OneSweep radix
+sort. The page walks through the essential API calls, including finding which buffer holds the
+sorted output, and validates the result against a CPU reference.
 
 <a href="{{ "/examples/sort_example.html" | relative_url }}" class="doc-btn">Open Example</a>
 <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/sort_example.mjs" target="_blank" class="doc-btn">Source</a>
@@ -58,10 +59,11 @@ validate the output.
 
 ### Gridwise Regression Tests
 
-Runs a correctness suite covering scan, reduce, and sort across multiple datatypes, binary
-operations, input sizes, and sort directions. Each test reports pass or fail individually. A second
-suite of large tests (1M--3M elements) can be triggered separately via a button once the main suite
-completes.
+Runs a correctness suite covering scan and reduce (`DLDFScan` and `HierarchicalScan`), sort,
+random permutations, the random-number generators, and primitive composition, across multiple
+datatypes, binary operations, input sizes, and sort directions. Each test reports pass or fail
+individually. A second suite of large tests (10<sup>6</sup> to 2<sup>24</sup> elements) can be
+triggered separately via a button once the main suite completes.
 
 <a href="{{ "/examples/regression.html" | relative_url }}" class="doc-btn">Open Example</a>
 <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/regression.mjs" target="_blank" class="doc-btn">Source</a>

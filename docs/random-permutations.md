@@ -32,7 +32,7 @@ With `reproducible: true`, the final shuffle sorts each of its sub-buckets befor
 | `seed` | `0x2545f491` | 32-bit seed |
 | `groupSize` | 2048 (1024 when reproducible) | mean group size for the final shuffle |
 | `split` | `"auto"` | how the group bits divide into passes: `"even"`, `"wide-first"`, `"narrow-first"`, `"passes:3"`, or explicit widths such as `"5+5+5"` |
-| `carry` | `"keys"` | what the passes move: hashed keys (inverted at the end), `"indices"`, or `"pairs"` (index plus random word; Philox only) |
+| `carry` | `"keys"` (`"indices"` with Philox) | what the passes move: hashed keys (inverted at the end; keyed hash only), `"indices"`, or `"pairs"` (index plus random word; Philox only) |
 | `reproducible` | `false` | bit-identical output on every GPU |
 | `rng` | `null` | `null` for the keyed hash, or `{ key: [lo, hi], rounds }` for Philox4x32 |
 | `phaseLimit` | all | run only the first steps of `perm.phases` (for per-phase timing) |
@@ -45,5 +45,5 @@ Writing this primitive added several general-purpose pieces to Gridwise:
 
 - **`ExecutePrimitive` action** (see [Composing Primitives](../composing-primitives/)). A primitive's `compute()` can run another primitive on the same encoder, binding the child's named buffers to its own: `new ExecutePrimitive({ primitive: this.scan, buffers: { inputBuffer: "counts", outputBuffer: "offsets" } })`. Create the child once (for example, in the constructor), not in `compute()`. GPU timing counts and records the child's kernels together with the parent's.
 - **`wgScan` in `wgslFunctions`.** An exclusive or inclusive scan of one value per invocation across a workgroup, for any binop: the scan counterpart of `wgReduce`. The subgroup version handles any subgroup size from 4 up. The version for devices without subgroups uses only workgroup barriers, not emulated subgroups, so it does not depend on forward progress.
-- **`random.mjs`.** WGSL random bits (a keyed invertible hash and Philox4x32) with bit-exact JavaScript mirrors for validation.
+- **`random.mjs`.** WGSL random bits (a keyed invertible hash and Philox4x32) with bit-exact JavaScript mirrors for validation. See [Random Numbers](../random-numbers/).
 - **`destroy()` frees internal buffers.** `BasePrimitive.destroy()` now destroys the GPU buffers the primitive allocated itself with `AllocateBuffer`. Buffers the caller passed in are left alone.

@@ -13,7 +13,7 @@ The primary goal of Gridwise is to deliver best-in-class performance on WebGPU c
 
 ### Primitive
 
-The primary abstraction in Gridwise is a `Primitive`. Primitives are instances of a primitive-specific subclass of a JavaScript `Primitive` class. They have an `execute` member function, and the typical usage is to instantiate a primitive using `new()` and then call `execute()` on that primitive. Both instantiation and execution have numerous options. As an example, let's look at a scan primitive, which is an instance of the `DLDFScan` class ("decoupled-lookback, decoupled-fallback scan"):
+The primary abstraction in Gridwise is a `Primitive`. Primitives are instances of a primitive-specific subclass of the JavaScript class `BasePrimitive`. They have an `execute` member function, and the typical usage is to instantiate a primitive using `new()` and then call `execute()` on that primitive. Both instantiation and execution have numerous options. As an example, let's look at a scan primitive, which is an instance of the `DLDFScan` class ("decoupled-lookback, decoupled-fallback scan"):
 
 ```js
 const datatype = "u32";
@@ -30,7 +30,7 @@ await dldfscanPrimitive.execute({
 });
 ```
 
-This particular primitive is parameterized by its datatype (in this case, "u32"), by the binary operation ("binop") performed by the scan (in this case, addition on u32 data), and by the scan operation (exclusive or inclusive).
+This particular primitive is parameterized by its datatype (in this case, "u32"), by the binary operation ("binop") performed by the scan (in this case, addition on u32 data), and by the scan operation (exclusive, inclusive, or reduce).
 
 When the scan is actually executed, its arguments are buffers that store its input and output. This particular primitive has named arguments of an input buffer named `inputBuffer` and an output buffer named `outputBuffer`. These buffers can be WebGPU buffers of type `GPUBuffer` but can also be `Buffer`s, described next.
 

@@ -14,7 +14,7 @@ primitives are timed and how to interpret results.
 
 Benchmarks scan, reduce, and sort over a configurable range of input sizes. Choose the primitive,
 datatype, and sort direction; results are plotted after each run. Note that sort overwrites its
-input, so repeated trials measure a partially-sorted array.
+input, so every trial after the first sorts an already-sorted array.
 
 <a href="{{ "/examples/scan_sort_perf.html" | relative_url }}" class="doc-btn">Open Example</a>
 <a href="https://github.com/gridwise-webgpu/gridwise/blob/main/examples/scan_sort_perf.mjs" target="_blank" class="doc-btn">Source</a>
