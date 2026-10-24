@@ -28,6 +28,66 @@ if (!device) {
 }
 
 const canvas = document.getElementById("canvas");
+
+/* ?validate (or ?validate=true) checks every Sort, Scan and Reduce against a
+ * CPU reference and prints the result to the console (failures also appear
+ * on the page). Off by default: the readbacks stall the pipeline. */
+const VALIDATE = (() => {
+  const v = new URLSearchParams(location.search).get("validate");
+  return v !== null && v !== "false" && v !== "0";
+})();
+if (VALIDATE) console.info("Validation on: each operation is checked against a CPU reference.");
+
+/* Copy the first n u32s of a GPU buffer (which needs COPY_SRC) to the CPU. */
+async function readU32(buffer, n) {
+  const staging = device.createBuffer({
+    size: n * 4,
+    usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+  });
+  const encoder = device.createCommandEncoder();
+  encoder.copyBufferToBuffer(buffer, 0, staging, 0, n * 4);
+  device.queue.submit([encoder.finish()]);
+  await staging.mapAsync(GPUMapMode.READ);
+  const out = new Uint32Array(staging.getMappedRange().slice(0));
+  staging.unmap();
+  staging.destroy();
+  return out;
+}
+
+function reportValidation(what, error) {
+  if (error) {
+    console.error(`${what} validation FAILED: ${error}`);
+    showError(`${what} validation failed: ${error}`);
+  } else {
+    console.info(`${what} validated (${particleCount} elements)`);
+  }
+}
+
+/* Ascending key-value sort of (key, index) pairs: keys must be in order,
+ * each output pair must be an input pair, and (the sort is stable, and the
+ * payloads start as 0..n-1) payloads of equal keys must be increasing. */
+function checkSort(inputKeys, keys, payloads) {
+  const n = inputKeys.length;
+  const seen = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const p = payloads[i];
+    if (p >= n || seen[p]) return `payload ${p} at ${i} is out of range or repeated`;
+    seen[p] = 1;
+    if (keys[i] !== inputKeys[p]) return `at ${i}: key ${keys[i]} but input key ${p} is ${inputKeys[p]}`;
+    if (i > 0 && keys[i - 1] > keys[i]) return `at ${i}: keys out of order (${keys[i - 1]} > ${keys[i]})`;
+    if (i > 0 && keys[i - 1] === keys[i] && payloads[i - 1] > p) return `at ${i}: equal keys not in input order (not stable)`;
+  }
+  return null;
+}
+
+function checkInclusiveScan(input, output) {
+  let sum = 0;
+  for (let i = 0; i < input.length; i++) {
+    sum = (sum + input[i]) >>> 0;
+    if (output[i] !== sum) return `at ${i}: expected ${sum}, got ${output[i]}`;
+  }
+  return null;
+}
 const context = canvas.getContext("webgpu");
 const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
 
@@ -795,6 +855,8 @@ async function performSort() {
     pass.end();
     
     device.queue.submit([commandEncoder.finish()]);
+    /* the sort overwrites its input, so keep a copy to check against */
+    const inputKeys = VALIDATE ? await readU32(sortKeysBuffer, particleCount) : null;
 
     // 2. Sort on the GPU
     await sorter.execute({
@@ -803,6 +865,13 @@ async function performSort() {
       payloadInOut: sortPayloadBuffer,
       payloadTemp: sortTempPayloadBuffer,
     });
+    if (VALIDATE) {
+      /* read whichever buffers the sorter reports hold the output */
+      const inTemp = sorter.outputIsInTemp;
+      const keys = await readU32(inTemp ? sortTempKeysBuffer : sortKeysBuffer, particleCount);
+      const payloads = await readU32(inTemp ? sortTempPayloadBuffer : sortPayloadBuffer, particleCount);
+      reportValidation(`Sort (output in ${sorter.outputKeysBufferName})`, checkSort(inputKeys, keys, payloads));
+    }
 
     // 3. Apply sorted positions to particles
     updateUniforms();
@@ -859,6 +928,11 @@ async function performScan() {
       inputBuffer: sortKeysBuffer,
       outputBuffer: scanOutputBuffer,
     });
+    if (VALIDATE) {
+      const input = await readU32(sortKeysBuffer, particleCount);
+      const output = await readU32(scanOutputBuffer, particleCount);
+      reportValidation("Scan", checkInclusiveScan(input, output));
+    }
 
     // 3. Apply scan targets
     updateUniforms();
@@ -912,6 +986,12 @@ async function performReduce() {
       inputBuffer: sortKeysBuffer,
       outputBuffer: reduceOutputBuffer,
     });
+    if (VALIDATE) {
+      const input = await readU32(sortKeysBuffer, particleCount);
+      const [sum] = await readU32(reduceOutputBuffer, 1);
+      const expected = input.reduce((a, b) => (a + b) >>> 0, 0);
+      reportValidation("Reduce", sum === expected ? null : `expected ${expected}, got ${sum}`);
+    }
 
     // 3. Apply reduce targets
     updateUniforms();
