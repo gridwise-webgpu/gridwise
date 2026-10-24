@@ -51,9 +51,21 @@ export class DLDFScan extends BaseScan {
 
   scandldfWGSL = () => {
     let kernel = /* wgsl */ `
-/* enables subgroups ONLY IF it was requested when creating device */
-/* WGSL requires this declaration is first in the shader */
-${this.fnDeclarations.enableSubgroupsIfAppropriate()}
+/* the helpers below, and what they need (subgroups enabled, emulated
+ * subgroups, binop, builtins), each once; include() must come first */
+${this.fnDeclarations.include(
+  "vec4InclusiveScan",
+  "vec4InclusiveToExclusive",
+  "vec4Reduce",
+  "vec4ScalarBinopV4",
+  "subgroupZero",
+  "subgroupInclusiveOpScan",
+  "subgroupReduce",
+  "subgroupShuffle",
+  "subgroupBallot",
+  ["wgReduce", { wgTempIsArgument: true }],
+  "initializeSubgroupVars"
+)}
 
 const BLOCK_DIM: u32 = ${this.workgroupSize};
 const SPLIT_MEMBERS = 2u;
@@ -79,9 +91,6 @@ var<workgroup> wg_broadcast_tile_id: u32;
 var<workgroup> wg_broadcast_prev_red: ${this.datatype};
 var<workgroup> wg_partials: array<${this.datatype}, MAX_PARTIALS_SIZE>;
 var<workgroup> wg_fallback: array<${this.datatype}, MAX_PARTIALS_SIZE>;
-/** If we're making subgroup calls and we don't have subgroup hardware,
- * this sets up necessary declarations (workgroup memory, subgroup vars) */
-${this.fnDeclarations.subgroupEmulation()}
 
 @diagnostic(off, subgroup_uniformity)
 fn unsafeShuffle(x: u32, source: u32) -> u32 {
@@ -116,20 +125,6 @@ fn split(x: ${this.datatype}, tid: u32) -> u32 {
   return (bitcast<u32>(x) >> (tid * 16u)) & VALUE_MASK;
 }
 
-/* defines "binop", the operation associated with the scan monoid */
-${this.binop.wgslfn}
-/* the following declarations use subgroups ONLY IF enabled */
-${this.fnDeclarations.commonDefinitions()}
-${this.fnDeclarations.vec4InclusiveScan()}
-${this.fnDeclarations.vec4InclusiveToExclusive()}
-${this.fnDeclarations.vec4Reduce()}
-${this.fnDeclarations.vec4ScalarBinopV4()}
-${this.fnDeclarations.subgroupZero()}
-${this.fnDeclarations.subgroupInclusiveOpScan()}
-${this.fnDeclarations.subgroupReduce()}
-${this.fnDeclarations.subgroupShuffle()}
-${this.fnDeclarations.subgroupBallot()}
-${this.fnDeclarations.wgReduce({ wgTempIsArgument: true })}
 
 @compute @workgroup_size(BLOCK_DIM, 1, 1)
 fn main(builtinsUniform: BuiltinsUniform,

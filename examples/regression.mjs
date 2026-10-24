@@ -687,6 +687,47 @@ execute with e = ${e}: got [${out}], expected [${want}]`;
     return errors;
   }
 
+  /* Core: include() emits each helper and dependency once, in a valid order
+   * (enable first), and workgroupBytes() counts what it declares. Checked by
+   * compiling the module as well. */
+  async function runIncludeTest() {
+    let errors = "";
+    const scan = new HierarchicalScan({
+      device,
+      datatype: "u32",
+      binop: new BinOpAdd({ datatype: "u32" }),
+      ...(useEmu && { disableSubgroups: true }),
+    });
+    const fd = scan.fnDeclarations;
+    const code = fd.include(
+      "wgScan",
+      ["wgScan", { scanType: "inclusive" }],
+      "wgScan" /* again: no second copy */,
+      ["wgHistogram", { name: "h", numBins: 64, workgroupSize: 256 }],
+      "subgroupInclusiveOpScan",
+      "computeLinearizedGridParametersSplit"
+    );
+    const count = (re) => (code.match(re) ?? []).length;
+    const expectOnce = {
+      "fn binop": /fn binop\b/g,
+      "struct BuiltinsUniform": /struct BuiltinsUniform\b/g,
+      "fn wgExclusiveScan": /fn wgExclusiveScan\b/g,
+      "fn wgInclusiveScan": /fn wgInclusiveScan\b/g,
+      "fn hAdd": /fn hAdd\b/g,
+    };
+    for (const [what, re] of Object.entries(expectOnce)) {
+      if (count(re) !== 1) errors += `\n${what} appears ${count(re)} times, expected once`;
+    }
+    if (!useEmu && !code.trimStart().startsWith("enable subgroups;")) errors += "\ninclude() does not start with enable subgroups;";
+    const info = await device.createShaderModule({ code: code + "\n@compute @workgroup_size(1) fn main() {}" }).getCompilationInfo();
+    for (const m of info.messages.filter((m) => m.type === "error")) errors += `\ncompile error: ${m.message}`;
+    const scanBytes = useEmu ? 256 * 4 : 64 * 4; /* one entry per invocation, or per smallest subgroup */
+    const want = 2 * scanBytes + 64 * 4;
+    const got = fd.workgroupBytes("wgScan", ["wgScan", { scanType: "inclusive" }], ["wgHistogram", { name: "h", numBins: 64, workgroupSize: 256 }]);
+    if (got !== want) errors += `\nworkgroupBytes ${got}, expected ${want}`;
+    return errors;
+  }
+
   class RandomBitsTest extends BasePrimitive {
     constructor(args) {
       super(args);
@@ -949,6 +990,7 @@ ${randomBitsWGSL(this.rng)}
   await runTest("ExecutePrimitive: scan nested in another primitive", runExecutePrimitiveTest);
   await runTest("re-execute one scan at changing sizes (uniform uploads)", runReexecuteTest);
   await runTest("core: Kernel buffers and UniformStruct (two bind groups; values re-uploaded on change)", runDeclaredBuffersTest);
+  await runTest("core: wgslFunctions.include() declares each helper once; workgroupBytes()", runIncludeTest);
   await runTest("random bits: keyed hash, WGSL = JS; Philox known answers", () => runRandomBitsTest(null));
   await runTest("random bits: Philox4x32-7, WGSL = JS", () => runRandomBitsTest({ key: [0x12345678, 0x9abcdef0], rounds: 7 }));
 
