@@ -4,6 +4,7 @@ import {
   Kernel,
   AllocateBuffer,
   ExecutePrimitive,
+  UniformStruct,
 } from "./primitive.mjs";
 import { BaseTestSuite } from "./testsuite.mjs";
 import { BinOpAddU32 } from "./binop.mjs";
@@ -242,6 +243,7 @@ export class HierarchicalScan extends BaseScan {
     if (!("label" in args)) {
       this.label += this.makeParamString(["type", "datatype", "binop", "useSubgroups"]);
     }
+    this.params = new UniformStruct("ScanParameters", { n: "u32", numTiles: "u32" });
   }
 
   finalizeRuntimeParameters() {
@@ -249,7 +251,6 @@ export class HierarchicalScan extends BaseScan {
     this.tileSize = this.workgroupSize * this.itemsPerThread;
     this.numTiles = Math.max(1, Math.ceil(this.inputLength / this.tileSize));
     this.workgroupCount = this.numTiles;
-    this.scanParameters = new Uint32Array([this.inputLength, this.numTiles, 0, 0]);
   }
 
   /** The scan of the per-tile partials: another HierarchicalScan (exclusive,
@@ -287,12 +288,6 @@ ${this.binop.wgslfn}
 ${this.fnDeclarations.subgroupInclusiveOpScan()}
 ${this.fnDeclarations.wgScan()}
 
-struct ScanParameters { n: u32, numTiles: u32, p0: u32, p1: u32 };
-@group(0) @binding(0) var<storage, read> inputBuffer: array<${T}>;
-@group(0) @binding(1) var<storage, read_write> out: array<${T}>;
-@group(0) @binding(2) var<uniform> params: ScanParameters;
-${withCarries ? `@group(0) @binding(3) var<storage, read> carries: array<${T}>;` : ""}
-
 const K = ${K}u;
 
 @compute @workgroup_size(${W})
@@ -327,23 +322,18 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   compute() {
     this.finalizeRuntimeParameters();
     const T = this.datatype;
-    const actions = [
-      new AllocateBuffer({
-        label: "scanParameters",
-        size: this.scanParameters.byteLength,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        populateWith: this.scanParameters,
-      }),
-    ];
+    const actions = [this.params.allocate("scanParameters", { n: this.inputLength, numTiles: this.numTiles })];
     const dispatch = () => this.getSimpleDispatchGeometry({ workgroupCount: this.numTiles });
     const tile = (mode, withCarries, outName) =>
       new Kernel({
         kernel: () => this.tileKernel({ mode, withCarries }),
         entryPoint: "main",
-        bufferTypes: [
-          ["read-only-storage", "storage", "uniform", ...(withCarries ? ["read-only-storage"] : [])],
+        buffers: [
+          { name: "inputBuffer", access: "read", type: `array<${T}>` },
+          { name: "out", buffer: outName, access: "read_write", type: `array<${T}>` },
+          { name: "params", buffer: "scanParameters", uniform: this.params },
+          ...(withCarries ? [{ name: "carries", access: "read", type: `array<${T}>` }] : []),
         ],
-        bindings: [["inputBuffer", outName, "scanParameters", ...(withCarries ? ["carries"] : [])]],
         label: `HierarchicalScan tile_${mode} (${this.numTiles} tiles)`,
         getDispatchGeometry: dispatch,
       });
