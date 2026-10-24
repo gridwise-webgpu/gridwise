@@ -139,6 +139,8 @@ Just as with `DLDFScan`, input lengths _must be_ a multiple of 4. Pad the end of
 
 During its development, sort had extensive performance testing and the defaults are fairly stable across different GPUs. We sort 8 bits per pass and this particular implementation has never been tested with a different number of bits per pass. This could be remedied with engineering effort.
 
+Sort works with subgroups of any width up to 128 lanes. Its warp-level multisplit (`WLMS`) tracks which lanes of a subgroup share a digit with one bit per lane. On devices whose subgroups are at most 32 wide (the adapter's `subgroupMaxSize`; Apple and NVIDIA, for instance), that mask is one `u32`. Only on devices whose subgroups can be wider (AMD RDNA, 32 to 64) is the wider version generated, which uses a `vec4<u32>` mask and a few more registers. The choice is made when the shader is generated, so 32-wide devices run exactly the 32-bit code.
+
 Ascending key-value sort is stable. Elements with equal keys preserve their original order from the input.
 
 Descending key-value sort's ordering is more complicated to specify. Gridwise does not guarantee a particular tie-breaking order, only that keys will be properly ordered. Gridwise's validation has no dependence on any descending tie-breaking convention.

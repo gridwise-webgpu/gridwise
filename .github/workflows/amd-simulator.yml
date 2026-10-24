@@ -9,12 +9,17 @@ name: AMD GPU simulator
 
 on:
   workflow_dispatch:
-  # While this is a prototype, run on PRs only when the setup itself changes.
+  # PRs that change the library, its tests or this setup
   pull_request:
     paths:
       - ".github/workflows/amd-simulator.yml"
       - "misc/run_amd_simulator.sh"
       - "misc/list_adapters.mjs"
+      - "src/**"
+      - "examples/regression.mjs"
+      - "examples/regression_node.mjs"
+      - "package.json"
+      - "package-lock.json"
 
 permissions:
   contents: read
@@ -86,10 +91,6 @@ jobs:
         run: PUPPETEER_SKIP_DOWNLOAD=true npm ci
 
       - name: Run the correctness tests on a simulated ${{ matrix.target }}
-        env:
-          # Known gap: OneSweep does not support 64-wide subgroups yet, and
-          # RADV runs compute 64-wide here. Remove once it does.
-          EXPECTED_FAILURES: sort
         run: |
           mkdir -p results
           timeout --signal=TERM 100m \
