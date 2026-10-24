@@ -1223,6 +1223,32 @@ export class UniformStruct {
       populateWith: this.pack(values),
     });
   }
+
+  /* Several sets of values in one buffer, one per kernel, each bound at its
+   * own offset (a multiple of alignment, normally
+   * device.limits.minUniformBufferOffsetAlignment):
+   *   this.params.allocateSlots("sortParameters", [values0, values1, ...], alignment)
+   *   { name: "sortParameters", buffer: this.params.slot("sortParameters", i, alignment), uniform: this.params } */
+  /** bytes from one slot to the next */
+  slotStride(alignment) {
+    return Math.ceil(this.byteLength / alignment) * alignment;
+  }
+  /** an AllocateBuffer holding one slot per entry of valuesList */
+  allocateSlots(label, valuesList, alignment) {
+    const stride = this.slotStride(alignment);
+    const bytes = new Uint8Array(stride * valuesList.length);
+    valuesList.forEach((values, i) => bytes.set(this.pack(values), i * stride));
+    return new AllocateBuffer({
+      label,
+      size: bytes.byteLength,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      populateWith: bytes,
+    });
+  }
+  /** the binding of slot i ({ buffer, offset, size }, as Kernel buffers take) */
+  slot(label, i, alignment) {
+    return { buffer: label, offset: i * this.slotStride(alignment), size: this.byteLength };
+  }
 }
 
 /** Buffer declarations shared by Kernel's `buffers` and by WGSL builders that
