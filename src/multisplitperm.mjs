@@ -70,7 +70,15 @@
  * Origin: written for the random-permutations paper (Owens et al.); see
  * tuneMultisplitPerm below for choosing groupSize and split per device.
  */
-import { BasePrimitive, Kernel, AllocateBuffer, ExecutePrimitive } from "./primitive.mjs";
+import {
+  BasePrimitive,
+  Kernel,
+  AllocateBuffer,
+  ExecutePrimitive,
+  UniformStruct,
+  declareBuffers,
+  bufferLayout,
+} from "./primitive.mjs";
 import { DLDFScan } from "./scandldf.mjs";
 import { BinOpAdd } from "./binop.mjs";
 import { randomBitsWGSL, randomBitsJS, pmMixJS } from "./random.mjs";
@@ -208,6 +216,24 @@ fn wgShuffle(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonun
 `;
 }
 
+/** The local finish's parameters and buffers (WGSL names; `names` maps them
+ * to the caller's buffers, for bufferLayout). */
+export const localFinishParams = new UniformStruct("LF", {
+  n: "u32",
+  numGroups: "u32",
+  stride: "u32",
+  seed: "u32",
+  seed2: "u32",
+});
+export function localFinishBuffers(names = {}) {
+  return [
+    { name: "keys", buffer: names.keys, access: "read_write", type: "array<Elem>" }, /* arranged by group */
+    { name: "outp", buffer: names.outp, access: "read_write", type: "array<u32>" }, /* permutation (indices) */
+    { name: "groupStart", buffer: names.groupStart, access: "read", type: "array<u32>" },
+    { name: "lf", buffer: names.lf, uniform: localFinishParams },
+  ];
+}
+
 /** WGSL module for the two-level finish (entry point "main"). keys[] holds
  * elements arranged by group: group g occupies [start(g), start(g+1)),
  * start(g) = groupStart[g * stride], start(numGroups) = n; the order inside a
@@ -217,7 +243,8 @@ fn wgShuffle(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonun
  * global memory. canonical, rng, pairs: as in MultisplitPerm.
  *
  * Bindings: keys (storage), outp (storage), groupStart (read-only-storage),
- * params (uniform: n, numGroups, stride, seed, seed2). */
+ * lf (uniform: n, numGroups, stride, seed, seed2), declared in the module;
+ * bind them with bufferLayout(localFinishBuffers({ keys, outp, groupStart, lf })). */
 export function localFinishWGSL(env, cap, { unmix = true, canonical = false, rng = null, pairs = false } = {}) {
   const W = WORKGROUP_SIZE;
   const sortGroup = /* wgsl */ `
@@ -243,11 +270,7 @@ ${env.fnDeclarations.wgScan()}
 ${randomBitsWGSL(rng)}
 ${wgShuffleWGSL(env, cap, { canonical, aux: pairs })}
 alias Elem = ${pairs ? "vec2u" : "u32"};   /* ${pairs ? "(index, random word)" : "index or hashed key"} */
-struct LF { n: u32, numGroups: u32, stride: u32, seed: u32, seed2: u32, p0: u32, p1: u32, p2: u32 };
-@group(0) @binding(0) var<storage, read_write> keys: array<Elem>;    /* arranged by group */
-@group(0) @binding(1) var<storage, read_write> outp: array<u32>;     /* permutation (indices) */
-@group(0) @binding(2) var<storage, read> groupStart: array<u32>;
-@group(0) @binding(3) var<uniform> lf: LF;
+${declareBuffers(localFinishBuffers())}
 var<workgroup> wS: u32;
 var<workgroup> wE: u32;
 fn startOf(g: u32) -> u32 { return select(groupStart[g * lf.stride], lf.n, g >= lf.numGroups); }
@@ -386,6 +409,13 @@ export class MultisplitPerm extends BasePrimitive {
     this.phases = this.plan
       .flatMap((p, i) => ["hist", "scan", "scatter"].map((s) => `${"ABCDEFGH"[i]} ${s}`))
       .concat(["finish"]);
+    this.multisplitParams = new UniformStruct("MS", {
+      n: "u32",
+      seed: "u32",
+      numSegs: "u32",
+      slots: "u32",
+      segStride: "u32" /* the previous pass's slots: segment s starts at segStart[s * segStride] */,
+    });
     this.config = {
       passBits: this.passBits,
       slots: this.plan.map((p) => p.slots),
@@ -438,13 +468,7 @@ ${this.fnDeclarations.subgroupEmulation()}
 ${this.fnDeclarations.subgroupInclusiveOpScan()}
 ${this.fnDeclarations.wgScan()}
 ${randomBitsWGSL(rng)}
-struct MS { n: u32, seed: u32, numSegs: u32, slots: u32, segStride: u32, p0: u32, p1: u32, p2: u32 };
 alias Elem = ${pairs ? "vec2u" : "u32"};
-@group(0) @binding(0) var<storage, read> keysIn: array<Elem>;        /* unused when keys come from indices */
-@group(0) @binding(1) var<storage, read_write> keysOut: array<Elem>; /* scatter only */
-@group(0) @binding(2) var<storage, read_write> hist: array<u32>;     /* [seg][digit][slot]: counts (hist), scanned offsets (scatter) */
-@group(0) @binding(3) var<storage, read> segStart: array<u32>;       /* segment s begins at segStart[s * segStride] */
-@group(0) @binding(4) var<uniform> ms: MS;
 const RADIX = ${RADIX}u;
 const K = ${K}u;
 const TILE = ${K * W}u;
@@ -565,7 +589,6 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
     }
     const n = this.n;
     const P = this.plan.length;
-    const uniform = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
     const keysBytes = Math.max(16, n * this.elementBytes);
     const actions = [
       new AllocateBuffer({ label: "keysTemp", size: keysBytes, clearBufferOnReuse: false }),
@@ -576,7 +599,15 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
        * keysIn. Never written (bound read-only), so no clear on reuse. */
       new AllocateBuffer({ label: "zero", size: 16, clearBufferOnReuse: false }),
     ];
-    const bufferTypes = [["read-only-storage", "storage", "storage", "read-only-storage", "uniform"]];
+    /* the multisplit kernels' buffers; hist is counts (hist_main) or the
+     * scanned offsets (scatter_main) */
+    const multisplitBuffers = ({ keysIn, keysOut, hist, segStart, params }) => [
+      { name: "keysIn", buffer: keysIn, access: "read", type: "array<Elem>" } /* unused when keys come from indices */,
+      { name: "keysOut", buffer: keysOut, access: "read_write", type: "array<Elem>" } /* scatter only */,
+      { name: "hist", buffer: hist, access: "read_write", type: "array<u32>" } /* [seg][digit][slot] */,
+      { name: "segStart", buffer: segStart, access: "read", type: "array<u32>" } /* segment s begins at segStart[s * segStride] */,
+      { name: "ms", buffer: params, uniform: this.multisplitParams },
+    ];
     let step = 0;
     const enabled = () => step++ < (this.phaseLimit ?? Infinity);
     this.plan.forEach((p, i) => {
@@ -590,18 +621,18 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
       actions.push(
         new AllocateBuffer({ label: `counts${i}`, size: p.histLength * 4, clearBufferOnReuse: false }),
         new AllocateBuffer({ label: `offsets${i}`, size: p.histLength * 4, clearBufferOnReuse: false }),
-        new AllocateBuffer({
-          label: `params${i}`,
-          size: 32,
-          usage: uniform,
-          populateWith: new Uint32Array([n, this.seed, p.numSegs, p.slots, prev ? prev.slots : 0, 0, 0, 0]),
+        this.multisplitParams.allocate(`params${i}`, {
+          n,
+          seed: this.seed,
+          numSegs: p.numSegs,
+          slots: p.slots,
+          segStride: prev ? prev.slots : 0,
         }),
         new Kernel({
           kernel,
           entryPoint: "hist_main",
           label: `MultisplitPerm ${name} hist (${p.bits} bits)`,
-          bufferTypes,
-          bindings: [[keysIn, keysOut, `counts${i}`, segStarts, `params${i}`]],
+          buffers: multisplitBuffers({ keysIn, keysOut, hist: `counts${i}`, segStart: segStarts, params: `params${i}` }),
           getDispatchGeometry: dispatch,
           enable: enabled(),
         }),
@@ -615,8 +646,7 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
           kernel,
           entryPoint: "scatter_main",
           label: `MultisplitPerm ${name} scatter (${p.bits} bits)`,
-          bufferTypes,
-          bindings: [[keysIn, keysOut, `offsets${i}`, segStarts, `params${i}`]],
+          buffers: multisplitBuffers({ keysIn, keysOut, hist: `offsets${i}`, segStart: segStarts, params: `params${i}` }),
           getDispatchGeometry: dispatch,
           enable: enabled(),
         })
@@ -624,11 +654,12 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
     });
     const last = this.plan[P - 1];
     actions.push(
-      new AllocateBuffer({
-        label: "finishParams",
-        size: 32,
-        usage: uniform,
-        populateWith: new Uint32Array([n, this.numGroups, last.slots, this.seed, (this.seed ^ 0x5bd1e995) >>> 0, 0, 0, 0]),
+      localFinishParams.allocate("finishParams", {
+        n,
+        numGroups: this.numGroups,
+        stride: last.slots,
+        seed: this.seed,
+        seed2: (this.seed ^ 0x5bd1e995) >>> 0,
       }),
       new Kernel({
         kernel: () =>
@@ -640,8 +671,15 @@ fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNo
           }),
         entryPoint: "main",
         label: `MultisplitPerm finish (${this.numGroups} groups)`,
-        bufferTypes: [["storage", "storage", "read-only-storage", "uniform"]],
-        bindings: [[this.keysBufferFor(P - 1), "outputBuffer", `offsets${P - 1}`, "finishParams"]],
+        /* localFinishWGSL declares its buffers itself (it is also used on its own) */
+        ...bufferLayout(
+          localFinishBuffers({
+            keys: this.keysBufferFor(P - 1),
+            outp: "outputBuffer",
+            groupStart: `offsets${P - 1}`,
+            lf: "finishParams",
+          })
+        ),
         getDispatchGeometry: () => this.getSimpleDispatchGeometry({ workgroupCount: this.numGroups }),
         enable: enabled(),
       })

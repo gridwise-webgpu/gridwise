@@ -1225,6 +1225,51 @@ export class UniformStruct {
   }
 }
 
+/** Buffer declarations shared by Kernel's `buffers` and by WGSL builders that
+ * return a whole module (see Kernel for the format). */
+const BUFFER_ACCESS = { read: "read-only-storage", read_write: "storage", uniform: "uniform" };
+function bufferGroups(buffers, where = "buffers") {
+  const groups = Array.isArray(buffers[0]) ? buffers : [buffers];
+  return groups.map((group) =>
+    group.map((b) => {
+      const access = b.uniform ? "uniform" : b.access;
+      if (!(access in BUFFER_ACCESS)) {
+        throw new Error(`${where}: buffer ${b.name} needs access "read", "read_write" or "uniform"`);
+      }
+      const type = b.uniform ? b.uniform.name : b.type;
+      if (!b.name || !type) {
+        throw new Error(`${where}: each buffer needs a name and a type (or a uniform)`);
+      }
+      return { ...b, access, type };
+    })
+  );
+}
+
+/** WGSL declarations (structs of uniforms, then @group/@binding variables)
+ * for a buffer list in Kernel's `buffers` format */
+export function declareBuffers(buffers) {
+  const space = { read: "storage, read", read_write: "storage, read_write", uniform: "uniform" };
+  const structs = new Map();
+  const vars = [];
+  bufferGroups(buffers, "declareBuffers").forEach((group, g) =>
+    group.forEach((b, i) => {
+      if (b.uniform) structs.set(b.uniform.name, b.uniform.wgsl);
+      vars.push(`@group(${g}) @binding(${i}) var<${space[b.access]}> ${b.name}: ${b.type};`);
+    })
+  );
+  return ["/* buffers */", ...structs.values(), ...vars].join("\n");
+}
+
+/** { bufferTypes, bindings } for a buffer list in Kernel's `buffers` format,
+ * for a Kernel whose WGSL already declares the buffers (with declareBuffers) */
+export function bufferLayout(buffers) {
+  const groups = bufferGroups(buffers, "bufferLayout");
+  return {
+    bufferTypes: groups.map((group) => group.map((b) => BUFFER_ACCESS[b.access])),
+    bindings: groups.map((group) => group.map((b) => b.buffer ?? b.name)),
+  };
+}
+
 /** A Kernel action: one compute pass running one entry point.
  *
  *   new Kernel({ kernel, entryPoint, buffers, label, getDispatchGeometry, ... })
@@ -1251,9 +1296,10 @@ export class UniformStruct {
  * declarations from this list; the declarations are appended to the kernel's
  * code (WGSL allows module-scope declarations in any order). The older form,
  * parallel lists bufferTypes and bindings with the declarations written in
- * the WGSL, still works. */
+ * the WGSL, still works. A function that returns a whole WGSL module for
+ * others to bind can declare its buffers with declareBuffers(list) and give
+ * its Kernel bufferLayout(list) instead. */
 export class Kernel {
-  static ACCESS = { read: "read-only-storage", read_write: "storage", uniform: "uniform" };
   constructor(args) {
     this.label = "kernel"; // default
     if (typeof args === "function") {
@@ -1276,22 +1322,7 @@ export class Kernel {
       if (this.bufferTypes || this.bindings) {
         throw new Error(`Kernel ${this.label}: give either buffers or bufferTypes and bindings, not both`);
       }
-      const groups = Array.isArray(this.buffers[0]) ? this.buffers : [this.buffers];
-      this.__bufferGroups = groups.map((group) =>
-        group.map((b) => {
-          const access = b.uniform ? "uniform" : b.access;
-          if (!(access in Kernel.ACCESS)) {
-            throw new Error(`Kernel ${this.label}: buffer ${b.name} needs access "read", "read_write" or "uniform"`);
-          }
-          const type = b.uniform ? b.uniform.name : b.type;
-          if (!b.name || !type) {
-            throw new Error(`Kernel ${this.label}: each buffer needs a name and a type (or a uniform)`);
-          }
-          return { ...b, access, type };
-        })
-      );
-      this.bufferTypes = this.__bufferGroups.map((group) => group.map((b) => Kernel.ACCESS[b.access]));
-      this.bindings = this.__bufferGroups.map((group) => group.map((b) => b.buffer ?? b.name));
+      Object.assign(this, bufferLayout(this.buffers));
     }
   }
   enabled() {
@@ -1300,17 +1331,7 @@ export class Kernel {
   }
   /** WGSL declarations of the buffers given in `buffers` ("" without them) */
   get bufferDeclarations() {
-    if (!this.__bufferGroups) return "";
-    const space = { read: "storage, read", read_write: "storage, read_write", uniform: "uniform" };
-    const structs = new Map();
-    const vars = [];
-    this.__bufferGroups.forEach((group, g) =>
-      group.forEach((b, i) => {
-        if (b.uniform) structs.set(b.uniform.name, b.uniform.wgsl);
-        vars.push(`@group(${g}) @binding(${i}) var<${space[b.access]}> ${b.name}: ${b.type};`);
-      })
-    );
-    return ["/* buffers (declared by the Kernel) */", ...structs.values(), ...vars].join("\n");
+    return this.buffers ? declareBuffers(this.buffers) : "";
   }
   /** the kernel's complete WGSL: its code, then its buffers' declarations */
   wgsl() {

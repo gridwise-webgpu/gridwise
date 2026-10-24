@@ -60,7 +60,7 @@ return [
 ];
 ```
 
-Each entry has `name` (the WGSL variable), `buffer` (the primitive's buffer bound to it, default `name`), `access` (`"read"`, `"read_write"` or `"uniform"`) and `type`, or `uniform` (a `UniformStruct`) in place of `access` and `type`. A list of lists gives one list per bind group. `UniformStruct.allocate()` returns an `AllocateBuffer` whose upload is skipped when the values have not changed. The older form, with `bufferTypes` and `bindings` given as parallel lists and the declarations written in the WGSL, still works.
+Each entry has `name` (the WGSL variable), `buffer` (the primitive's buffer bound to it, default `name`), `access` (`"read"`, `"read_write"` or `"uniform"`) and `type`, or `uniform` (a `UniformStruct`) in place of `access` and `type`. A list of lists gives one list per bind group. `UniformStruct.allocate()` returns an `AllocateBuffer` whose upload is skipped when the values have not changed. The older form, with `bufferTypes` and `bindings` given as parallel lists and the declarations written in the WGSL, still works. A function that returns a whole WGSL module for others to bind (such as `localFinishWGSL`) can declare its buffers with `declareBuffers(list)`, and its own `Kernel` then uses `...bufferLayout(list)` in place of `buffers`, so the list is still written once.
 
 ### Composing primitives
 

@@ -65,6 +65,11 @@ export class Kernel {
   wgsl(): string;
 }
 
+/** WGSL declarations for a buffer list (for WGSL builders that return a whole module) */
+export function declareBuffers(buffers: KernelBuffer[] | KernelBuffer[][]): string;
+/** { bufferTypes, bindings } for a buffer list, for a Kernel whose WGSL declares its buffers itself */
+export function bufferLayout(buffers: KernelBuffer[] | KernelBuffer[][]): { bufferTypes: string[][]; bindings: any[][] };
+
 /** A uniform parameter struct declared once for WGSL and JavaScript */
 export class UniformStruct {
   name: string;
@@ -339,4 +344,8 @@ export function tuneMultisplitPerm(args: {
 export function multisplitPermPassBits(groupBits: number, split?: string | number[]): number[];
 export function localFinishCap(device: GPUDevice, meanGroupSize?: number, bytesPerElement?: number): number;
 export function localFinishWGSL(env: BasePrimitive, cap: number, options?: { [key: string]: any }): string;
+/** the local finish's uniform parameters (n, numGroups, stride, seed, seed2) */
+export const localFinishParams: UniformStruct;
+/** the local finish's buffers (keys, outp, groupStart, lf), bound to the given buffer names */
+export function localFinishBuffers(names?: { keys?: string; outp?: string; groupStart?: string; lf?: string }): KernelBuffer[];
 export function wgShuffleWGSL(env: BasePrimitive, cap: number, options?: { canonical?: boolean; aux?: boolean }): string;
