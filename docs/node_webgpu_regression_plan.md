@@ -63,9 +63,14 @@ WebGPU compute shaders are compiled to hardware-specific machine binaries at run
 * **Warmup Phase**: The script runs a silent compilation pass of the test suite before start.
 * **Device Caching**: The WebGPU device context is cached and shared between the warmup run and the timed run. This preserves both the browser-level and driver-level pipeline caches, ensuring subsequent executions measure only execution performance.
 
-### 2. Microsecond-Scale Driver Quantization & Noise Floor
-Hardware timestamp queries under Metal/WebGPU resolve timings inside discrete clock-ticking intervals. On Apple Silicon, this timing granularity is typically quantized to **65.536 μs (0.065536 ms)**.
-* Small fluctuations can cause measurements to snap into neighboring quantization bins, falsely reporting a 100% or 200% slowdown on sub-millisecond tests.
+### 1b. Clock Warm-up
+GPUs lower their clocks when they look idle, and a run of single executes separated by CPU work (uploads, readbacks) looks idle. On a V100, the SM clock fell from 1,297 to 180 MHz during such a run, with "GPU Idle" as the only reason, and every kernel slowed by up to 10×.
+* **Warm-up**: Before the timed trials of each large test (>= 1M elements), the runner runs that primitive back to back for 200 ms, doubling `trials` until one execute keeps the GPU busy for at least 20 ms.
+* For measurements that must be comparable across runs, lock the clocks where possible (NVIDIA: `sudo nvidia-smi -i <gpu> --lock-gpu-clocks=<MHz>,<MHz>`, undone by `--reset-gpu-clocks`).
+
+### 2. Timestamp Resolution & Noise Floor
+By default, Dawn (and so Chrome and the `webgpu` npm package) rounds GPU timestamps down to multiples of **65.536 μs (0.065536 ms)**, on every GPU, as a privacy measure ([timing-strategy](../timing-strategy/#timestamp-resolution)). Many single executes in this suite take less than that.
+* **Full resolution**: The runner creates its GPU with `disable-dawn-features=timestamp_quantization`, so its timings are not rounded. Baselines recorded before this change were rounded: each time is a multiple of 0.065536 ms, and a sub-millisecond test could appear 100% or 200% slower by moving to the next multiple.
 * **Noise Floor Limits**: The test suite ignores regressions where the absolute GPU timing slowdown is under **3.0 ms**, ignoring sub-millisecond noise.
 
 ### 3. Multi-Trial Min Filter
