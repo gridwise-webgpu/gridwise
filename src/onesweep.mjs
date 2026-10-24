@@ -604,54 +604,7 @@ export class OneSweepSort extends BaseSort {
     var<workgroup> wg_incomplete: u32; /* did anyone see a thread that didn't complete? */
     var<workgroup> wg_fallback: array<atomic<u32>, RADIX>; /* we can probably find another place to put this that doesn't require a separate allocation */
 
-    /* warp-level multisplit function */
-    /* this appears to be limited to subgroup sizes <= 32 */
-    /** more portable version, HLSL:
-     * https://github.com/b0nes164/GPUSorting/blob/09a6081d964b682bbb58838b83ab75aebe7f4e05/GPUSortingD3D12/Shaders/SortCommon.hlsl#L400-L424
-     * https://github.com/b0nes164/GPUSorting/blob/09a6081d964b682bbb58838b83ab75aebe7f4e05/GPUSortingD3D12/Shaders/SortCommon.hlsl#L359-L375
-     * Thomas: "I should also note that in my HLSL implementation, and I definitely think
-     * this is the way to do this, I ended splitting the implementation into a 'big subgroup size' 16+
-     * and 'small subgroup size < 16'" ... "The defining issue, is that the number of histograms is
-     * inversely proportional to the subgroup size. At that low of a subgroup size, you have to start
-     * doing more exotic techniques to prevent losing occupancy. Because basically you want a shared
-     * mem histogram per warp."
-     */
-    fn WLMS(key: u32, shift: u32, sgid: u32, sgsz: u32, lane_mask_lt: u32, s_offset: u32) -> u32 {
-      var eq_mask = 0xffffffffu;
-      /* loop through the bits in this digit place */
-      for (var k = 0u; k < RADIX_LOG; k += 1u) {
-        let curr_bit = 1u << (k + shift);
-        let pred = (key & curr_bit) != 0u;
-        let ballot = subgroupBallot(pred);
-        eq_mask &= select(~ballot.x, ballot.x, pred);
-      }
-      /* eq_mask marks the threads that have the same digit as me ... */
-      var out = countOneBits(eq_mask & lane_mask_lt);
-      /* ... and out marks those threads in eq_mask whose ids are less than me */
-      /* what is the largest-sgid thread in my subgroup that has the same digit as me? */
-      let highest_rank_peer = sgsz - countLeadingZeros(eq_mask) - 1u;
-      var pre_inc = 0u;
-      if (sgid == highest_rank_peer) {
-        /* add to wg_warpHist for my digit value: total number of threads with my digit value */
-        /* since I'm the highest rank peer, that's the number of threads ranked below me with
-         * my digit value, plus one for me */
-        pre_inc = atomicAdd(&wg_warpHist[((key >> shift) & RADIX_MASK) + s_offset], out + 1u);
-        /* pre_inc now reflects the number of threads seen to date that have MY digit
-         * from previous calls to WLMS */
-        /* wg_warpHist[s_offset:s_offset+RADIX] is now a per-digit histogram up to and including
-         * all digits seen so far by this subgroup */
-      }
-
-      workgroupBarrier();
-      /** out is a unique and densely packed index [0...n] for each thread with the same digit
-       * out means "This is the nth instance of this digit I have seen so far in my warp"
-       * it is the sum of "count of this digit for all previous subgroups" (pre_inc from
-       * highest rank peer) and "number of threads below me in my subgroup with this digit"
-       * */
-      out += subgroupShuffle(pre_inc, highest_rank_peer);
-      return out;
-    }
-
+${this.wlmsWGSL()}
     /**
      * Input: global keysIn[]
      * Output: global keysOut[]
@@ -775,7 +728,11 @@ export class OneSweepSort extends BaseSort {
        */
       var offsets = array<u32, KEYS_PER_THREAD>();
       {
-        let lane_mask_lt = (1u << sgid) - 1u;
+        ${
+          this.wideSubgroups
+            ? "let lane_mask_lt = laneMaskBelow(sgid);"
+            : "let lane_mask_lt = (1u << sgid) - 1u;"
+        }
         let s_offset = sid * RADIX;
         for (var k = 0u; k < KEYS_PER_THREAD; k += 1u) {
           /* offsets[k] reflects the number of digits seen by this subgroup
@@ -1219,6 +1176,114 @@ export class OneSweepSort extends BaseSort {
   }
   get outputPayloadBufferName() {
     return this.outputIsInTemp ? "payloadTemp" : "payloadInOut";
+  }
+
+  /** Can this device's subgroups be wider than 32 lanes (e.g., AMD RDNA,
+   * 32-64)? Then WLMS needs lane masks wider than one u32. Decided when the
+   * WGSL is generated, so devices whose subgroups are at most 32 wide (Apple,
+   * NVIDIA) get exactly the 32-bit WLMS and its register use. Emulated
+   * subgroups are 32 wide. */
+  get wideSubgroups() {
+    return this.useSubgroups && (this.SUBGROUP_MAX_SIZE ?? 0) > 32;
+  }
+
+  /** WGSL for WLMS (warp-level multisplit): 32-bit lane masks, or vec4<u32>
+   * masks when wideSubgroups. */
+  wlmsWGSL() {
+    return this.wideSubgroups
+      ? /* wgsl */ `    /* warp-level multisplit function, for subgroups of up to 128 lanes */
+    /** Lane masks are vec4<u32> (lane i is bit i % 32 of word i / 32), as
+     * subgroupBallot returns them. Generated only when the adapter's subgroups
+     * can be wider than 32 (see wideSubgroups); otherwise WLMS is the 32-bit
+     * version, which needs fewer registers. */
+    fn laneMaskBelow(n: u32) -> vec4<u32> {
+      /* bits set for lanes 0..n-1 */
+      var m = vec4<u32>(0u);
+      for (var i = 0u; i < 4u; i += 1u) {
+        let lo = i * 32u;
+        m[i] = select(select((1u << (n - lo)) - 1u, 0xffffffffu, n >= lo + 32u), 0u, n <= lo);
+      }
+      return m;
+    }
+    fn WLMS(key: u32, shift: u32, sgid: u32, sgsz: u32, lane_mask_lt: vec4<u32>, s_offset: u32) -> u32 {
+      /* start from the lanes that exist, so ~ballot cannot mark lanes past sgsz */
+      var eq_mask = laneMaskBelow(sgsz);
+      /* loop through the bits in this digit place */
+      for (var k = 0u; k < RADIX_LOG; k += 1u) {
+        let curr_bit = 1u << (k + shift);
+        let pred = (key & curr_bit) != 0u;
+        let ballot = subgroupBallot(pred);
+        eq_mask &= select(~ballot, ballot, pred);
+      }
+      /* eq_mask marks the threads that have the same digit as me ... */
+      let below = eq_mask & lane_mask_lt;
+      var out = countOneBits(below.x) + countOneBits(below.y) + countOneBits(below.z) + countOneBits(below.w);
+      /* ... and out counts those threads in eq_mask whose ids are less than me */
+      /* what is the largest-sgid thread in my subgroup that has the same digit as me?
+       * (eq_mask includes me, so it is never zero) */
+      let top_word = select(select(select(0u, 1u, eq_mask.y != 0u), 2u, eq_mask.z != 0u), 3u, eq_mask.w != 0u);
+      let highest_rank_peer = top_word * 32u + firstLeadingBit(eq_mask[top_word]);
+      var pre_inc = 0u;
+      if (sgid == highest_rank_peer) {
+        /* add to wg_warpHist for my digit value: total number of threads with my digit value
+         * (the number ranked below me with my digit value, plus one for me) */
+        pre_inc = atomicAdd(&wg_warpHist[((key >> shift) & RADIX_MASK) + s_offset], out + 1u);
+      }
+
+      workgroupBarrier();
+      /* see the 32-bit version for what out means */
+      out += subgroupShuffle(pre_inc, highest_rank_peer);
+      return out;
+    }
+`
+      : /* wgsl */ `    /* warp-level multisplit function */
+    /* this appears to be limited to subgroup sizes <= 32 */
+    /** more portable version, HLSL:
+     * https://github.com/b0nes164/GPUSorting/blob/09a6081d964b682bbb58838b83ab75aebe7f4e05/GPUSortingD3D12/Shaders/SortCommon.hlsl#L400-L424
+     * https://github.com/b0nes164/GPUSorting/blob/09a6081d964b682bbb58838b83ab75aebe7f4e05/GPUSortingD3D12/Shaders/SortCommon.hlsl#L359-L375
+     * Thomas: "I should also note that in my HLSL implementation, and I definitely think
+     * this is the way to do this, I ended splitting the implementation into a 'big subgroup size' 16+
+     * and 'small subgroup size < 16'" ... "The defining issue, is that the number of histograms is
+     * inversely proportional to the subgroup size. At that low of a subgroup size, you have to start
+     * doing more exotic techniques to prevent losing occupancy. Because basically you want a shared
+     * mem histogram per warp."
+     */
+    fn WLMS(key: u32, shift: u32, sgid: u32, sgsz: u32, lane_mask_lt: u32, s_offset: u32) -> u32 {
+      var eq_mask = 0xffffffffu;
+      /* loop through the bits in this digit place */
+      for (var k = 0u; k < RADIX_LOG; k += 1u) {
+        let curr_bit = 1u << (k + shift);
+        let pred = (key & curr_bit) != 0u;
+        let ballot = subgroupBallot(pred);
+        eq_mask &= select(~ballot.x, ballot.x, pred);
+      }
+      /* eq_mask marks the threads that have the same digit as me ... */
+      var out = countOneBits(eq_mask & lane_mask_lt);
+      /* ... and out marks those threads in eq_mask whose ids are less than me */
+      /* what is the largest-sgid thread in my subgroup that has the same digit as me? */
+      let highest_rank_peer = sgsz - countLeadingZeros(eq_mask) - 1u;
+      var pre_inc = 0u;
+      if (sgid == highest_rank_peer) {
+        /* add to wg_warpHist for my digit value: total number of threads with my digit value */
+        /* since I'm the highest rank peer, that's the number of threads ranked below me with
+         * my digit value, plus one for me */
+        pre_inc = atomicAdd(&wg_warpHist[((key >> shift) & RADIX_MASK) + s_offset], out + 1u);
+        /* pre_inc now reflects the number of threads seen to date that have MY digit
+         * from previous calls to WLMS */
+        /* wg_warpHist[s_offset:s_offset+RADIX] is now a per-digit histogram up to and including
+         * all digits seen so far by this subgroup */
+      }
+
+      workgroupBarrier();
+      /** out is a unique and densely packed index [0...n] for each thread with the same digit
+       * out means "This is the nth instance of this digit I have seen so far in my warp"
+       * it is the sum of "count of this digit for all previous subgroups" (pre_inc from
+       * highest rank peer) and "number of threads below me in my subgroup with this digit"
+       * */
+      out += subgroupShuffle(pre_inc, highest_rank_peer);
+      return out;
+    }
+`;
   }
 
   finalizeRuntimeParameters() {
