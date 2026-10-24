@@ -115,8 +115,9 @@ fn ${name}(x: ${T}) -> u32 {
 
 /** Bins bounded by levels, like CUB's HistogramRange: bin i is
  * [levels[i], levels[i+1]), so levels.length = numBins + 1, strictly
- * increasing. The WGSL function binary-searches a storage buffer named
- * "levels" (array<T>), which the primitive fills from this.levels. */
+ * increasing. The WGSL function binary-searches an array named "levels"
+ * (array<T>, or another name given to wgsl()), which the primitive fills
+ * from this.levels: a storage buffer, or a copy in workgroup memory. */
 export class RangeBins extends Bins {
   constructor(args) {
     super(args);
@@ -133,17 +134,17 @@ export class RangeBins extends Bins {
     this.numBins = this.levels.length - 1;
     this.needsLevels = true;
   }
-  wgsl(name = "binOf") {
+  wgsl(name = "binOf", { levels = "levels" } = {}) {
     const L = this.levels.length;
     return /* wgsl */ `
 fn ${name}(x: ${this.datatype}) -> u32 {
-  if (!(x >= levels[0] && x < levels[${L - 1}])) { return ${BIN_NONE}u; }
+  if (!(x >= ${levels}[0] && x < ${levels}[${L - 1}])) { return ${BIN_NONE}u; }
   /* invariant: levels[lo] <= x < levels[hi] */
   var lo = 0u;
   var hi = ${L - 1}u;
   while (hi - lo > 1u) {
     let mid = (lo + hi) / 2u;
-    if (x >= levels[mid]) { lo = mid; } else { hi = mid; }
+    if (x >= ${levels}[mid]) { lo = mid; } else { hi = mid; }
   }
   return lo;
 }`;

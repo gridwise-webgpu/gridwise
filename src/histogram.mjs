@@ -19,7 +19,10 @@
  *
  * Options: workgroupSize (256), itemsPerThread (16; sets the workgroup count),
  * copies (copies of the bins per workgroup, against atomic contention;
- * default 4 for <= 256 bins, 2 for <= 1024, else 1), maxWorkgroups (8192).
+ * default 4 for <= 256 bins, 2 for <= 1024, else 1), maxWorkgroups (8192),
+ * levelsInWorkgroup (RangeBins: copy the levels into workgroup memory, so
+ * the binary searches avoid global memory, as in Ashkiani et al.'s GPU
+ * Multisplit histogram; default: when they fit next to the bins).
  */
 import { BasePrimitive, Kernel, AllocateBuffer, ClearBuffer } from "./primitive.mjs";
 import { datatypeToBytes } from "./util.mjs";
@@ -53,6 +56,15 @@ export class Histogram extends BasePrimitive {
     return this.numBins * this.copies * 4 <= limit;
   }
 
+  /** RangeBins: are the levels copied into workgroup memory? They must fit
+   * next to the bins (if those are in workgroup memory). */
+  get workgroupLevels() {
+    if (!this.bins.needsLevels) return false;
+    const limit = this.device.limits.maxComputeWorkgroupStorageSize;
+    const fits = this.bins.levels.byteLength + (this.workgroupBins ? this.numBins * this.copies * 4 : 0) <= limit;
+    return fits && (this.levelsInWorkgroup ?? true);
+  }
+
   get bytesTransferred() {
     return this.getBuffer("inputBuffer").size + this.numBins * 4;
   }
@@ -72,13 +84,16 @@ export class Histogram extends BasePrimitive {
     const N = this.numBins;
     const ranged = this.bins.needsLevels;
     const wg = this.workgroupBins;
+    const wgLevels = this.workgroupLevels;
+    const L = ranged ? this.bins.levels.length : 0;
     return /* wgsl */ `
 struct HistogramParameters { n: u32, p0: u32, p1: u32, p2: u32 };
 @group(0) @binding(0) var<storage, read> inputBuffer: array<${T}>;
 @group(0) @binding(1) var<storage, read_write> outputBuffer: array<atomic<u32>>;
 @group(0) @binding(2) var<uniform> params: HistogramParameters;
 ${ranged ? `@group(0) @binding(3) var<storage, read> levels: array<${T}>;` : ""}
-${this.bins.wgsl("binOf")}
+${wgLevels ? `var<workgroup> wgLevels: array<${T}, ${L}>;` : ""}
+${this.bins.wgsl("binOf", wgLevels ? { levels: "wgLevels" } : {})}
 ${wg ? this.fnDeclarations.wgHistogram({ name: "wgBins", numBins: N, copies: this.copies, workgroupSize: W }) : ""}
 
 @compute @workgroup_size(${W})
@@ -87,6 +102,11 @@ fn histogram(@builtin(local_invocation_index) lidx: u32,
              @builtin(num_workgroups) nwg: vec3u) {
   let stride = nwg.x * ${W}u;
 ${
+  wgLevels
+    ? `  for (var i = lidx; i < ${L}u; i += ${W}u) { wgLevels[i] = levels[i]; }
+${wg ? "" : "  workgroupBarrier();\n"}`
+    : ""
+}${
   wg
     ? /* wgsl */ `  wgBinsClear(lidx);
   workgroupBarrier();

@@ -731,7 +731,7 @@ ${randomBitsWGSL(this.rng)}
   /* Histogram: counts on the GPU against the bins' JavaScript mirror.
    * gen(i) gives sample i; repeat > 1 executes into the same output again,
    * which must not accumulate (the output is cleared each time). */
-  async function runHistogramTest({ bins, n, gen, repeat = 1 }) {
+  async function runHistogramTest({ bins, n, gen, repeat = 1, options = {} }) {
     const TypedArray = datatypeToTypedArray(bins.datatype);
     const input = TypedArray.from({ length: n }, (_, i) => gen(i));
     const inputBuffer = device.createBuffer({
@@ -747,7 +747,7 @@ ${randomBitsWGSL(this.rng)}
       size: bins.numBins * 4,
       usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
-    const primitive = new Histogram({ device, bins });
+    const primitive = new Histogram({ device, bins, ...options });
     for (let r = 0; r < repeat; r++) await primitive.execute({ inputBuffer, outputBuffer });
     const encoder = device.createCommandEncoder();
     encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, bins.numBins * 4);
@@ -765,7 +765,7 @@ ${randomBitsWGSL(this.rng)}
   }
   /* a deterministic pseudo-random value in [0, 1) for sample i */
   const unit = (i) => ((Math.imul(i, 0x9e3779b1) >>> 0) ^ (Math.imul(i >>> 7, 0x85ebca6b) >>> 0)) / 2 ** 32;
-  /* [name, bins, n, gen, repeat] */
+  /* [name, bins, n, gen, repeat, options] */
   const histogramTests = [
     ["even f32 256 bins [0,1), samples in [-0.25,1.25)", new EvenBins({ datatype: "f32", numBins: 256, lower: 0, upper: 1 }), 100003, (i) => unit(i) * 1.5 - 0.25],
     ["even f32 10 bins [-5,5)", new EvenBins({ datatype: "f32", numBins: 10, lower: -5, upper: 5 }), 65536, (i) => (unit(i) + unit(i + 1) - 1) * 6],
@@ -779,6 +779,8 @@ ${randomBitsWGSL(this.rng)}
     ["radix u32 bits [8,16)", new RadixBins({ shift: 8, bits: 8 }), 65536, (i) => Math.floor(unit(i) * 2 ** 32)],
     ["radix u32 bits [4,20) (65536 bins, global-memory bins)", new RadixBins({ shift: 4, bits: 16 }), 100000, (i) => Math.floor(unit(i) * 2 ** 32)],
     ["even f32 256 bins, executed twice into one output", new EvenBins({ datatype: "f32", numBins: 256, lower: 0, upper: 1 }), 4096, (i) => unit(i), 2],
+    ["range f32 7 uneven bins, levels in storage", new RangeBins({ datatype: "f32", levels: [-1, -0.5, 0, 0.1, 0.2, 0.5, 1, 10] }), 65536, (i) => (unit(i) - 0.2) * 3, 1, { levelsInWorkgroup: false }],
+    ["range u32 7999 bins (levels too many for workgroup memory)", new RangeBins({ datatype: "u32", levels: Array.from({ length: 8000 }, (_, k) => 3 * k) }), 100000, (i) => Math.floor(unit(i) * 25000)],
   ];
   const largeHistogramTests = [
     ["even f32 256 bins [0,1)", new EvenBins({ datatype: "f32", numBins: 256, lower: 0, upper: 1 }), 1 << 24, (i) => unit(i)],
@@ -887,8 +889,8 @@ ${randomBitsWGSL(this.rng)}
     await runTest(name, () => runPermTest({ n, options }));
   }
 
-  for (const [label, bins, n, gen, repeat] of histogramTests) {
-    await runTest(`hist  ${label} n=${n}`, () => runHistogramTest({ bins, n, gen, repeat }));
+  for (const [label, bins, n, gen, repeat, options] of histogramTests) {
+    await runTest(`hist  ${label} n=${n}`, () => runHistogramTest({ bins, n, gen, repeat, options }));
   }
 
   summarize();
