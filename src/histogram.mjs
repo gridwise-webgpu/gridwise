@@ -21,7 +21,7 @@
  * copies (copies of the bins per workgroup, against atomic contention;
  * default 4 for <= 256 bins, 2 for <= 1024, else 1), maxWorkgroups (8192).
  */
-import { BasePrimitive, Kernel, AllocateBuffer, ClearBuffer } from "./primitive.mjs";
+import { BasePrimitive, Kernel, AllocateBuffer, ClearBuffer, UniformStruct } from "./primitive.mjs";
 import { datatypeToBytes } from "./util.mjs";
 
 export class Histogram extends BasePrimitive {
@@ -45,6 +45,7 @@ export class Histogram extends BasePrimitive {
       }
     }
     this.getDispatchGeometry = () => [this.workgroupCount];
+    this.params = new UniformStruct("HistogramParameters", { n: "u32" });
   }
 
   /** do the bins (all copies) fit in workgroup memory? */
@@ -63,21 +64,14 @@ export class Histogram extends BasePrimitive {
       1,
       Math.min(Math.ceil(this.inputLength / (this.workgroupSize * this.itemsPerThread)), this.maxWorkgroups)
     );
-    this.histogramParameters = new Uint32Array([this.inputLength, 0, 0, 0]);
   }
 
   histogramWGSL = () => {
     const T = this.datatype;
     const W = this.workgroupSize;
     const N = this.numBins;
-    const ranged = this.bins.needsLevels;
     const wg = this.workgroupBins;
     return /* wgsl */ `
-struct HistogramParameters { n: u32, p0: u32, p1: u32, p2: u32 };
-@group(0) @binding(0) var<storage, read> inputBuffer: array<${T}>;
-@group(0) @binding(1) var<storage, read_write> outputBuffer: array<atomic<u32>>;
-@group(0) @binding(2) var<uniform> params: HistogramParameters;
-${ranged ? `@group(0) @binding(3) var<storage, read> levels: array<${T}>;` : ""}
 ${this.bins.wgsl("binOf")}
 ${wg ? this.fnDeclarations.wgHistogram({ name: "wgBins", numBins: N, copies: this.copies, workgroupSize: W }) : ""}
 
@@ -110,13 +104,9 @@ ${
   compute() {
     this.finalizeRuntimeParameters();
     const ranged = this.bins.needsLevels;
+    const T = this.datatype;
     return [
-      new AllocateBuffer({
-        label: "histogramParameters",
-        size: this.histogramParameters.byteLength,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        populateWith: this.histogramParameters,
-      }),
+      this.params.allocate("histogramParameters", { n: this.inputLength }),
       ...(ranged
         ? [
             new AllocateBuffer({
@@ -132,8 +122,12 @@ ${
       new Kernel({
         kernel: this.histogramWGSL,
         entryPoint: "histogram",
-        bufferTypes: [["read-only-storage", "storage", "uniform", ...(ranged ? ["read-only-storage"] : [])]],
-        bindings: [["inputBuffer", "outputBuffer", "histogramParameters", ...(ranged ? ["levels"] : [])]],
+        buffers: [
+          { name: "inputBuffer", access: "read", type: `array<${T}>` },
+          { name: "outputBuffer", access: "read_write", type: "array<atomic<u32>>" },
+          { name: "params", buffer: "histogramParameters", uniform: this.params },
+          ...(ranged ? [{ name: "levels", access: "read", type: `array<${T}>` }] : []),
+        ],
         label: `histogram (${this.bins})`,
         /* with trials > 1, each dispatch must start from zero counts */
         resetBuffersForBenchmarkingOnly: ["outputBuffer"],

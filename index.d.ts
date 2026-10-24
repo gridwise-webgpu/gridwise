@@ -28,6 +28,20 @@ export class BasePrimitive {
   destroy(): void;
 }
 
+/** One buffer a Kernel binds, declared once for WGSL and the bind group layout */
+export interface KernelBuffer {
+  /** the variable's name in WGSL */
+  name: string;
+  /** the primitive's buffer bound to it (default: name) */
+  buffer?: string | { buffer: string; offset?: number; size?: number };
+  /** "read" (read-only storage), "read_write" (storage) or "uniform" */
+  access?: "read" | "read_write" | "uniform";
+  /** its WGSL type, e.g. "array<f32>" */
+  type?: string;
+  /** a uniform parameter struct (sets access and type, and declares the struct) */
+  uniform?: UniformStruct;
+}
+
 export class Kernel {
   label: string;
   kernel: string | ((args?: { [key: string]: any }) => string);
@@ -38,11 +52,30 @@ export class Kernel {
       | {
           kernel: string | ((args?: { [key: string]: any }) => string);
           label?: string;
+          /** buffers in binding order (or one list per bind group); replaces bufferTypes and bindings */
+          buffers?: KernelBuffer[] | KernelBuffer[][];
           [key: string]: any;
         }
   );
 
   enabled(): boolean;
+  /** WGSL declarations of the declared buffers ("" without them) */
+  readonly bufferDeclarations: string;
+  /** the kernel's complete WGSL: its code, then its buffers' declarations */
+  wgsl(): string;
+}
+
+/** A uniform parameter struct declared once for WGSL and JavaScript */
+export class UniformStruct {
+  name: string;
+  byteLength: number;
+  constructor(name: string, fields: { [field: string]: "u32" | "i32" | "f32" });
+  /** the WGSL struct declaration, padded to a multiple of 16 bytes */
+  readonly wgsl: string;
+  /** values packed in the struct's layout */
+  pack(values: { [field: string]: number }): Uint8Array;
+  /** an AllocateBuffer for a uniform buffer named label, holding values */
+  allocate(label: string, values: { [field: string]: number }): AllocateBuffer;
 }
 
 export class AllocateBuffer {

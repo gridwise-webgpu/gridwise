@@ -36,6 +36,32 @@ When the scan is actually executed, its arguments are buffers that store its inp
 
 The primitive performs all necessary WebGPU operations, including (optionally) setting up an encoder, building up and setting WebGPU layouts and pipelines, running the pipeline, and optionally recording GPU-side or CPU-side timing. It also caches WebGPU layouts and pipelines to avoid the expense of recreating them if they have already been created. Internally, a primitive describes its work as a list of actions returned by its `compute()` method (kernels to dispatch, internal buffers to allocate, copies), and `execute()` carries them out in order. One kind of action runs another primitive, so a primitive can use an existing one, such as a scan, as one of its own steps (see [Composing primitives](#composing-primitives) below).
 
+### Declaring a kernel's buffers and parameters
+
+A kernel's buffers are declared once, in its `Kernel` action, in binding order. Gridwise derives the bind group layout, the bind groups and the WGSL declarations from that list, so the kernel's WGSL uses the buffers without declaring them. Parameters that go in a uniform buffer are declared once as a `UniformStruct`, which generates the WGSL struct (padded to 16 bytes) and packs the values. From `Histogram`:
+
+```js
+// constructor
+this.params = new UniformStruct("HistogramParameters", { n: "u32" });
+
+// compute()
+return [
+  this.params.allocate("histogramParameters", { n: this.inputLength }),
+  new Kernel({
+    kernel: this.histogramWGSL, // uses inputBuffer, outputBuffer, params.n, levels
+    entryPoint: "histogram",
+    buffers: [
+      { name: "inputBuffer", access: "read", type: `array<${T}>` },
+      { name: "outputBuffer", access: "read_write", type: "array<atomic<u32>>" },
+      { name: "params", buffer: "histogramParameters", uniform: this.params },
+      ...(ranged ? [{ name: "levels", access: "read", type: `array<${T}>` }] : []),
+    ],
+  }),
+];
+```
+
+Each entry has `name` (the WGSL variable), `buffer` (the primitive's buffer bound to it, default `name`), `access` (`"read"`, `"read_write"` or `"uniform"`) and `type`, or `uniform` (a `UniformStruct`) in place of `access` and `type`. A list of lists gives one list per bind group. `UniformStruct.allocate()` returns an `AllocateBuffer` whose upload is skipped when the values have not changed. The older form, with `bufferTypes` and `bindings` given as parallel lists and the declarations written in the WGSL, still works.
+
 ### Composing primitives
 
 A primitive's work is a list of actions returned by its `compute()` method: `Kernel`s to dispatch, `AllocateBuffer`s for internal buffers, copies and writes. One of those actions can be another primitive. `ExecutePrimitive` runs a child primitive at that point in the list, on the same encoder, with the child's buffers bound to the parent's by name, so a new primitive can reuse an existing one (for example, a scan) as one of its steps and still be a single primitive to execute, time and test. [Composing Primitives](../composing-primitives/) describes why this exists and how it works.

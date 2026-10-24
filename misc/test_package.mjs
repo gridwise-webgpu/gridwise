@@ -55,6 +55,7 @@ async function main() {
       "RangeBins",
       "RadixBins",
       "ClearBuffer",
+      "UniformStruct",
       "MultisplitPerm",
       "tuneMultisplitPerm",
       "randomBitsWGSL",
