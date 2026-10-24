@@ -35,6 +35,7 @@ import { DLDFScan, BinOpAdd } from "gridwise";
 const adapter = await navigator.gpu.requestAdapter();
 const device = await adapter.requestDevice({
   requiredFeatures: adapter.features.has("subgroups") ? ["subgroups"] : [],
+  requiredLimits: { maxComputeWorkgroupStorageSize: 32768 }, // needed by sort only
 });
 
 // 2. Create input and output GPU buffers
@@ -59,13 +60,14 @@ const scan = new DLDFScan({
   device,
   type: "exclusive",
   datatype: "u32",
-  binop: BinOpAdd,
+  binop: new BinOpAdd({ datatype: "u32" }),
 });
 
 scan.registerBuffer({ label: "inputBuffer", buffer: inputBuffer });
 scan.registerBuffer({ label: "outputBuffer", buffer: outputBuffer });
 
-await scan.execute({ count });
+// The input length comes from the registered input buffer.
+await scan.execute();
 ```
 
 ### Radix Sort (`OneSweepSort`)
@@ -80,14 +82,16 @@ const sort = new OneSweepSort({
   direction: "ascending",
 });
 
+// keysBuffer holds the keys (STORAGE usage); keysTempBuffer is the same size.
 sort.registerBuffer({ label: "keysInOut", buffer: keysBuffer });
 sort.registerBuffer({ label: "keysTemp", buffer: keysTempBuffer });
-await sort.execute({ count });
+await sort.execute();
 
-// Radix sort ping-pongs between the two buffers; the sorted keys are in
-// whichever the last pass wrote ("keysInOut" or "keysTemp"):
-const sorted = sort.getBuffer(sort.outputKeysBufferName);
-// or construct with copyOutputToTemp: true to always find them in keysTemp
+// Radix sort ping-pongs between the two buffers, so both may be overwritten,
+// and the sorted keys are in whichever the last pass wrote. The sort reports
+// which (also as sort.outputKeysBufferName, "keysInOut" or "keysTemp").
+// Or construct it with copyOutputToTemp: true to always find them in keysTemp.
+const sortedBuffer = sort.outputIsInTemp ? keysTempBuffer : keysBuffer;
 ```
 
 ---
