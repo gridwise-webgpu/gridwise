@@ -21,6 +21,9 @@ let mainFinished = new Promise((resolve) => {
 });
 
 let enableTiming = true;
+/* CORRECTNESS_ONLY=true: one pass, no warm-up, no timing, no performance
+ * comparison. For slow or timing-free devices such as GPU simulators. */
+const correctnessOnly = process.env.CORRECTNESS_ONLY === "true";
 let cachedDevice = null;
 
 const gpuCreateFeatures = [
@@ -134,7 +137,7 @@ BasePrimitive.prototype.execute = async function (args = {}) {
   /* A primitive run by another primitive (ExecutePrimitive) is timed as part
    * of its parent; timing it separately would read the parent's timing
    * helper before the parent has finished recording. */
-  if (!enableTiming || args.__timingSetUpByParent) {
+  if (!enableTiming || correctnessOnly || args.__timingSetUpByParent) {
     return await originalExecute.call(this, args);
   }
 
@@ -193,7 +196,15 @@ BasePrimitive.prototype.execute = async function (args = {}) {
 };
 
 // Intercept console.log to track PASS/FAIL counts
-const testStatus = { passed: 0, failed: 0 };
+/* EXPECTED_FAILURES=sort,perm: failures of tests in these families (the first
+ * word of the test name) are known and counted separately, so they do not
+ * fail the run; any other failure still does. For a known gap on a particular
+ * device, e.g. OneSweep on 64-wide subgroups. */
+const expectedFailureFamilies = new Set(
+  (process.env.EXPECTED_FAILURES ?? "").split(",").map((s) => s.trim()).filter(Boolean)
+);
+const testStatus = { passed: 0, failed: 0, expectedFailed: 0, passedInExpected: 0 };
+const familyOf = (msgStr) => msgStr.replace(/^\[(PASS|FAIL)\]\s*/, "").split(/\s+/)[0];
 const originalConsoleLog = console.log;
 console.log = function (...msg) {
   if (enableTiming) {
@@ -201,8 +212,10 @@ console.log = function (...msg) {
     const msgStr = msg.join(" ");
     if (msgStr.startsWith("[PASS]")) {
       testStatus.passed++;
+      if (expectedFailureFamilies.has(familyOf(msgStr))) testStatus.passedInExpected++;
     } else if (msgStr.startsWith("[FAIL]")) {
-      testStatus.failed++;
+      if (expectedFailureFamilies.has(familyOf(msgStr))) testStatus.expectedFailed++;
+      else testStatus.failed++;
     }
   }
 };
@@ -210,10 +223,12 @@ console.log = function (...msg) {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // 5a. Warmup run (JIT compiles everything silently)
-console.log("Warming up shaders (JIT compilation phase)...");
-enableTiming = false;
-await import(`./regression.mjs?warmup=true`);
-await mainFinished;
+if (!correctnessOnly) {
+  console.log("Warming up shaders (JIT compilation phase)...");
+  enableTiming = false;
+  await import(`./regression.mjs?warmup=true`);
+  await mainFinished;
+}
 
 // Reset mainFinished promise and log interceptors for timed run
 mainFinished = new Promise((resolve) => {
@@ -253,7 +268,8 @@ let regressionDetected = false;
  * are neither compared with nor written to the baseline. */
 const emulated = process.env.DISABLE_SUBGROUPS === "true";
 if (emulated) console.log("Subgroups disabled (emulated): skipping the performance comparison.");
-for (const res of emulated ? [] : perfResults) {
+if (correctnessOnly) console.log("CORRECTNESS_ONLY: skipping the performance comparison.");
+for (const res of emulated || correctnessOnly ? [] : perfResults) {
   const key = `${res.label}_${res.type || "default"}_${res.datatype}_size_${res.inputLength}`;
   newGpuBaseline[key] = { gpuTimeMs: res.gpuTimeMs, cpuTimeMs: res.cpuTimeMs };
 
@@ -300,14 +316,22 @@ for (const res of emulated ? [] : perfResults) {
   }
 }
 
-if (updateBaseline && !emulated) {
+if (updateBaseline && !emulated && !correctnessOnly) {
   baselineData[adapterDescription] = { ...gpuBaseline, ...newGpuBaseline };
   fs.writeFileSync(baselinePath, JSON.stringify(baselineData, null, 2), "utf8");
   console.log(`\nBaseline performance data for "${adapterDescription}" written to: ${baselinePath}`);
 }
 
 console.log("\n================ REGRESSION SUMMARY ================");
-console.log(`Correctness: ${testStatus.passed} passed, ${testStatus.failed} failed`);
+console.log(
+  `Correctness: ${testStatus.passed} passed, ${testStatus.failed} failed` +
+    (expectedFailureFamilies.size
+      ? `, ${testStatus.expectedFailed} expected failures (EXPECTED_FAILURES=${[...expectedFailureFamilies].join(",")})`
+      : "")
+);
+if (expectedFailureFamilies.size && testStatus.expectedFailed === 0) {
+  console.log(`Note: nothing in EXPECTED_FAILURES failed (${testStatus.passedInExpected} of those tests passed); remove it.`);
+}
 
 if (testStatus.failed > 0 || testStatus.passed === 0) {
   console.error(`FAIL: Functional correctness failures detected! (${testStatus.passed} passed, ${testStatus.failed} failed)`);

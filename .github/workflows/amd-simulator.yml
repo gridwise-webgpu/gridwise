@@ -1,0 +1,127 @@
+# Correctness on simulated AMD GPUs, without a GPU. See misc/run_amd_simulator.sh.
+#
+# rocjitsu (ROCm/rocm-systems, emulation/rocjitsu) executes AMD GPU
+# instructions on the CPU behind the amdgpu kernel-driver interface. Mesa's
+# Vulkan driver (RADV) drives the simulated GPU, and Node's webgpu package
+# (Dawn) runs on RADV. That covers RDNA3 (gfx1100) and RDNA4 (gfx1201); RADV
+# does not support the CDNA (Instinct) GPUs rocjitsu also simulates.
+name: AMD GPU simulator
+
+on:
+  workflow_dispatch:
+  # While this is a prototype, run on PRs only when the setup itself changes.
+  pull_request:
+    paths:
+      - ".github/workflows/amd-simulator.yml"
+      - "misc/run_amd_simulator.sh"
+      - "misc/list_adapters.mjs"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amd-simulator-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # nightly ROCm SDK whose rocjitsu is used
+  ROCM_SDK_VERSION: 10.3.0a20261023
+
+jobs:
+  simulate:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    # A prototype: report, but do not block, until it has a baseline.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [gfx1201, gfx1100]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Vulkan (Mesa RADV)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mesa-vulkan-drivers libvulkan1 libdrm-amdgpu1
+          dpkg -l mesa-vulkan-drivers libdrm-amdgpu1 | tail -2
+
+      # rocjitsu ships with AMD's nightly ROCm SDK ("TheRock"), as used by
+      # IREE's CI. Pinned to a release that includes RDNA Vulkan support.
+      - name: Install the ROCm SDK (rocjitsu)
+        run: |
+          # report a failing command's output as an annotation
+          try() {
+            local out="$RUNNER_TEMP/try.log"
+            if ! "$@" > "$out" 2>&1; then
+              cat "$out"
+              echo "::error title=ROCm SDK::$* failed: $(tail -c 600 "$out" | tr '\n' ' ')"
+              return 1
+            fi
+            cat "$out"
+          }
+          venv="$RUNNER_TEMP/rocm-venv"
+          python3 -m venv "$venv"
+          index=https://nightly.repo.amd.com/rocm/whl-next/
+          # rocm-sdk init (which unpacks the SDK, rocjitsu included) needs devel
+          try "$venv/bin/python" -m pip install --pre --index-url "$index" "rocm[devel]==$ROCM_SDK_VERSION"
+          try "$venv/bin/rocm-sdk" init
+          root=$("$venv/bin/rocm-sdk" path --root)
+          sim=$(ls "$root/bin" | grep -E '^(rocjitsu|mirage)$' | tr '\n' ' ')
+          cfgs=$(ls "$root/share/rocjitsu/configs" 2>/dev/null | grep -E 'gfx1100|gfx1201' | tr '\n' ' ')
+          echo "::notice title=ROCm SDK::$("$venv/bin/rocm-sdk" version 2>&1 | head -1); simulator: ${sim:-none}; configs: ${cfgs:-none}"
+          [[ -n $sim && -n $cfgs ]]
+          echo "ROCM_ROOT=$root" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: PUPPETEER_SKIP_DOWNLOAD=true npm ci
+
+      - name: Run the correctness tests on a simulated ${{ matrix.target }}
+        env:
+          # Known gap: OneSweep does not support 64-wide subgroups yet, and
+          # RADV runs compute 64-wide here. Remove once it does.
+          EXPECTED_FAILURES: sort
+        run: |
+          mkdir -p results
+          timeout --signal=TERM 100m \
+            misc/run_amd_simulator.sh ${{ matrix.target }} 2>&1 | tee "results/${{ matrix.target }}.log"
+          exit "${PIPESTATUS[0]}"
+
+      - name: Summarize
+        if: always()
+        run: |
+          log="results/${{ matrix.target }}.log"
+          [[ -f $log ]] || exit 0
+          {
+            echo "### Simulated ${{ matrix.target }}"
+            echo '```'
+            grep -E "^WebGPU adapter|^Correctness:" "$log" || true
+            echo '```'
+            echo "Failures by test family:"
+            echo '```'
+            grep '^\[FAIL\]' "$log" | awk '{print $2}' | sort | uniq -c || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # the same, as annotations (visible on the PR and through the API)
+          t=${{ matrix.target }}
+          echo "::notice title=$t adapter::$(grep -m1 '^WebGPU adapter' "$log" || echo none)"
+          echo "::notice title=$t correctness::$(grep -m1 '^Correctness:' "$log" || echo 'no summary line')"
+          fails=$(grep '^\[FAIL\]' "$log" | awk '{print $2}' | sort | uniq -c | xargs || true)
+          [[ -z $fails ]] || echo "::warning title=$t failures by family::$fails"
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: amd-simulator-${{ matrix.target }}
+          path: results/
+          retention-days: 14
