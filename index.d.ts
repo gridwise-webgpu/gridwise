@@ -126,11 +126,14 @@ export class ExecutePrimitive {
   enabled(): boolean;
 }
 
+/** Upload CPU data into a known buffer at a byte offset. A queue write: it lands
+ * before any of this execute()'s GPU work runs, not in action order. */
 export class WriteGPUBuffer {
   label: string;
-  cpuSource: any;
+  cpuSource: ArrayBufferView | ArrayBuffer;
+  offset?: number;
 
-  constructor(args: { label: string; cpuSource: any; [key: string]: any });
+  constructor(args: { label: string; cpuSource: ArrayBufferView | ArrayBuffer; offset?: number; [key: string]: any });
 }
 
 export class Buffer {

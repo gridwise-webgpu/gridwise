@@ -61,9 +61,16 @@ class TestWGSLFunctionsPrimitive extends BasePrimitive {
         size: this.inputLength * 4,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
       }),
+      /* the input: 3i + 1, then words 2 and 3 overwritten (the "WriteGPUBuffer"
+       * test reads it back; both are queue writes, done before the kernel) */
       new WriteGPUBuffer({
         label: "inputBuffer",
-        cpuSource: new Uint32Array(this.inputLength),
+        cpuSource: Uint32Array.from({ length: this.inputLength }, (_, i) => 3 * i + 1),
+      }),
+      new WriteGPUBuffer({
+        label: "inputBuffer",
+        cpuSource: new Uint32Array([1000, 1001]),
+        offset: 8,
       }),
       new Kernel({
         label: "test_kernel",
@@ -77,6 +84,11 @@ class TestWGSLFunctionsPrimitive extends BasePrimitive {
 
 export async function runSuite(device, resultsCallback) {
   const tests = [
+    {
+      name: "WriteGPUBuffer (whole buffer, then at an offset)",
+      kernelBody: "outputBuffer[gid] = inputBuffer[gid];",
+      expected: (lidx) => (lidx === 2 ? 1000 : lidx === 3 ? 1001 : 3 * lidx + 1),
+    },
     {
       name: "vec4InclusiveScan",
       kernelBody: "outputBuffer[gid] = vec4InclusiveScan(vec4<u32>(1u, 2u, 3u, 4u)).z;",
