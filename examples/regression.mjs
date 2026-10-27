@@ -18,6 +18,7 @@ import {
 import { OneSweepSort } from "../src/onesweep.mjs";
 import { MultisplitPerm } from "../src/multisplitperm.mjs";
 import { ShunPerm } from "../src/shunperm.mjs";
+import { FeistelPerm, SwapOrNotPerm, MitchellPerm } from "../src/bijectionperm.mjs";
 import { Histogram } from "../src/histogram.mjs";
 import { EvenBins, RangeBins, RadixBins } from "../src/bins.mjs";
 
@@ -836,6 +837,44 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
     return errors;
   }
 
+  /* Keyed-bijection permutations: the output equals reference() (the
+   * bijection's JS mirror), which is a permutation of 0..n-1; with gather,
+   * each output is the input value at that index. Phases run to the end. */
+  const bijectionClasses = { FeistelPerm, SwapOrNotPerm, MitchellPerm };
+  async function runBijectionTest({ cls, n, options }) {
+    const primitive = new bijectionClasses[cls]({ device, adapter, n, seed: 0x5eed, ...options });
+    const words = options.gather ? 2 : 1;
+    const bytes = n * 4 * words;
+    const outputBuffer = device.createBuffer({ size: bytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const mappable = device.createBuffer({ size: bytes, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    let input, inputBuffer;
+    if (options.gather) {
+      input = Uint32Array.from({ length: 2 * n }, (_, j) => (j & 1 ? ~(j >> 1) >>> 0 : Math.imul(j >> 1, 0x9e3779b1) >>> 0));
+      inputBuffer = device.createBuffer({ size: bytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+      device.queue.writeBuffer(inputBuffer, 0, input);
+    }
+    await primitive.execute({ outputBuffer, ...(inputBuffer && { inputBuffer }) });
+    const encoder = device.createCommandEncoder();
+    encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, bytes);
+    device.queue.submit([encoder.finish()]);
+    await mappable.mapAsync(GPUMapMode.READ);
+    const output = new Uint32Array(mappable.getMappedRange().slice());
+    mappable.unmap();
+    let errors = primitive.validate({ outputBuffer: output, inputBuffer: input });
+    const seen = new Uint8Array(n);
+    for (const x of primitive.reference()) {
+      if (x >= n || seen[x]++) {
+        errors += `\nreference() is not a permutation (${x})`;
+        break;
+      }
+    }
+    primitive.destroy();
+    outputBuffer.destroy();
+    mappable.destroy();
+    inputBuffer?.destroy();
+    return errors;
+  }
+
   class RandomBitsTest extends BasePrimitive {
     constructor(args) {
       super(args);
@@ -1117,6 +1156,23 @@ ${randomBitsWGSL(this.rng)}
     await runTest(`perm  ShunPerm n=${n} ${JSON.stringify(options)}`, () => runShunTest({ n, options }));
   }
 
+  for (const [cls, n, options] of [
+    ["FeistelPerm", 1, {}],
+    ["FeistelPerm", 1000, {}],
+    ["FeistelPerm", 4096, { rounds: 4 }] /* a power of 4: no cycle walking */,
+    ["FeistelPerm", 100003, { roundFunction: "mulshift", rounds: 8 }],
+    ["FeistelPerm", 5000, { gather: true }],
+    ["SwapOrNotPerm", 2, {}],
+    ["SwapOrNotPerm", 100003, {}],
+    ["MitchellPerm", 7, {}] /* domain 256: mostly invalid keys */,
+    ["MitchellPerm", 65537, {}] /* Thrust's worst case: 2^16 + 1 */,
+    ["MitchellPerm", 100003, { gather: true }],
+    ["MitchellPerm", 65537, { mode: "walk" }],
+    ["MitchellPerm", 4096, { mode: "walk", gather: true }],
+  ]) {
+    await runTest(`perm  ${cls} n=${n} ${JSON.stringify(options)}`, () => runBijectionTest({ cls, n, options }));
+  }
+
   for (const [label, bins, n, gen, repeat] of histogramTests) {
     await runTest(`hist  ${label} n=${n}`, () => runHistogramTest({ bins, n, gen, repeat }));
   }
@@ -1157,6 +1213,9 @@ ${randomBitsWGSL(this.rng)}
       await runLarge(name, () => runPermTest({ n, options }));
     }
     await runLarge("perm  ShunPerm n=1048576 {}", () => runShunTest({ n: 1 << 20, options: {} }));
+    for (const cls of ["FeistelPerm", "SwapOrNotPerm", "MitchellPerm"]) {
+      await runLarge(`perm  ${cls} n=1048577 {}`, () => runBijectionTest({ cls, n: (1 << 20) + 1, options: {} }));
+    }
 
     for (const [label, bins, n, gen] of largeHistogramTests) {
       await runLarge(`hist  ${label} n=${n}`, () => runHistogramTest({ bins, n, gen }));
