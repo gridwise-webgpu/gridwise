@@ -316,6 +316,9 @@ export function randomBitsJS(rng?: PhiloxRng | null): {
   elem: ((i: number) => number) | null;
 };
 export const PHILOX_WGSL: string;
+/** WGSL philox_mulhi(a, b): the high 32 bits of a * b */
+export const MULHI_WGSL: string;
+export function mulhiJS(a: number, b: number): number;
 export function pmMixJS(i: number, seed: number): number;
 export function pmRandJS(a: number, b: number, seed: number): number;
 export function pmBoundedJS(k: number, key: number, seed: number, ctr?: { value: number }, rand?: (a: number, b: number, s: number) => number): number;
@@ -379,6 +382,54 @@ export class ShunPerm extends BasePrimitive {
   reference(): Uint32Array;
   /** "" when the output equals reference() */
   validate(args?: { outputBuffer?: Uint32Array }): string;
+}
+
+export interface BijectionPermOptions {
+  device: GPUDevice;
+  adapter?: GPUAdapter;
+  n: number;
+  seed?: number;
+  /** out[i] = inputBuffer[f(i)] instead of f(i) */
+  gather?: boolean;
+  /** WGSL type of gathered values (default "vec2u") */
+  valueType?: string;
+  phaseLimit?: number;
+  label?: string;
+  disableSubgroups?: boolean;
+  [key: string]: any;
+}
+
+/** perm[i] = f(i) for a keyed bijection f of [0, n) (no atomics; reference() is exact) */
+export class BijectionPerm extends BasePrimitive {
+  n: number;
+  seed: number;
+  gather: boolean;
+  phases: string[];
+  config: { [key: string]: any };
+  constructor(args: BijectionPermOptions);
+  execute(args: { outputBuffer: GPUBuffer; inputBuffer?: GPUBuffer; [key: string]: any }): Promise<void>;
+  /** the bijection on its whole domain, on the CPU */
+  bijectionJS(x: number): number;
+  /** the indices execute() writes (with gather, the input positions it reads) */
+  reference(): Uint32Array;
+  /** "" when the output matches reference() */
+  validate(args?: { outputBuffer?: Uint32Array; inputBuffer?: Uint32Array }): string;
+}
+
+/** Balanced Feistel network, cycle-walked to [0, n) */
+export class FeistelPerm extends BijectionPerm {
+  constructor(args: BijectionPermOptions & { rounds?: number; roundFunction?: "triple32" | "mulshift" });
+}
+
+/** Hoang, Morris and Rogaway's swap-or-not cipher on [0, n) */
+export class SwapOrNotPerm extends BijectionPerm {
+  constructor(args: BijectionPermOptions & { rounds?: number });
+}
+
+/** Mitchell et al. (ACM TOPC 2022) as in Thrust's thrust::shuffle; "scan" mode is Thrust's output */
+export class MitchellPerm extends BijectionPerm {
+  scans: BasePrimitive[];
+  constructor(args: BijectionPermOptions & { rounds?: number; mode?: "scan" | "walk" });
 }
 
 export function tuneMultisplitPerm(args: {

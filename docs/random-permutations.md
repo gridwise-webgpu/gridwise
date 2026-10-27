@@ -52,6 +52,37 @@ await perm.roundsUsed();                // rounds needed; Infinity if maxRounds 
 
 The iterations run in rounds (reserve both locations of each pending swap with `atomicMax`, then commit the swaps that own both). The number of rounds is about 3 log2 n with high probability and only known on the GPU, so `ShunPerm` records `maxRounds` rounds (default `ceil(3 log2 n) + 16`) and sizes each round with an indirect dispatch: a one-invocation kernel writes the round's workgroup count from the number of iterations still pending, with no trip to the CPU, and rounds after the last dispatch no workgroups. Its kernels cannot be repeated in place, so `trials` must be 1. Options: `n`, `seed`, `rng` (Philox, as for `MultisplitPerm`), `maxRounds`.
 
+## Keyed bijections: FeistelPerm, SwapOrNotPerm, MitchellPerm
+
+These write `perm[i] = f(i)` for a pseudorandom bijection `f` of `[0, n)` chosen by the seed. There are no atomics and no data movement besides one 4-byte write per element. With `gather: true` they write `out[i] = in[f(i)]` instead (64-bit values by default; `valueType` sets the WGSL type). The output depends only on `n` and the seed, and `reference()` computes it on the CPU.
+
+```js
+import { FeistelPerm, SwapOrNotPerm, MitchellPerm } from "gridwise";
+const perm = new FeistelPerm({ device, n, seed, rounds: 8 });
+await perm.execute({ outputBuffer });                       // n u32s
+const thrust = new MitchellPerm({ device, n, seed, gather: true });
+await thrust.execute({ inputBuffer, outputBuffer });       // n vec2u values each
+```
+
+- **`FeistelPerm`**: a balanced Feistel network on two `h`-bit halves, with a `triple32` (default) or one-multiply `mulshift` round function. Options: `rounds` (default 24) and `roundFunction`.
+- **`SwapOrNotPerm`**: Hoang, Morris and Rogaway's swap-or-not cipher ("An Enciphering Scheme Based on a Card Shuffle", CRYPTO 2012). It works directly on `[0, n)`. Option: `rounds` (default `6 ceil(log2 n)`).
+- **`MitchellPerm`**: Mitchell, Stokes, Frank and Holmes ("Bandwidth-Optimal Random Shuffling for GPUs", ACM TOPC 2022), ported from NVIDIA Thrust's `thrust::shuffle`. It gives the same output as Thrust, bit for bit, for the same round keys.
+  - `mode: "scan"` (default) does what Thrust does: evaluate `f` on its power-of-two domain and compact the values below `n` in index order. Thrust does this in one decoupled-lookback pass. That pass needs forward progress between workgroups, which WebGPU does not promise. So this version uses three steps: count the valid values per tile, run `DLDFScan` on the counts, then evaluate `f` again and write.
+  - `mode: "walk"` uses cycle walking in one kernel instead.
+
+When `f`'s domain is larger than `n`, `FeistelPerm` and `MitchellPerm`'s walk mode restrict it to `[0, n)` by cycle walking: apply `f` until the value is below `n`. This always ends, because `i`'s cycle contains `i`.
+
+None of these is uniform: a keyed bijection reaches at most 2^(key bits) of the n! permutations. Their quality rests on `f` being a good pseudorandom permutation. They are the fastest way to get a permutation that looks random.
+
+A new keyed bijection is a subclass of `BijectionPerm` that supplies four things:
+
+- `bijectionWGSL()`: a WGSL `fn bijection(x: u32) -> u32`;
+- `bijectionJS(x)`: its bit-exact JavaScript mirror;
+- `roundKeys`: a `Uint32Array`;
+- `parameters`: a `UniformStruct` that starts with `n`, and its values.
+
+`BijectionPerm` provides the buffers, the cycle-walking kernel, gather, `reference()` and `validate()`.
+
 ## Pieces other primitives can use
 
 Writing this primitive added several general-purpose pieces to Gridwise:
