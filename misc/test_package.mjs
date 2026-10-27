@@ -60,6 +60,7 @@ async function main() {
       "bufferLayout",
       "localFinishBuffers",
       "MultisplitPerm",
+      "ShunPerm",
       "tuneMultisplitPerm",
       "randomBitsWGSL",
       "randomBitsJS",

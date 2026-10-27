@@ -17,6 +17,7 @@ import {
 } from "../src/primitive.mjs";
 import { OneSweepSort } from "../src/onesweep.mjs";
 import { MultisplitPerm } from "../src/multisplitperm.mjs";
+import { ShunPerm } from "../src/shunperm.mjs";
 import { Histogram } from "../src/histogram.mjs";
 import { EvenBins, RangeBins, RadixBins } from "../src/bins.mjs";
 
@@ -731,6 +732,110 @@ execute with e = ${e}: got [${out}], expected [${want}]`;
     return errors;
   }
 
+  /* Core: indirect dispatch. A one-invocation kernel writes the workgroup
+   * count (indirectDispatch); the next kernel, dispatched indirectly, counts
+   * the workgroups that run and the largest linearized workgroup id. */
+  class IndirectDispatchTest extends BasePrimitive {
+    constructor(args) {
+      super(args);
+      this.knownBuffers = ["outputBuffer"];
+      this.workgroupSize = 1;
+      this.params = new UniformStruct("IndirectParams", { count: "u32" });
+    }
+    compute() {
+      return [
+        this.params.allocate("indirectParams", { count: this.count }),
+        /* rewritten by the first kernel each execute: no clear on reuse */
+        new AllocateBuffer({ label: "args", size: 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.INDIRECT, clearBufferOnReuse: false }),
+        new Kernel({
+          kernel: () => /* wgsl */ `
+${this.fnDeclarations.include("indirectDispatch")}
+@compute @workgroup_size(1) fn main() {
+  setDispatchSize(p.count);
+  atomicStore(&out[0], 0u);
+  atomicStore(&out[1], 0u);
+}`,
+          label: "size the dispatch",
+          buffers: [
+            { name: "args", access: "read_write", type: "array<u32>" },
+            { name: "out", buffer: "outputBuffer", access: "read_write", type: "array<atomic<u32>>" },
+            { name: "p", buffer: "indirectParams", uniform: this.params },
+          ],
+          getDispatchGeometry: () => [1],
+        }),
+        new Kernel({
+          kernel: () => /* wgsl */ `
+${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
+@compute @workgroup_size(1) fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
+  ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
+  if (wgid >= p.count) { return; }
+  atomicAdd(&out[0], 1u);
+  atomicMax(&out[1], wgid);
+}`,
+          label: "counted (indirect)",
+          buffers: [
+            { name: "out", buffer: "outputBuffer", access: "read_write", type: "array<atomic<u32>>" },
+            { name: "p", buffer: "indirectParams", uniform: this.params },
+          ],
+          indirect: "args",
+        }),
+      ];
+    }
+  }
+
+  async function runIndirectDispatchTest() {
+    const outputBuffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const mappable = device.createBuffer({ size: 16, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const primitive = new IndirectDispatchTest({ device });
+    const maxDim = device.limits.maxComputeWorkgroupsPerDimension;
+    let errors = "";
+    for (const count of [0, 5, maxDim + 3 /* needs a second dimension */]) {
+      primitive.count = count;
+      await primitive.execute({ outputBuffer });
+      const encoder = device.createCommandEncoder();
+      encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, 16);
+      device.queue.submit([encoder.finish()]);
+      await mappable.mapAsync(GPUMapMode.READ);
+      const [ran, maxId] = new Uint32Array(mappable.getMappedRange().slice(0, 8));
+      mappable.unmap();
+      if (ran !== count || (count > 0 && maxId !== count - 1)) {
+        errors += `\ncount ${count}: ${ran} workgroups ran, largest id ${maxId}`;
+      }
+    }
+    primitive.destroy();
+    outputBuffer.destroy();
+    mappable.destroy();
+    return errors;
+  }
+
+  /* ShunPerm: bit-identical to sequential Fisher-Yates (reference()), done
+   * within maxRounds; trials > 1 is refused (its kernels are not repeatable) */
+  async function runShunTest({ n, options }) {
+    const primitive = new ShunPerm({ device, n, seed: 0x5eed, ...options });
+    const outputBuffer = device.createBuffer({ size: n * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const mappable = device.createBuffer({ size: n * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    await primitive.execute({ outputBuffer });
+    const encoder = device.createCommandEncoder();
+    encoder.copyBufferToBuffer(outputBuffer, 0, mappable, 0, n * 4);
+    device.queue.submit([encoder.finish()]);
+    await mappable.mapAsync(GPUMapMode.READ);
+    const output = new Uint32Array(mappable.getMappedRange().slice());
+    mappable.unmap();
+    let errors = primitive.validate({ outputBuffer: output });
+    const rounds = await primitive.roundsUsed();
+    if (!Number.isFinite(rounds)) errors += `\nnot finished after ${primitive.maxRounds} rounds`;
+    try {
+      await primitive.execute({ outputBuffer, trials: 2 });
+      errors += "\ntrials: 2 was accepted";
+    } catch {
+      /* expected */
+    }
+    primitive.destroy();
+    outputBuffer.destroy();
+    mappable.destroy();
+    return errors;
+  }
+
   class RandomBitsTest extends BasePrimitive {
     constructor(args) {
       super(args);
@@ -1002,6 +1107,16 @@ ${randomBitsWGSL(this.rng)}
     await runTest(name, () => runPermTest({ n, options }));
   }
 
+  await runTest("core: indirect dispatch (counts 0, 5, past one dimension)", runIndirectDispatchTest);
+  for (const [n, options] of [
+    [2, {}],
+    [1000, {}],
+    [100003, {}] /* not a power of two */,
+    [16384, { rng: { key: [1, 2], rounds: 7 } }] /* Philox */,
+  ]) {
+    await runTest(`perm  ShunPerm n=${n} ${JSON.stringify(options)}`, () => runShunTest({ n, options }));
+  }
+
   for (const [label, bins, n, gen, repeat] of histogramTests) {
     await runTest(`hist  ${label} n=${n}`, () => runHistogramTest({ bins, n, gen, repeat }));
   }
@@ -1041,6 +1156,7 @@ ${randomBitsWGSL(this.rng)}
       const name = `perm  MultisplitPerm n=${n} ${JSON.stringify(options)}`;
       await runLarge(name, () => runPermTest({ n, options }));
     }
+    await runLarge("perm  ShunPerm n=1048576 {}", () => runShunTest({ n: 1 << 20, options: {} }));
 
     for (const [label, bins, n, gen] of largeHistogramTests) {
       await runLarge(`hist  ${label} n=${n}`, () => runHistogramTest({ bins, n, gen }));

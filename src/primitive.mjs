@@ -507,6 +507,13 @@ export class BasePrimitive {
     if (!("trials" in args)) {
       args.trials = 1;
     }
+    /* trials > 1 repeats each kernel in place; some primitives' kernels cannot
+     * be repeated (e.g. a round that advances state or appends to a list) */
+    if (args.trials > 1 && this.singleTrialOnly) {
+      throw new Error(
+        `Primitive ${this.label}: its kernels cannot be repeated in place, so trials must be 1 (time repeated executes instead)`
+      );
+    }
 
     /* do we need to register any new buffers specified in execute? */
     if (this.knownBuffers) {
@@ -781,8 +788,23 @@ export class BasePrimitive {
            * TODO: dispatchGeometry should be able to be an array or number, not
            *     just a function
            * */
+          /* indirect dispatch: the workgroup counts (x, y, z: three u32s)
+           * are read on the GPU from a buffer with INDIRECT usage */
           let dispatchGeometry;
-          if (action.getDispatchGeometry) {
+          let indirect = null;
+          if (action.indirect) {
+            const spec = typeof action.indirect === "string" ? { buffer: action.indirect } : action.indirect;
+            if (!this.hasBuffer(spec.buffer)) {
+              throw new Error(`Primitive ${this.label}: Kernel ${action.label} has unknown indirect buffer ${spec.buffer}`);
+            }
+            const gpuBuffer = this.getBuffer(spec.buffer).buffer.buffer;
+            if ((gpuBuffer.usage & GPUBufferUsage.INDIRECT) === 0) {
+              throw new Error(
+                `Primitive ${this.label}: indirect buffer ${spec.buffer} needs GPUBufferUsage.INDIRECT (AllocateBuffer usage)`
+              );
+            }
+            indirect = { gpuBuffer, offset: spec.offset ?? 0 };
+          } else if (action.getDispatchGeometry) {
             dispatchGeometry = action.getDispatchGeometry();
           } else {
             dispatchGeometry = this.getDispatchGeometry();
@@ -861,7 +883,11 @@ export class BasePrimitive {
                 );
               }
             }
-            kernelPass.dispatchWorkgroups(...dispatchGeometry);
+            if (indirect) {
+              kernelPass.dispatchWorkgroupsIndirect(indirect.gpuBuffer, indirect.offset);
+            } else {
+              kernelPass.dispatchWorkgroups(...dispatchGeometry);
+            }
           }
           kernelPass.end();
 
@@ -877,7 +903,7 @@ size of bindings: ${action.bindings[0].map(
 workgroupCount: ${this.workgroupCount}
 workgroupSize: ${this.workgroupSize}
 maxGSLWorkgroupCount: ${this.maxGSLWorkgroupCount}
-dispatchGeometry: ${dispatchGeometry}`);
+dispatchGeometry: ${indirect ? "indirect" : dispatchGeometry}`);
           }
 
           break;
@@ -1169,7 +1195,8 @@ dispatchGeometry: ${dispatchGeometry}`);
    * clock before it is timed: GPUs lower their clocks when they look idle,
    * and executes separated by CPU work look idle (a V100 fell from 1,297 to
    * 180 MHz, slowing every kernel up to 10x). trials doubles until one
-   * execute keeps the GPU busy for 20 ms; returns the trials reached.
+   * execute keeps the GPU busy for 20 ms (stays 1 when singleTrialOnly);
+   * returns the trials reached.
    * args are execute()'s (buffers and options). */
   async warmUp(args = {}, warmMs = 200) {
     // eslint-disable-next-line no-unused-vars
@@ -1180,7 +1207,9 @@ dispatchGeometry: ${dispatchGeometry}`);
       const start = performance.now();
       await this.execute({ ...plain, trials, __warmUp: true });
       await this.device.queue.onSubmittedWorkDone();
-      if (performance.now() - start < 20 && trials < 4096) trials *= 2;
+      /* a primitive that cannot repeat kernels in place (singleTrialOnly)
+       * warms up with whole executes, one trial each */
+      if (performance.now() - start < 20 && trials < 4096 && !this.singleTrialOnly) trials *= 2;
     }
     return trials;
   }
@@ -1397,6 +1426,14 @@ export function bufferLayout(buffers) {
  *   type     its WGSL type
  *   uniform  a UniformStruct: access "uniform", type the struct, and the
  *            struct's declaration is added too
+ *
+ * The workgroup count comes from getDispatchGeometry() (the Kernel's, else
+ * the primitive's), or, with indirect: { buffer, offset = 0 } (or just the
+ * buffer's name), from three u32s (x, y, z) in that buffer, read on the GPU
+ * when the kernel runs: an earlier kernel can size this one without a trip
+ * to the CPU. The buffer needs GPUBufferUsage.INDIRECT; write its counts
+ * with the indirectDispatch WGSL helper (wgslFunctions), which keeps each
+ * dimension within the device's limit.
  *
  * Gridwise derives the bind group layout, the bind groups and the WGSL
  * declarations from this list; the declarations are appended to the kernel's
