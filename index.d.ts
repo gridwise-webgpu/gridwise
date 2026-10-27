@@ -41,6 +41,18 @@ export class BasePrimitive {
   registerBuffer(args: { label: string; buffer: any; device?: GPUDevice }): void;
   /** compute passes execute() records, including nested primitives' */
   countKernels(): number;
+  /** labels of those kernels, in the order of getTimingResult()'s GPU times */
+  kernelLabels(): string[];
+  /** run back to back for warmMs (default 200) so the GPU is at full clock; returns the trials reached */
+  warmUp(args?: { [key: string]: any }, warmMs?: number): Promise<number>;
+  /** warm up, then time `repeats` executes of `trials` dispatches; medians per trial */
+  benchmark(args?: { warmMs?: number; repeats?: number; trials?: number; [key: string]: any }): Promise<{
+    ns: number;
+    timing: "gpu" | "cpu";
+    trials: number;
+    repeats: number;
+    kernels: { label: string; ns: number }[];
+  }>;
   /** destroys GPU buffers the primitive allocated itself */
   destroy(): void;
 }
