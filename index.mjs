@@ -14,6 +14,7 @@ export {
   localFinishParams,
   wgShuffleWGSL,
   localFinishCap,
+  localFinishReservedBytes,
 } from "./src/multisplitperm.mjs";
 export {
   randomBitsWGSL,

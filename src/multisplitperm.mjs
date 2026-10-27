@@ -116,13 +116,22 @@ export function multisplitPermPassBits(groupBits, split = "even") {
   return [a, groupBits - a];
 }
 
+/** The local finish's helpers (include()), and the workgroup memory it needs
+ * besides its elements: shufCnt and shufStart (256 + 257 words), wS and wE,
+ * and what the helpers declare. */
+const localFinishHelpers = ["wgScan", "computeLinearizedGridParametersSplit"];
+export function localFinishReservedBytes(env) {
+  return (256 + 257 + 2) * 4 + env.fnDeclarations.workgroupBytes(...localFinishHelpers);
+}
+
 /** Group-size cap for the local finish: the mean group size plus 8 standard
  * deviations (a larger group takes the slow exact path, which for random
  * bucketing essentially never happens), rounded up to a multiple of 256,
- * limited by the device's workgroup memory. */
-export function localFinishCap(device, meanGroupSize = 4096, bytesPerElement = 4) {
+ * limited by the device's workgroup memory less reservedBytes (default 3,328;
+ * MultisplitPerm passes localFinishReservedBytes(this)). */
+export function localFinishCap(device, meanGroupSize = 4096, bytesPerElement = 4, reservedBytes = 3328) {
   const deviceMax =
-    Math.floor((device.limits.maxComputeWorkgroupStorageSize - 3328) / bytesPerElement / 256) * 256;
+    Math.floor((device.limits.maxComputeWorkgroupStorageSize - reservedBytes) / bytesPerElement / 256) * 256;
   const wanted = Math.ceil((meanGroupSize + 8 * Math.sqrt(meanGroupSize)) / 256) * 256;
   return Math.min(deviceMax, wanted);
 }
@@ -261,12 +270,7 @@ export function localFinishWGSL(env, cap, { unmix = true, canonical = false, rng
         keys[s + j] = x;
       }`;
   return /* wgsl */ `
-${env.fnDeclarations.enableSubgroupsIfAppropriate()}
-${env.fnDeclarations.commonDefinitions()}
-${env.binop.wgslfn}
-${env.fnDeclarations.subgroupEmulation()}
-${env.fnDeclarations.subgroupInclusiveOpScan()}
-${env.fnDeclarations.wgScan()}
+${env.fnDeclarations.include(...localFinishHelpers)}
 ${randomBitsWGSL(rng)}
 ${wgShuffleWGSL(env, cap, { canonical, aux: pairs })}
 alias Elem = ${pairs ? "vec2u" : "u32"};   /* ${pairs ? "(index, random word)" : "index or hashed key"} */
@@ -362,7 +366,7 @@ export class MultisplitPerm extends BasePrimitive {
     };
     while (
       this.localCap === undefined &&
-      localFinishCap(device, n / 2 ** groupBits, this.elementBytes) < needed(groupBits)
+      localFinishCap(device, n / 2 ** groupBits, this.elementBytes, localFinishReservedBytes(this)) < needed(groupBits)
     ) {
       groupBits++;
     }
@@ -390,7 +394,7 @@ export class MultisplitPerm extends BasePrimitive {
       return p;
     });
     this.numGroups = numSegs;
-    this.localCap ??= localFinishCap(device, n / numSegs, this.elementBytes);
+    this.localCap ??= localFinishCap(device, n / numSegs, this.elementBytes, localFinishReservedBytes(this));
 
     /* one scan primitive per pass, created once so that every compute()
      * returns the same objects */
@@ -461,12 +465,11 @@ export class MultisplitPerm extends BasePrimitive {
   }
   return lo;`;
     return /* wgsl */ `
-${this.fnDeclarations.enableSubgroupsIfAppropriate()}
-${this.fnDeclarations.commonDefinitions()}
-${this.binop.wgslfn}
-${this.fnDeclarations.subgroupEmulation()}
-${this.fnDeclarations.subgroupInclusiveOpScan()}
-${this.fnDeclarations.wgScan()}
+${this.fnDeclarations.include(
+  "wgScan",
+  ["wgHistogram", { name: "cnt", numBins: RADIX, workgroupSize: W }] /* the histogram, then each tile's ranks */,
+  "computeLinearizedGridParametersSplit"
+)}
 ${randomBitsWGSL(rng)}
 alias Elem = ${pairs ? "vec2u" : "u32"};
 const RADIX = ${RADIX}u;
@@ -493,8 +496,6 @@ fn myWork(wid: u32, lidx: u32) -> Work {
   return Work(seg, wid % ms.slots, workgroupUniformLoad(&wBegin), workgroupUniformLoad(&wEnd));
 }
 
-/* per-digit counts: the histogram (hist_main), then each tile's ranks (scatter_main) */
-${this.fnDeclarations.wgHistogram({ name: "cnt", numBins: RADIX, workgroupSize: W })}
 
 @compute @workgroup_size(${W})
 fn hist_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
