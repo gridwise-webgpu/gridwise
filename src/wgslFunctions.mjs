@@ -149,6 +149,7 @@ export class wgslFunctions {
     wgReduce: ["commonDefinitions", "binop", "subgroupReduce"],
     wgScan: ["commonDefinitions", "binop", "subgroupInclusiveOpScan"],
     wgHistogram: [],
+    indirectDispatch: [],
     /* inline */
     computeLinearizedGridParameters: ["commonDefinitions"],
     computeLinearizedGridParametersSplit: ["commonDefinitions"],
@@ -688,6 +689,33 @@ fn ${name}Add(b: u32, lidx: u32) {
   if (b < ${N}u) { atomicAdd(&${name}[${slot}], 1u); }
 }
 fn ${name}Count(b: u32) -> u32 { return ${count}; }`;
+  }
+
+  /** Write the workgroup counts for an indirect dispatch (a Kernel with
+   * `indirect`):
+   *
+   *   ${this.fnDeclarations.include(["indirectDispatch", { name: "setRoundSize", buffer: "args" }])}
+   *   setRoundSize(workgroupCount);    // writes args[offset .. offset + 2]
+   *
+   * buffer is the WGSL name of an array<u32> storage buffer (default
+   * "args"), offset its first word (default 0). workgroupCount is split as
+   * x * y >= workgroupCount with x, y at most the device's
+   * maxComputeWorkgroupsPerDimension (counts above it make the dispatch do
+   * nothing), so the dispatched kernel linearizes its workgroup id
+   * (computeLinearizedGridParametersSplit) and skips ids >= workgroupCount.
+   * A count of 0 dispatches nothing. */
+  indirectDispatch(args = {}) {
+    const env = Object.assign(Object.create(this.env), args); // properties in args overwrite this.env
+    const name = env.name ?? "setDispatchSize";
+    const buf = env.buffer ?? "args";
+    const o = env.offset ?? 0;
+    const maxDim = env.device.limits.maxComputeWorkgroupsPerDimension;
+    return /* wgsl */ `
+fn ${name}(workgroupCount: u32) {
+  ${buf}[${o}u] = min(workgroupCount, ${maxDim}u);
+  ${buf}[${o + 1}u] = (workgroupCount + ${maxDim - 1}u) / ${maxDim}u;
+  ${buf}[${o + 2}u] = 1u;
+}`;
   }
 
   wgScan(args = {}) {

@@ -16,6 +16,7 @@ export {
   localFinishCap,
   localFinishReservedBytes,
 } from "./src/multisplitperm.mjs";
+export { ShunPerm } from "./src/shunperm.mjs";
 export {
   randomBitsWGSL,
   randomBitsJS,

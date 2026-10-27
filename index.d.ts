@@ -22,6 +22,8 @@ export class BasePrimitive {
   knownBuffers: string[];
   /** the WGSL helpers, for this primitive's device (with or without subgroups) */
   fnDeclarations: WgslFunctions;
+  /** true when the kernels cannot be repeated in place: execute() then refuses trials > 1 */
+  singleTrialOnly?: boolean;
 
   constructor(args: {
     device: GPUDevice;
@@ -69,6 +71,8 @@ export class Kernel {
           label?: string;
           /** buffers in binding order (or one list per bind group); replaces bufferTypes and bindings */
           buffers?: KernelBuffer[] | KernelBuffer[][];
+          /** dispatch with the workgroup counts (x, y, z u32s) in this buffer, read on the GPU (INDIRECT usage) */
+          indirect?: string | { buffer: string; offset?: number };
           [key: string]: any;
         }
   );
@@ -339,6 +343,29 @@ export class MultisplitPerm extends BasePrimitive {
   keyOf(i: number): number;
   groupOf(i: number): number;
   /** "" when valid */
+  validate(args?: { outputBuffer?: Uint32Array }): string;
+}
+
+/** Parallel Fisher-Yates (Shun et al., SODA 2015): bit-identical to sequential
+ * Fisher-Yates with the same swap targets; rounds sized by indirect dispatch */
+export class ShunPerm extends BasePrimitive {
+  n: number;
+  seed: number;
+  maxRounds: number;
+  constructor(args: {
+    device: GPUDevice;
+    n: number;
+    seed?: number;
+    rng?: null | { key: [number, number]; rounds?: number };
+    maxRounds?: number;
+    [key: string]: any;
+  });
+  execute(args: { outputBuffer: GPUBuffer; [key: string]: any }): Promise<void>;
+  /** rounds the last execute() needed (Infinity if maxRounds ran out) */
+  roundsUsed(): Promise<number>;
+  /** sequential Fisher-Yates with the same swap targets, on the CPU */
+  reference(): Uint32Array;
+  /** "" when the output equals reference() */
   validate(args?: { outputBuffer?: Uint32Array }): string;
 }
 

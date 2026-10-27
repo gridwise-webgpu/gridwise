@@ -76,6 +76,18 @@ ${this.fnDeclarations.include(
 
 `this.fnDeclarations.workgroupBytes(...)`, with the same list, is the workgroup memory those helpers declare, for sizing a kernel's own workgroup arrays against `device.limits.maxComputeWorkgroupStorageSize`.
 
+### Indirect dispatch
+
+A `Kernel` normally dispatches the workgroup count its `getDispatchGeometry()` returns, fixed when `execute()` records it. With `indirect: "args"` (or `{ buffer, offset }`), it instead reads three u32s (x, y, z) from that buffer when the GPU runs it, so an earlier kernel can size it from data on the GPU, with no trip to the CPU. The buffer needs `GPUBufferUsage.INDIRECT`. Write the counts with the `indirectDispatch` WGSL helper, which splits a count across x and y to stay within `maxComputeWorkgroupsPerDimension`; the dispatched kernel linearizes its workgroup id (`computeLinearizedGridParametersSplit`) and skips ids at or past the count:
+
+```js
+new AllocateBuffer({ label: "args", size: 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.INDIRECT, clearBufferOnReuse: false }),
+new Kernel({ kernel: sizeIt /* include("indirectDispatch"); setDispatchSize(count) */, buffers: [...], getDispatchGeometry: () => [1] }),
+new Kernel({ kernel: work, buffers: [...], indirect: "args" }),
+```
+
+`ShunPerm` sizes each of its rounds this way. A primitive whose kernels cannot be repeated in place (one that advances state or appends to a list, as `ShunPerm`'s rounds do) sets `this.singleTrialOnly = true`, and `execute()` then refuses `trials` > 1.
+
 ### Actions, and when they take effect
 
 `compute()` returns a list of actions: `Kernel`, `AllocateBuffer`, `WriteGPUBuffer`, `ClearBuffer`, `CopyBufferToBuffer` and `ExecutePrimitive`. `execute()` records the GPU work into one command encoder and submits it at the end, so the encoder commands (`Kernel`, `ClearBuffer`, `CopyBufferToBuffer`, and the actions of an `ExecutePrimitive`) run on the GPU in list order.
