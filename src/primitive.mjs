@@ -1149,6 +1149,85 @@ dispatchGeometry: ${dispatchGeometry}`);
     return count;
   }
 
+  /** Labels of the kernels execute() records, in the order of the GPU
+   * timings getTimingResult() returns (nested primitives' kernels included,
+   * as countKernels counts them). */
+  kernelLabels(actions = this.compute()) {
+    const labels = [];
+    for (const action of actions) {
+      if (action.constructor === Kernel && action.enabled()) {
+        labels.push(action.label ?? action.entryPoint ?? "kernel");
+      } else if (action.constructor === ExecutePrimitive && action.enabled()) {
+        this.__bindChildBuffers(action, actions);
+        labels.push(...action.primitive.kernelLabels());
+      }
+    }
+    return labels;
+  }
+
+  /** Run this primitive back to back for warmMs, so that the GPU is at full
+   * clock before it is timed: GPUs lower their clocks when they look idle,
+   * and executes separated by CPU work look idle (a V100 fell from 1,297 to
+   * 180 MHz, slowing every kernel up to 10x). trials doubles until one
+   * execute keeps the GPU busy for 20 ms; returns the trials reached.
+   * args are execute()'s (buffers and options). */
+  async warmUp(args = {}, warmMs = 200) {
+    // eslint-disable-next-line no-unused-vars
+    const { enableGPUTiming, enableCPUTiming, trials: _, ...plain } = args;
+    const end = performance.now() + warmMs;
+    let trials = 1;
+    while (performance.now() < end) {
+      const start = performance.now();
+      await this.execute({ ...plain, trials, __warmUp: true });
+      await this.device.queue.onSubmittedWorkDone();
+      if (performance.now() - start < 20 && trials < 4096) trials *= 2;
+    }
+    return trials;
+  }
+
+  /** Time this primitive: warm up (warmUp), then execute it `repeats` times
+   * with `trials` dispatches per kernel, and return medians per trial:
+   *
+   *   const r = await primitive.benchmark({ inputBuffer, outputBuffer });
+   *   // { ns, timing: "gpu" | "cpu", trials, repeats,
+   *   //   kernels: [{ label, ns }, ...] }   (kernels: GPU timing only)
+   *
+   * GPU timing (timestamp queries; per kernel) if the device has the
+   * "timestamp-query" feature, else CPU timing of the whole execute.
+   * Options: warmMs (200), repeats (5), trials (default: as many as the
+   * warm-up reached, so each timed execute is at least ~20 ms); the rest
+   * are execute()'s. With trials > 1 a kernel must be repeatable (see
+   * Kernel's resetBuffersForBenchmarkingOnly). For full-resolution
+   * timestamps, see docs/timing-strategy.md. */
+  async benchmark(args = {}) {
+    const { warmMs = 200, repeats = 5, trials: givenTrials, ...executeArgs } = args;
+    const warmTrials = await this.warmUp(executeArgs, warmMs);
+    const trials = givenTrials ?? warmTrials;
+    const gpu = this.device.features.has("timestamp-query");
+    const median = (a) => [...a].sort((x, y) => x - y)[a.length >> 1];
+    const totals = [];
+    const perKernel = [];
+    for (let r = 0; r < repeats; r++) {
+      await this.execute({ ...executeArgs, trials, enableGPUTiming: gpu, enableCPUTiming: !gpu });
+      const { gpuTotalTimeNS, cpuTotalTimeNS } = await this.getTimingResult();
+      if (gpu) {
+        const ns = [gpuTotalTimeNS].flat();
+        totals.push(ns.reduce((a, b) => a + b, 0) / trials);
+        ns.forEach((t, i) => (perKernel[i] ??= []).push(t / trials));
+      } else {
+        totals.push(cpuTotalTimeNS / trials);
+      }
+    }
+    const labels = gpu ? this.kernelLabels() : [];
+    return {
+      ns: median(totals),
+      timing: gpu ? "gpu" : "cpu",
+      trials,
+      repeats,
+      kernels: perKernel.map((k, i) => ({ label: labels[i], ns: median(k) })),
+    };
+  }
+
   async getTimingResult() {
     const gpuTotalTimeNS = BasePrimitive.__timingHelper
       ? await BasePrimitive.__timingHelper.getResult()
