@@ -2,11 +2,26 @@
 // Project: https://github.com/gridwise-js/gridwise
 // Definitions by: Google DeepMind team
 
+/** a WGSL helper for include(): its name, or [name, args] */
+export type WgslHelper = string | [string, { [key: string]: any }];
+
+/** The WGSL helpers available to a primitive's kernels (wgslFunctions.mjs) */
+export interface WgslFunctions {
+  /** module-scope WGSL for these helpers and everything they need, each once (put it first) */
+  include(...helpers: WgslHelper[]): string;
+  /** workgroup memory (bytes) declared by include(...helpers) */
+  workgroupBytes(...helpers: WgslHelper[]): number;
+  /** the individual helpers (wgScan, wgHistogram, subgroupDigitMatch, ...) */
+  [helper: string]: any;
+}
+
 export class BasePrimitive {
   device: GPUDevice;
   label: string;
   useSubgroups: boolean;
   knownBuffers: string[];
+  /** the WGSL helpers, for this primitive's device (with or without subgroups) */
+  fnDeclarations: WgslFunctions;
 
   constructor(args: {
     device: GPUDevice;
@@ -345,7 +360,9 @@ export function tuneMultisplitPerm(args: {
 }>;
 
 export function multisplitPermPassBits(groupBits: number, split?: string | number[]): number[];
-export function localFinishCap(device: GPUDevice, meanGroupSize?: number, bytesPerElement?: number): number;
+export function localFinishCap(device: GPUDevice, meanGroupSize?: number, bytesPerElement?: number, reservedBytes?: number): number;
+/** workgroup memory the local finish needs besides its elements (for localFinishCap) */
+export function localFinishReservedBytes(env: BasePrimitive): number;
 export function localFinishWGSL(env: BasePrimitive, cap: number, options?: { [key: string]: any }): string;
 /** the local finish's uniform parameters (n, numGroups, stride, seed, seed2) */
 export const localFinishParams: UniformStruct;
