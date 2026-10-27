@@ -1195,7 +1195,8 @@ dispatchGeometry: ${indirect ? "indirect" : dispatchGeometry}`);
    * clock before it is timed: GPUs lower their clocks when they look idle,
    * and executes separated by CPU work look idle (a V100 fell from 1,297 to
    * 180 MHz, slowing every kernel up to 10x). trials doubles until one
-   * execute keeps the GPU busy for 20 ms; returns the trials reached.
+   * execute keeps the GPU busy for 20 ms (stays 1 when singleTrialOnly);
+   * returns the trials reached.
    * args are execute()'s (buffers and options). */
   async warmUp(args = {}, warmMs = 200) {
     // eslint-disable-next-line no-unused-vars
@@ -1206,7 +1207,9 @@ dispatchGeometry: ${indirect ? "indirect" : dispatchGeometry}`);
       const start = performance.now();
       await this.execute({ ...plain, trials, __warmUp: true });
       await this.device.queue.onSubmittedWorkDone();
-      if (performance.now() - start < 20 && trials < 4096) trials *= 2;
+      /* a primitive that cannot repeat kernels in place (singleTrialOnly)
+       * warms up with whole executes, one trial each */
+      if (performance.now() - start < 20 && trials < 4096 && !this.singleTrialOnly) trials *= 2;
     }
     return trials;
   }

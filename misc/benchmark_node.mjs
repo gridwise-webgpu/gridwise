@@ -6,8 +6,8 @@
  *   node misc/benchmark_node.mjs scan,sort 20,24 --kernels
  *
  * primitives: scan (DLDFScan), hscan (HierarchicalScan), sort (OneSweep,
- * u32 keys), histogram (256 even f32 bins), perm (MultisplitPerm); default
- * all. Sizes default to 20,22,24. --kernels also prints each kernel's time.
+ * u32 keys), histogram (256 even f32 bins), perm (MultisplitPerm), shun
+ * (ShunPerm, parallel Fisher-Yates: one trial per execute); default all. Sizes default to 20,22,24. --kernels also prints each kernel's time.
  * Throughput is elements per second. Sort sorts in place, so after the
  * first execute it sorts sorted keys.
  *
@@ -20,11 +20,12 @@ import { OneSweepSort } from "../src/onesweep.mjs";
 import { Histogram } from "../src/histogram.mjs";
 import { EvenBins } from "../src/bins.mjs";
 import { MultisplitPerm } from "../src/multisplitperm.mjs";
+import { ShunPerm } from "../src/shunperm.mjs";
 import { BinOpAdd } from "../src/binop.mjs";
 
 const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const showKernels = process.argv.includes("--kernels");
-const which = (positional[0] ?? "scan,hscan,sort,histogram,perm").split(",");
+const which = (positional[0] ?? "scan,hscan,sort,histogram,perm,shun").split(",");
 const logSizes = (positional[1] ?? "20,22,24").split(",").map(Number);
 
 const { adapter, device } = await createNodeDevice();
@@ -70,6 +71,11 @@ const setups = {
   perm: (n) => {
     const outputBuffer = buffer(n * 4);
     const primitive = new MultisplitPerm({ device, adapter, n });
+    return { primitive, args: { outputBuffer }, buffers: [outputBuffer] };
+  },
+  shun: (n) => {
+    const outputBuffer = buffer(n * 4);
+    const primitive = new ShunPerm({ device, adapter, n });
     return { primitive, args: { outputBuffer }, buffers: [outputBuffer] };
   },
 };

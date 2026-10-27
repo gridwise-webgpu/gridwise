@@ -54,8 +54,9 @@ export class ShunPerm extends BasePrimitive {
     this.rng ??= null;
     this.maxRounds ??= Math.ceil(3 * Math.log2(this.n)) + 16;
     this.singleTrialOnly = true; /* each round appends to a list: not repeatable in place */
+    this.datatype = "u32";
     this.params = new UniformStruct("SH", { n: "u32", seed: "u32" });
-    if (!("label" in args)) this.label += ` [ n: ${this.n} ]`;
+    if (!("label" in args)) this.label += this.makeParamString(["useSubgroups"]);
   }
 
   /** the module with init, reserve and commit */
