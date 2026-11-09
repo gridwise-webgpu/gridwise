@@ -13,6 +13,26 @@ import {
   divRoundUp,
 } from "./util.mjs";
 
+/* a small integer per GPU object (e.g., a GPUBuffer), for cache keys: the
+ * object itself is the canonical name of a buffer, whatever any primitive
+ * calls it. Ids come from a counter, so are never reused, and the WeakMap
+ * does not keep objects alive. */
+const gpuObjectIds = new WeakMap();
+let nextGPUObjectId = 1;
+function gpuObjectId(object) {
+  let id = gpuObjectIds.get(object);
+  if (id === undefined) {
+    id = nextGPUObjectId++;
+    gpuObjectIds.set(object, id);
+  }
+  return id;
+}
+
+/* more cached bind groups than this, and the bind-group cache starts over:
+ * a bound for buffers that the cache cannot see die (ones a caller passed
+ * in, then destroyed); real workloads use far fewer */
+const MAX_CACHED_BIND_GROUPS = 4096;
+
 class WebGPUObjectCache {
   constructor({
     enabled = [
@@ -20,6 +40,7 @@ class WebGPUObjectCache {
       "bindGroupLayouts",
       "computeModules",
       "computePipelines",
+      "bindGroups",
     ] /* this list is the default */,
     // eslint-disable-next-line no-unused-vars
     ...args
@@ -32,19 +53,63 @@ class WebGPUObjectCache {
       "bindGroupLayouts",
       "computeModules",
       "computePipelines",
+      "bindGroups",
     ];
     for (const cache of this.caches) {
       this[cache] = new CountingMap({
         enabled: this.initiallyEnabled.includes(cache),
       });
     }
+    /* buffer id -> the bindGroups keys that bind it, to evict them */
+    this.bindGroupKeysByBuffer = new Map();
+  }
+
+  /** A bind group for `pipeline` (cached, with __cacheKey) at group `index`,
+   * binding `entries` ({ binding, resource: GPUBufferBinding }): from the
+   * cache if the same pipeline has bound the same GPU buffers and ranges
+   * before, else from create(). The key is the pipeline, the group, and
+   * each buffer's identity (gpuObjectId), offset and size; buffer names
+   * play no part. */
+  bindGroup(pipeline, index, entries, create) {
+    const ids = entries.map(({ resource }) => gpuObjectId(resource.buffer));
+    const key = `${pipeline.__cacheKey}|${index}|${entries
+      .map(({ resource }, i) => `${ids[i]}:${resource.offset ?? 0}:${resource.size ?? ""}`)
+      .join(",")}`;
+    let group = this.bindGroups.get(key);
+    if (!group) {
+      group = create();
+      if (this.bindGroups.enabled) {
+        if (this.bindGroups.size >= MAX_CACHED_BIND_GROUPS) this.clearBindGroups();
+        this.bindGroups.set(key, group);
+        for (const id of ids) {
+          if (!this.bindGroupKeysByBuffer.has(id)) this.bindGroupKeysByBuffer.set(id, new Set());
+          this.bindGroupKeysByBuffer.get(id).add(key);
+        }
+      }
+    }
+    return group;
+  }
+
+  /** drop the cached bind groups that bind `buffer` (it is being destroyed) */
+  forgetBuffer(buffer) {
+    const id = gpuObjectIds.get(buffer);
+    const keys = id === undefined ? undefined : this.bindGroupKeysByBuffer.get(id);
+    if (!keys) return;
+    for (const key of keys) this.bindGroups.delete(key);
+    this.bindGroupKeysByBuffer.delete(id);
+  }
+
+  clearBindGroups() {
+    this.bindGroups.clear();
+    this.bindGroupKeysByBuffer.clear();
   }
   get stats() {
     return `Cache hits/misses:
 Pipeline layouts: ${this.pipelineLayouts.hits}/${this.pipelineLayouts.misses}
 Bind group layouts: ${this.bindGroupLayouts.hits}/${this.bindGroupLayouts.misses}
 Compute modules: ${this.computeModules.hits}/${this.computeModules.misses}
-Compute pipelines: ${this.computePipelines.hits}/${this.computePipelines.misses}`;
+Compute pipelines: ${this.computePipelines.hits}/${this.computePipelines.misses}
+Bind groups: ${this.bindGroups.hits}/${this.bindGroups.misses} (${this.bindGroups.size} cached)`;
   }
   enable() {
     for (const enabled of this.initiallyEnabled) {
@@ -56,17 +121,6 @@ Compute pipelines: ${this.computePipelines.hits}/${this.computePipelines.misses}
       this[enabled].disable();
     }
   }
-}
-
-/* a small integer per GPU object (e.g., a GPUBuffer), for cache keys */
-const gpuObjectIds = new WeakMap();
-function gpuObjectId(object) {
-  let id = gpuObjectIds.get(object);
-  if (id === undefined) {
-    id = (gpuObjectId.next = (gpuObjectId.next ?? 0) + 1);
-    gpuObjectIds.set(object, id);
-  }
-  return id;
 }
 
 function generateCacheKey(obj) {
@@ -742,32 +796,25 @@ export class BasePrimitive {
             label: `${this.label} compute pass`,
           };
 
-          /* bind groups, cached per primitive by pipeline and the GPU
-           * buffers (and ranges) bound: the same buffers bind the same way
-           * every execute, and creating them was about a third of the CPU
-           * time of a small execute */
+          /* bind groups, cached by pipeline and the GPU buffers (and
+           * ranges) bound (WebGPUObjectCache.bindGroup): the same buffers
+           * bind the same way every execute, and creating them was about a
+           * third of the CPU time of a small execute */
           let kernelBindGroups = {};
           for (const [bindGroupIndex, bindGroup] of action.bindings.entries()) {
             const entries = bindGroup.map((binding, bindingIndex) => ({
               binding: bindingIndex,
               resource: this.getBufferResource(binding),
             }));
-            const key = `${computePipelineCacheKey}|${bindGroupIndex}|${entries
-              .map(({ resource: r }) => `${gpuObjectId(r.buffer)}:${r.offset ?? 0}:${r.size ?? ""}`)
-              .join(",")}`;
-            this.__bindGroups ??= new Map();
-            let kernelBindGroup = this.__bindGroups.get(key);
-            if (!kernelBindGroup) {
-              kernelBindGroup = this.device.createBindGroup({
+            kernelBindGroups[bindGroupIndex] = webGPUObjectCache.bindGroup(computePipeline, bindGroupIndex, entries, () =>
+              this.device.createBindGroup({
                 label: `bindGroup ${bindGroupIndex} for ${this.label} ${
                   action.entryPoint && action.entryPoint
                 } kernel`,
                 layout: computePipeline.getBindGroupLayout(bindGroupIndex),
                 entries,
-              });
-              this.__bindGroups.set(key, kernelBindGroup);
-            }
-            kernelBindGroups[bindGroupIndex] = kernelBindGroup;
+              })
+            );
           }
 
           /** If we have specified N trials, launch 1 pass with N dispatches.
@@ -1104,6 +1151,7 @@ dispatchGeometry: ${indirect ? "indirect" : dispatchGeometry}`);
       if (existingBuffer && this.__ownedBuffers?.has(existingBuffer.buffer.buffer)) {
         /* we allocated it earlier at a different size: free it */
         this.__ownedBuffers.delete(existingBuffer.buffer.buffer);
+        BasePrimitive.__deviceToWebGPUObjectCache.get(this.device)?.forgetBuffer(existingBuffer.buffer.buffer);
         existingBuffer.buffer.buffer.destroy();
       }
       this.device.pushErrorScope("out-of-memory");
@@ -1286,7 +1334,7 @@ dispatchGeometry: ${indirect ? "indirect" : dispatchGeometry}`);
     return { gpuTotalTimeNS, cpuTotalTimeNS };
   }
   destroy() {
-    this.__bindGroups?.clear();
+    const cache = BasePrimitive.__deviceToWebGPUObjectCache.get(this.device);
     /* destroy the GPU buffers this primitive allocated itself (AllocateBuffer);
      * buffers passed in by the caller belong to the caller */
     const owned = this.__ownedBuffers ?? new Set();
@@ -1296,6 +1344,7 @@ dispatchGeometry: ${indirect ? "indirect" : dispatchGeometry}`);
       }
     }
     for (const buffer of owned) {
+      cache?.forgetBuffer(buffer); /* and the bind groups that bound it */
       buffer.destroy();
     }
     owned.clear();
