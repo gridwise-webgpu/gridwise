@@ -211,7 +211,7 @@ With the measured sort rate and per-access costs in place of copy bandwidth, the
 **Next, in order of expected gain:**
 
 1. **Sort rate.** On the M1 Max, OneSweep's 64-bit key-value passes run at about 100 GB/s, and the default tile (12 keys per thread) is already the fastest valid one (`misc/onesweep_probe.mjs`; fewer than 8 keys per thread sort wrongly with 32-lane subgroups). The spin limit of the lookback does not matter. What limits a pass is still open.
-2. **Local gathers.** Pack's `rank[i + h]` gather is still random. The same multisplit, applied to the requests and then to the answers, would make it local too, at about twice the streaming cost.
+2. **Index-ordered active list** (done with local scatter). Pack's order does not matter, since the sort reorders everything. So with local scatter the active list is kept in index order, and pack reads `rank[i]` and `rank[i + h]` in nearly sequential order instead of at random. Bit 31 of each rank marks a suffix as still active; the local-scatter apply writes it with the rank, and a compaction over all n (flags, scan, compact: about 20 bytes per symbol per round) builds the next list.
 3. **Fewer key bits.** Later rounds sort 2b bits; replacing `rank[i]` with a dense id for its group would save passes once few groups remain.
 
 **How to measure:** `node misc/benchmark_suffixarray.mjs random256,random4,english,fibonacci,allA 20,22,24` prints the device rates at each size, then per input the rounds, work ratio, wall and GPU time, the overhead per submission, both models (copy bandwidth only, and calibrated with the device rates), and per phase the GPU time, modeled bytes and achieved bandwidth.

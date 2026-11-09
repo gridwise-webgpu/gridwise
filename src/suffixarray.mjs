@@ -123,6 +123,7 @@ fn groupRank(k: vec2u) -> u32 {
   return (k.x >> sa.b) | (k.y << (32u - sa.b));
 }
 fn sameKey(a: vec2u, b: vec2u) -> bool { return all(a == b); }
+const RANK_MASK = 0x7fffffffu; /* with localScatter, bit 31 of rank[i]: still active */
 `;
 
   /** the round's actual number of active suffixes (kernels that bind count):
@@ -175,8 +176,15 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   }
   let i = activeList[p];
   let j = i + sa.h;
-  let r2 = select(0u, rank[j], j < sa.n);
-  keys[p] = packRanks(activeRanks[p], r2); /* rank[i], carried by the list: no gather */
+  ${
+    this.localScatter
+      ? `/* the list is in index order, so rank[i] and rank[i + h] are read in
+   * nearly sequential order; bit 31 of a rank is its suffix's "active" flag */
+  let r2 = select(0u, rank[j] & RANK_MASK, j < sa.n);
+  keys[p] = packRanks(rank[i] & RANK_MASK, r2);`
+      : `let r2 = select(0u, rank[j], j < sa.n);
+  keys[p] = packRanks(activeRanks[p], r2); /* rank[i], carried by the list: no gather */`
+  }
   payload[p] = i;
 }`;
 
@@ -219,10 +227,14 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   /* the first subgroup of a group keeps its rank: skip its (random) write,
    * about half of them on text; the initial round writes every rank */
   ${this.localScatter ? "/* the rank is written later, through a multisplit (applyWGSL) */" : "if (sa.initial == 1u || q != g) { rank[payload[p]] = r; }"}
-  newRanks[p] = r;
   /* a subgroup of one: p starts it and p + 1 does not continue it */
   let alone = q == p && (p + 1u == m || !sameKey(keys[p + 1u], k));
-  keep[p] = select(1u, 0u, alone);
+  ${
+    this.localScatter
+      ? `newRanks[p] = r | select(1u << 31u, 0u, alone); /* the rank and its active flag, applied later */`
+      : `newRanks[p] = r;
+  keep[p] = select(1u, 0u, alone);`
+  }
 }`;
 
   /** the next active list, and its length */
@@ -240,6 +252,29 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
     nextRanks[offsets[p]] = newRanks[p];
   }
   if (p + 1u == m) { count[sa.round] = offsets[p] + keep[p]; }
+}`;
+
+  /** localScatter: the next active list in index order, from the active
+   * flags (bit 31 of each rank): the flags, then (after a scan) the list */
+  activeFlagsWGSL = () => /* wgsl */ `
+${this.commonWGSL()}
+@compute @workgroup_size(${WORKGROUP_SIZE})
+fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
+  ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
+  let i = gid;
+  if (i >= sa.n) { return; }
+  flags[i] = rank[i] >> 31u;
+}`;
+
+  compactByIndexWGSL = () => /* wgsl */ `
+${this.commonWGSL()}
+@compute @workgroup_size(${WORKGROUP_SIZE})
+fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
+  ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
+  let i = gid;
+  if (i >= sa.n) { return; }
+  if (flags[i] == 1u) { nextActive[offsets[i]] = i; }
+  if (i + 1u == sa.n) { count[sa.round] = offsets[i] + flags[i]; }
 }`;
 
   /** when the initial round resolves every suffix, the sorted payload is
@@ -322,7 +357,10 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
     const m = initial ? this.n : this.m;
     const sort = initial ? this.initialSort : this.roundSort;
     sort.length = m;
-    for (const scan of [this.groupScan, this.subgroupScan, this.keepScan]) scan.length = m;
+    for (const scan of [this.groupScan, this.subgroupScan]) scan.length = m;
+    /* the active list's compaction: by sorted position over the m actives,
+     * or (localScatter) by index over all n */
+    this.keepScan.length = this.localScatter ? this.n : m;
     const other = (list) => (list === "listA" ? "listB" : "listA");
     const work = initial ? "listA" : other(this.activeList);
     const spare = other(work);
@@ -349,7 +387,7 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
             `pack (h = ${this.h})`,
             [
               u32s("activeList", this.activeList),
-              u32s("activeRanks", "activeRanks"),
+              ...(this.localScatter ? [] : [u32s("activeRanks", "activeRanks")]),
               u32s("rank", "rankBuffer"),
               keys("keys", "read_write"),
               u32s("payload", work, "read_write"),
@@ -385,25 +423,11 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
         ],
         m
       ),
-      new ExecutePrimitive({ primitive: this.keepScan, buffers: { inputBuffer: "groupFlags", outputBuffer: "subgroupFlags" } }),
-      this.kernel(
-        this.compactWGSL,
-        "compact",
-        [
-          u32s("keep", "groupFlags"),
-          u32s("offsets", "subgroupFlags"),
-          u32s("payload", sortedPayload),
-          u32s("newRanks", newRanks),
-          u32s("nextActive", nextActive, "read_write"),
-          u32s("nextRanks", "activeRanks", "read_write"),
-          u32s("count", "count", "read_write"),
-        ],
-        m
-      ),
-      /* local scatter: group (suffix, new rank) by the suffix's block, into
-       * the free start buffers, then write the ranks block by block */
       ...(this.localScatter
         ? [
+            /* local scatter: group (suffix, new rank and active flag) by the
+             * suffix's block, into the free start buffers, then write the
+             * ranks block by block */
             new ExecutePrimitive({
               primitive: Object.assign(this.rankSplit, { length: m }),
               buffers: { keysIn: sortedPayload, valuesIn: newRanks, keysOut: "groupStart", valuesOut: "subgroupStart" },
@@ -414,8 +438,38 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
               [u32s("dest", "groupStart"), u32s("value", "subgroupStart"), u32s("written", "rankBuffer", "read_write")],
               m
             ),
+            /* the next active list, in index order: flags, scan, compact */
+            this.kernel(this.activeFlagsWGSL, "compact flags", [u32s("rank", "rankBuffer"), u32s("flags", "groupFlags", "read_write")], this.n),
+            new ExecutePrimitive({ primitive: this.keepScan, buffers: { inputBuffer: "groupFlags", outputBuffer: "subgroupFlags" } }),
+            this.kernel(
+              this.compactByIndexWGSL,
+              "compact by index",
+              [
+                u32s("flags", "groupFlags"),
+                u32s("offsets", "subgroupFlags"),
+                u32s("nextActive", nextActive, "read_write"),
+                u32s("count", "count", "read_write"),
+              ],
+              this.n
+            ),
           ]
-        : []),
+        : [
+            new ExecutePrimitive({ primitive: this.keepScan, buffers: { inputBuffer: "groupFlags", outputBuffer: "subgroupFlags" } }),
+            this.kernel(
+              this.compactWGSL,
+              "compact",
+              [
+                u32s("keep", "groupFlags"),
+                u32s("offsets", "subgroupFlags"),
+                u32s("payload", sortedPayload),
+                u32s("newRanks", newRanks),
+                u32s("nextActive", nextActive, "read_write"),
+                u32s("nextRanks", "activeRanks", "read_write"),
+                u32s("count", "count", "read_write"),
+              ],
+              m
+            ),
+          ]),
     ];
   }
 
@@ -584,7 +638,12 @@ export function suffixArrayPhase(label = "") {
  * write 8 to scatter) and an apply kernel (read 8, write 4 within one block
  * at a time) do, all streaming: 32 bytes. The output likewise: a
  * Multisplit of (rank, index) (read 4 + 4, write 8), then apply (read 8,
- * write 4). (The multisplits' own small scans are not counted.) */
+ * write 4). (The multisplits' own small scans are not counted.)
+ * The active list is then kept in index order, so pack reads both ranks in
+ * nearly sequential order (no random access), update writes no keep flags
+ * (24 bytes), and the compaction runs over all n each round: flags (read
+ * the rank, write a flag: 8), an exclusive scan (8), and the compaction
+ * (read flag and offset 8, write the list 4 per active). */
 export function suffixArrayTraffic({
   n,
   activeCounts,
@@ -603,15 +662,19 @@ export function suffixArrayTraffic({
     const initial = round === 0;
     const c = capacities[round] ?? m;
     if (initial) add("initial keys", 13 * m);
-    else add("pack", 24 * m + 12 * (c - m), m);
+    else add("pack", 24 * m + 12 * (c - m), localScatter ? 0 : m);
     add("sort", (8 + 24 * passes(initial ? 9 * INITIAL_SYMBOLS : 2 * rankBits)) * c);
     add("heads", 16 * m);
-    add("scans", 24 * c);
     if (localScatter) {
-      add("update ranks", 28 * m);
+      add("scans", 16 * c + 8 * n);
+      add("update ranks", 24 * m);
       add("local scatter", 20 * c + 12 * m);
-    } else add("update ranks", 32 * m, m);
-    add("compact", 24 * m);
+      add("compact", 16 * n + 4 * m);
+    } else {
+      add("scans", 24 * c);
+      add("update ranks", 32 * m, m);
+      add("compact", 24 * m);
+    }
   });
   if (activeCounts.length === 1) add("output", 8 * n);
   else if (localScatter) {
