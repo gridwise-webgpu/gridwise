@@ -998,12 +998,10 @@ dispatchGeometry: ${indirect ? "indirect" : dispatchGeometry}`);
           }
           const sourceBuffer = this.getBuffer(action.source).buffer;
           const destBuffer = this.getBuffer(action.destination).buffer;
-          encoder.copyBufferToBuffer(
-            sourceBuffer.buffer,
-            sourceBuffer.buffer.offset ?? 0,
-            destBuffer.buffer,
-            destBuffer.buffer.offset ?? 0
-          );
+          /* action.size: bytes to copy (default: the whole source buffer) */
+          const copyArgs = [sourceBuffer.buffer, sourceBuffer.buffer.offset ?? 0, destBuffer.buffer, destBuffer.buffer.offset ?? 0];
+          if (action.size !== undefined) copyArgs.push(action.size);
+          encoder.copyBufferToBuffer(...copyArgs);
           break;
         }
       }

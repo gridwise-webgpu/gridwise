@@ -195,6 +195,45 @@ export async function main(navigator) {
     return primitive.validate({ inputBuffer: memsrc, outputBuffer: memdest });
   }
 
+  /* DLDFScan `length`: one primitive scans the first lengths[j] elements of a
+   * buffer of capacity elements, execute after execute; outputs before
+   * lengths[j] must match a CPU scan of those elements */
+  async function runScanLengthTest({ type, binop, capacity, lengths }) {
+    const primitive = new DLDFScan({ device, binop, type, datatype: "u32" });
+    const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    const input = device.createBuffer({ size: capacity * 4, usage });
+    const output = device.createBuffer({ size: capacity * 4, usage });
+    const mappable = device.createBuffer({ size: capacity * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const op = binop instanceof BinOpMax ? (a, b) => Math.max(a, b) : (a, b) => (a + b) >>> 0;
+    const identity = 0; /* for both add and max over u32 */
+    let errors = "";
+    for (const length of lengths) {
+      const data = Uint32Array.from({ length: capacity }, () => Math.floor(Math.random() * 1000));
+      device.queue.writeBuffer(input, 0, data);
+      primitive.length = length;
+      await primitive.execute({ inputBuffer: input, outputBuffer: output });
+      const encoder = device.createCommandEncoder();
+      encoder.copyBufferToBuffer(output, 0, mappable, 0, capacity * 4);
+      device.queue.submit([encoder.finish()]);
+      await mappable.mapAsync(GPUMapMode.READ);
+      const out = new Uint32Array(mappable.getMappedRange().slice(0));
+      mappable.unmap();
+      let acc = identity, budget = 3;
+      for (let i = 0; i < length && budget > 0; i++) {
+        const inclusive = op(acc, data[i]);
+        const expected = type === "inclusive" ? inclusive : acc;
+        if (out[i] !== expected) {
+          errors += `\nlength ${length}, position ${i}: expected ${expected}, got ${out[i]}`;
+          budget--;
+        }
+        acc = inclusive;
+      }
+    }
+    for (const b of [input, output, mappable]) b.destroy();
+    primitive.destroy();
+    return errors;
+  }
+
   /* ------------------------------------------------------------------ */
   /* Sort helpers                                                         */
   /* ------------------------------------------------------------------ */
@@ -368,6 +407,78 @@ export async function main(navigator) {
       validateArgs.outputPayload = memdestPayload;
     }
     return primitive.validate(validateArgs);
+  }
+
+  /* `length`: one primitive sorts the first lengths[j] elements of buffers of
+   * capacity elements, execute after execute (the suffix array's pattern:
+   * a shrinking working set). Each result must be the sorted first
+   * lengths[j] input elements, with their payloads. */
+  async function runSortLengthTest({ type, datatype, capacity, lengths, keyBits }) {
+    const isKeyValue = type === "keyvalue";
+    const primitive = new OneSweepSort({
+      device,
+      datatype,
+      type: isKeyValue ? "keyvalue" : "keysonly",
+      direction: "ascending",
+      copyOutputToTemp: true,
+      ...(keyBits !== undefined ? { KEY_BITS: keyBits } : {}),
+    });
+    const bytes = datatype === "u64" ? 8 : 4;
+    const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    const keysInOut = device.createBuffer({ size: capacity * bytes, usage });
+    const keysTemp = device.createBuffer({ size: capacity * bytes, usage });
+    const payloadInOut = isKeyValue ? device.createBuffer({ size: capacity * 4, usage }) : null;
+    const payloadTemp = isKeyValue ? device.createBuffer({ size: capacity * 4, usage }) : null;
+    const read = async (buffer, size) => {
+      const mappable = device.createBuffer({ size, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+      const encoder = device.createCommandEncoder();
+      encoder.copyBufferToBuffer(buffer, 0, mappable, 0, size);
+      device.queue.submit([encoder.finish()]);
+      await mappable.mapAsync(GPUMapMode.READ);
+      const copy = mappable.getMappedRange().slice(0);
+      mappable.destroy();
+      return copy;
+    };
+    let errors = "";
+    for (const length of lengths) {
+      const keys = generateSortInput(datatype, capacity, keyBits !== undefined ? "random" : "fewUnique");
+      const payload = Uint32Array.from({ length: capacity }, (_, i) => i);
+      device.queue.writeBuffer(keysInOut, 0, keys);
+      if (isKeyValue) device.queue.writeBuffer(payloadInOut, 0, payload);
+      primitive.length = length;
+      await primitive.execute({ keysInOut, keysTemp, ...(isKeyValue && { payloadInOut, payloadTemp }) });
+      const TypedArray = datatypeToTypedArray(datatype);
+      const outKeys = new TypedArray(await read(keysTemp, length * bytes));
+      const outPayload = isKeyValue ? new Uint32Array(await read(payloadTemp, length * 4)) : null;
+      const inKeys = keys.slice(0, length);
+      const inPayload = payload.slice(0, length);
+      const err =
+        keyBits !== undefined
+          ? validatePartialKeySort({ keyBits, direction: "ascending", inputKeys: inKeys, outputKeys: outKeys, inputPayload: isKeyValue ? inPayload : null, outputPayload: outPayload })
+          : validateStableSort({ inputKeys: inKeys, outputKeys: outKeys, inputPayload: isKeyValue ? inPayload : null, outputPayload: outPayload });
+      if (err) errors += `\nlength ${length}:${err}`;
+    }
+    for (const b of [keysInOut, keysTemp, payloadInOut, payloadTemp]) b?.destroy();
+    primitive.destroy();
+    return errors;
+  }
+
+  /* the output must be the input stably sorted (ascending): keys and, for a
+   * key-value sort, payloads */
+  function validateStableSort({ inputKeys, outputKeys, inputPayload, outputPayload }) {
+    const order = Array.from(inputKeys, (_, i) => i).sort((a, b) =>
+      inputKeys[a] < inputKeys[b] ? -1 : inputKeys[a] > inputKeys[b] ? 1 : a - b
+    );
+    let errors = "";
+    let budget = 5;
+    for (let i = 0; i < order.length && budget > 0; i++) {
+      const k = inputKeys[order[i]];
+      if (outputKeys[i] !== k || (outputPayload && outputPayload[i] !== inputPayload[order[i]])) {
+        errors += `\nposition ${i}: expected (${k}${outputPayload ? `, ${inputPayload[order[i]]}` : ""}), got (${outputKeys[i]}${outputPayload ? `, ${outputPayload[i]}` : ""})`;
+        budget--;
+      }
+    }
+    return errors;
   }
 
   /* A sort with KEY_BITS < key width. OneSweep runs ceil(KEY_BITS / 8)
@@ -1140,6 +1251,26 @@ ${randomBitsWGSL(this.rng)}
   for (const [type, datatype, direction, size, keyBits, keys] of sortTests) {
     const name = sortName(type, datatype, direction, size, keyBits, keys);
     await runTest(name, () => runSortTest({ type, datatype, direction, size, keyBits, keys }));
+  }
+
+  for (const [type, BinOpClass, capacity, lengths] of [
+    ["exclusive", BinOpAdd, 20000, [20000, 13001, 4096, 4097, 3, 1]],
+    ["inclusive", BinOpMax, 20000, [19999, 8191, 2]],
+  ]) {
+    const name = `scan  ${type.padEnd(9)} u32  ${BinOpClass.name.replace("BinOp", "").toLowerCase().padEnd(8)} length=${lengths.join(",")} of ${capacity}`;
+    await runTest(name, () => runScanLengthTest({ type, binop: new BinOpClass({ datatype: "u32" }), capacity, lengths }));
+  }
+
+  /* [type, datatype, capacity, lengths, keyBits] */
+  for (const [type, datatype, capacity, lengths, keyBits] of [
+    ["keysonly", "u32", 10000, [10000, 9999, 3073, 1]],
+    ["keyvalue", "u32", 10000, [7000, 3840, 3841, 17]] /* a whole tile, a tile + 1 */,
+    ["keyvalue", "u64", 10000, [10000, 6000, 3072, 3073, 2]],
+    ["keyvalue", "u64", 10000, [9000, 5000, 100], 48] /* 6 passes */,
+    ["keyvalue", "u64", 10000, [9000, 5000, 100], 40] /* 5 passes: odd */,
+  ]) {
+    const name = `sort  ${type.padEnd(9)} ${datatype}  length=${lengths.join(",")} of ${capacity}${keyBits !== undefined ? ` keyBits=${keyBits}` : ""}`;
+    await runTest(name, () => runSortLengthTest({ type, datatype, capacity, lengths, keyBits }));
   }
 
   for (const [type, datatype, direction, size, keyBits] of sortNoCopyTests) {

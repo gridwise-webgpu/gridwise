@@ -102,6 +102,18 @@ const sortedValues = sort.getBuffer(sort.outputPayloadBufferName);  // payloadIn
 
 If only the low bits of `u32` keys vary (for instance, keys known to be below 2^20), pass `KEY_BITS` to the constructor to sort only those bits. That saves passes: `KEY_BITS: 20` takes 3 passes instead of 4. Because the pass count can then be odd, use `outputKeysBufferName` (or `copyOutputToTemp: true`) to find the result.
 
+### Sorting a prefix of the buffers
+
+Set `length` (in the constructor, or on the primitive between executes) to sort only the first `length` keys and payloads of the buffers; the rest is neither read nor sorted. The pipelines do not depend on `length`, so one primitive can sort a shrinking working set inside buffers allocated once:
+
+```js
+const sort = new OneSweepSort({ device, datatype: "u64", type: "keyvalue", KEY_BITS: 48, copyOutputToTemp: true });
+for (const m of workingSetSizes) {
+  sort.length = m;            // m <= the buffers' length
+  await sort.execute({ keysInOut, keysTemp, payloadInOut, payloadTemp });
+}
+```
+
 ### 64-bit keys
 
 With `datatype: "u64"`, keys are WGSL `vec2u` values, 8 bytes each: element `[0]` (`x`) holds the low 32 bits and element `[1]` (`y`) the high 32 bits. A full key takes 8 passes, low word first. In JavaScript, fill and read the buffers as `BigUint64Array`s, which use the same layout. Payloads in a key-value sort are still `u32`.
