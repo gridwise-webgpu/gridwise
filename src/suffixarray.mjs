@@ -43,6 +43,8 @@ import {
 import { OneSweepSort } from "./onesweep.mjs";
 import { DLDFScan } from "./scandldf.mjs";
 import { BinOpAdd, BinOpMax } from "./binop.mjs";
+import { Multisplit } from "./multisplit.mjs";
+import { RadixBins } from "./bins.mjs";
 
 const WORKGROUP_SIZE = 256;
 const INITIAL_SYMBOLS = 7; /* 7 x 9 bits = 63 bits */
@@ -51,6 +53,9 @@ const MAX_ROUNDS = 40;
  * read back when that count shrank by less than this factor, or is this small */
 const SPECULATE_RATIO = 0.75;
 const SPECULATE_SMALL = 1 << 16;
+/* localScatter "auto": from this n up (on an M1 Max a random 4-byte write
+ * cost 0.23 ns at 2^20, 0.34 at 2^22, 0.80 at 2^24) */
+const LOCAL_SCATTER_FROM = 1 << 22;
 
 export class SuffixArray extends BasePrimitive {
   constructor(args) {
@@ -68,6 +73,22 @@ export class SuffixArray extends BasePrimitive {
      * actual number is count[round - 1], on the GPU); round: 0 = initial */
     this.params = new UniformStruct("SAParams", { n: "u32", m: "u32", h: "u32", b: "u32", initial: "u32", round: "u32" });
     this.speculate ??= true;
+    /* localScatter: apply the rank writes (and the output's) through a
+     * Multisplit by destination block, so that each block's writes stay in
+     * cache, instead of scattering them directly. "auto" (default): for
+     * n >= 2^22, where the rank array outgrows the caches. */
+    this.localScatter ??= "auto";
+    if (this.localScatter === "auto") this.localScatter = this.n >= LOCAL_SCATTER_FROM;
+    if (this.localScatter) {
+      const L = Math.max(1, Math.ceil(Math.log2(this.n + 1)));
+      const bits = Math.min(8, L);
+      /* destination's top bits (a rank of n may wrap to bucket 0: only
+       * locality, not correctness, depends on the bucket) */
+      const bins = new RadixBins({ shift: L - bits, bits });
+      const split = (options) => new Multisplit({ device: this.device, adapter: this.adapter, bins, ...options });
+      this.rankSplit = split({ type: "keyvalue" }); /* (suffix, new rank) by suffix */
+      this.outputSplit = split({ values: "index" }); /* (rank, suffix) by rank */
+    }
     /* sortOptions: passed to both OneSweep sorts (e.g., KEYS_PER_THREAD) */
     const sortArgs = { device: this.device, adapter: this.adapter, datatype: "u64", type: "keyvalue", direction: "ascending", ...this.sortOptions };
     this.initialSort = new OneSweepSort({ ...sortArgs, KEY_BITS: 9 * INITIAL_SYMBOLS });
@@ -142,7 +163,7 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
      * above every real one, which the sort moves to the end */
     let ones = (1u << sa.b) - 1u;
     keys[p] = packRanks(ones, ones);
-    payload[p] = 0u;
+    payload[p] = sa.n; /* no suffix: a local-scatter write to it is dropped */
     return;
   }
   let i = activeList[p];
@@ -190,7 +211,7 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   let r = groupRank(k) + (q - g);
   /* the first subgroup of a group keeps its rank: skip its (random) write,
    * about half of them on text; the initial round writes every rank */
-  if (sa.initial == 1u || q != g) { rank[payload[p]] = r; }
+  ${this.localScatter ? "/* the rank is written later, through a multisplit (applyWGSL) */" : "if (sa.initial == 1u || q != g) { rank[payload[p]] = r; }"}
   newRanks[p] = r;
   /* a subgroup of one: p starts it and p + 1 does not continue it */
   let alone = q == p && (p + 1u == m || !sameKey(keys[p + 1u], k));
@@ -224,6 +245,19 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   let p = gid;
   if (p >= sa.n) { return; }
   outputBuffer[p] = sorted[p];
+}`;
+
+  /** apply multisplit (destination, value) pairs: written[dest - offset] = value;
+   * a destination of n or more (a speculative round's spare) is dropped */
+  applyWGSL = (offset) => () => /* wgsl */ `
+${this.commonWGSL()}
+@compute @workgroup_size(${WORKGROUP_SIZE})
+fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
+  ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
+  let p = gid;
+  if (p >= sa.m) { return; }
+  let d = dest[p];
+  if (d - ${offset}u < sa.n) { written[d - ${offset}u] = value[p]; }
 }`;
 
   /** SA[rank[i] - 1] = i */
@@ -359,6 +393,22 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
         ],
         m
       ),
+      /* local scatter: group (suffix, new rank) by the suffix's block, into
+       * the free start buffers, then write the ranks block by block */
+      ...(this.localScatter
+        ? [
+            new ExecutePrimitive({
+              primitive: Object.assign(this.rankSplit, { length: m }),
+              buffers: { keysIn: sortedPayload, valuesIn: newRanks, keysOut: "groupStart", valuesOut: "subgroupStart" },
+            }),
+            this.kernel(
+              this.applyWGSL(0),
+              "apply ranks",
+              [u32s("dest", "groupStart"), u32s("value", "subgroupStart"), u32s("written", "rankBuffer", "read_write")],
+              m
+            ),
+          ]
+        : []),
     ];
   }
 
@@ -367,12 +417,25 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
     if (this.stage === "output") {
       const outputLength = this.getBuffer("outputBuffer")?.size / 4;
       if (!(outputLength >= this.n)) throw new Error(`SuffixArray: outputBuffer must hold n = ${this.n} u32s`);
-      actions.push(
-        this.params.allocate("saParams", { n: this.n, m: 0, h: this.h, b: this.rankBits, initial: 0, round: 0 }),
+      const output =
         this.rounds === 0
           ? this.kernel(this.copyOutputWGSL, "output (copy)", [u32s("sorted", this.sortedPayload), u32s("outputBuffer", "outputBuffer", "read_write")], this.n)
-          : this.kernel(this.outputWGSL, "output", [u32s("rank", "rankBuffer"), u32s("outputBuffer", "outputBuffer", "read_write")], this.n)
-      );
+          : this.localScatter
+            ? [
+                /* group (rank, suffix) by the rank's block, then write SA block by block */
+                new ExecutePrimitive({
+                  primitive: Object.assign(this.outputSplit, { length: this.n }),
+                  buffers: { keysIn: "rankBuffer", keysOut: "listA", valuesOut: "listB" },
+                }),
+                this.kernel(
+                  this.applyWGSL(1),
+                  "output",
+                  [u32s("dest", "listA"), u32s("value", "listB"), u32s("written", "outputBuffer", "read_write")],
+                  this.n
+                ),
+              ]
+            : this.kernel(this.outputWGSL, "output", [u32s("rank", "rankBuffer"), u32s("outputBuffer", "outputBuffer", "read_write")], this.n);
+      actions.push(this.params.allocate("saParams", { n: this.n, m: this.n, h: this.h, b: this.rankBits, initial: 0, round: 0 }), ...[output].flat());
       return actions;
     }
     return [...actions, ...this.roundActions()];
@@ -463,7 +526,7 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   }
 
   destroy() {
-    for (const p of [this.initialSort, this.roundSort, this.groupScan, this.subgroupScan, this.keepScan]) p.destroy();
+    for (const p of [this.initialSort, this.roundSort, this.groupScan, this.subgroupScan, this.keepScan, this.rankSplit, this.outputSplit]) p?.destroy();
     super.destroy();
   }
 }
@@ -475,6 +538,7 @@ const u32s = (name, buffer, access = "read") => ({ name, buffer, access, type: "
 /** Which phase of the algorithm a kernel label belongs to. */
 export function suffixArrayPhase(label = "") {
   if (label.startsWith("OneSweep")) return "sort";
+  if (label.startsWith("Multisplit") || label.startsWith("SuffixArray apply ranks")) return "local scatter";
   if (/scan/i.test(label)) return "scans";
   const m = label.match(/^SuffixArray (initial keys|pack|heads|update ranks|compact|output)/);
   return m ? m[1] : "other";
@@ -506,8 +570,21 @@ export function suffixArrayPhase(label = "") {
  * suffixes whose rank does not change (about half on text), so the random
  * count is an upper bound. With speculation (execute()), a round's
  * capacity can exceed its active count: pass the run's `capacities` and the
- * sort and scans are counted at the capacity. */
-export function suffixArrayTraffic({ n, activeCounts, capacities = activeCounts, rankBits = Math.ceil(Math.log2(n + 1)) }) {
+ * sort and scans are counted at the capacity.
+ *
+ * With localScatter, update writes no ranks; instead a Multisplit of the
+ * (suffix, rank) pairs by the suffix's block (read 4 to count, read 8 and
+ * write 8 to scatter) and an apply kernel (read 8, write 4 within one block
+ * at a time) do, all streaming: 32 bytes. The output likewise: a
+ * Multisplit of (rank, index) (read 4 + 4, write 8), then apply (read 8,
+ * write 4). (The multisplits' own small scans are not counted.) */
+export function suffixArrayTraffic({
+  n,
+  activeCounts,
+  capacities = activeCounts,
+  localScatter = false,
+  rankBits = Math.ceil(Math.log2(n + 1)),
+}) {
   const passes = (bits) => Math.ceil(bits / 8);
   const bytes = {};
   const random = {};
@@ -523,10 +600,17 @@ export function suffixArrayTraffic({ n, activeCounts, capacities = activeCounts,
     add("sort", (8 + 24 * passes(initial ? 9 * INITIAL_SYMBOLS : 2 * rankBits)) * c);
     add("heads", 16 * m);
     add("scans", 24 * c);
-    add("update ranks", 32 * m, m);
+    if (localScatter) {
+      add("update ranks", 28 * m);
+      add("local scatter", 20 * c + 12 * m);
+    } else add("update ranks", 32 * m, m);
     add("compact", 24 * m);
   });
-  add("output", 8 * n, activeCounts.length > 1 ? n : 0);
+  if (activeCounts.length === 1) add("output", 8 * n);
+  else if (localScatter) {
+    add("local scatter", 16 * n);
+    add("output", 12 * n);
+  } else add("output", 8 * n, n);
   const total = Object.values(bytes).reduce((a, b) => a + b, 0);
   const totalRandom = Object.values(random).reduce((a, b) => a + b, 0);
   return { bytes, random, total, totalRandom };

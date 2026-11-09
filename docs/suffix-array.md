@@ -195,13 +195,13 @@ With the measured sort rate and per-access costs in place of copy bandwidth, the
 2. **When the initial round resolves every suffix, the output is a copy** of the sorted payload instead of a scatter by rank.
 3. **Unchanged ranks are not rewritten.** The first subgroup of each group keeps its rank, so update skips its scatter: on English-like text that is 57% of the rank writes (20% on the Fibonacci word, 12% on random ACGT, measured on the CPU at 2^17).
 4. **Speculative rounds** (decision 4) hide the per-round readback when the active count shrinks slowly.
+5. **Local scatter** (from n = 2^22, `localScatter`). The rank updates and the output no longer scatter directly. The (suffix, rank) pairs are first grouped by the suffix's block with [`Multisplit`](../multisplit/) (256 blocks), then written block by block, so each block's writes stay in cache. That replaces about 290 bytes of traffic per random write with about 32 streamed bytes.
 
 **Next, in order of expected gain:**
 
-1. **Sort rate.** Find what limits OneSweep on 64-bit key-value data on this GPU (tile size under 32 KB of workgroup memory, the lookback, the scatter); the sort is half the time on every input.
-2. **Fewer key bits.** Later rounds sort 2b bits; replacing `rank[i]` with a dense id for its group (and dropping the sorted-by-construction high part) would save passes once few groups remain.
-3. **Local rank scatters.** Group the update's scatters by destination block before writing (Büren et al.), so each cache line is written once.
-4. **Fewer readbacks.** Let OneSweep take its length from a GPU buffer, so several rounds can be submitted together; this matters for repetitive inputs and small n.
+1. **Sort rate.** OneSweep's tile size sets how many workgroups share a core; on the M1 Max, 4 keys per thread for 64-bit key-value (instead of 12) made a pass 1.35 times faster (`misc/onesweep_probe.mjs`). The default needs measurements on other GPUs before it changes; meanwhile `sortOptions: { KEYS_PER_THREAD }` sets it.
+2. **Local gathers.** Pack's `rank[i + h]` gather is still random. The same multisplit, applied to the requests and then to the answers, would make it local too, at about twice the streaming cost.
+3. **Fewer key bits.** Later rounds sort 2b bits; replacing `rank[i]` with a dense id for its group would save passes once few groups remain.
 
 **How to measure:** `node misc/benchmark_suffixarray.mjs random256,random4,english,fibonacci,allA 20,22,24` prints the device rates at each size, then per input the rounds, work ratio, wall and GPU time, the overhead per submission, both models (copy bandwidth only, and calibrated with the device rates), and per phase the GPU time, modeled bytes and achieved bandwidth.
 
