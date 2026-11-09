@@ -1,19 +1,17 @@
-/* Why is OneSweep slow on this GPU? Sweeps the lookback's spin limit
- * (MAX_SPIN_COUNT) and the tile size (KEYS_PER_THREAD) and reports, for one
- * pass, the time, the bandwidth it achieves, and how often the lookback
- * gave up and fell back to recomputing a predecessor's histogram.
+/* Why is OneSweep slow on this GPU? Sweeps the tile size (KEYS_PER_THREAD)
+ * and, with --spin, the lookback's spin limit (MAX_SPIN_COUNT), and reports
+ * for each: the workgroup memory a pass uses, the time of one pass, the
+ * bandwidth it achieves, and how often the lookback gave up and recomputed a
+ * predecessor's histogram (the fallback).
  *
- *   node misc/onesweep_probe.mjs [log2 n] [u32|u64kv]
+ *   node misc/onesweep_probe.mjs [log2 n] [u32|u64kv] [--spin]
  *   node misc/onesweep_probe.mjs 24 u32
  *
- * Reading the result:
- * - fallbacks near 0 at every spin limit, and time per pass falling with
- *   bigger tiles: the pass is bound by per-tile work (lookback latency,
- *   ranking), not by memory;
- * - many fallbacks that fall as the spin limit rises, with the time: the
- *   lookback gives up too soon on this GPU, and each fallback rereads a tile;
- * - time per pass flat across both: bound elsewhere (the scatter, or
- *   occupancy); compare with misc/device_rates.mjs.
+ * On an M1 Max (2^24): the spin limit made no difference (fallbacks were a
+ * few percent of tiles at any limit); the tile size did, through occupancy.
+ * A pass was fastest with the largest tile that still let two (u32 keys, 11
+ * keys per thread, 1.4x the default's speed) or three (u64 key-value, 4 keys
+ * per thread, 1.35x) workgroups share a core's 32 KB of workgroup memory.
  * Keys are random each run; each point is the median of 5 runs after a
  * warm-up. */
 import { createNodeDevice } from "./node_device.mjs";
@@ -22,6 +20,7 @@ import { copyBandwidth, sortBytesPerElement } from "./device_rates.mjs";
 
 const logN = Number(process.argv[2] ?? 24);
 const kind = process.argv[3] ?? "u32";
+const spins = process.argv.includes("--spin") ? [4, 16, 64, 256, 4096] : [4];
 const n = 2 ** logN;
 const options = kind === "u64kv" ? { datatype: "u64", type: "keyvalue" } : { datatype: "u32", type: "keysonly" };
 const keyBytes = options.datatype === "u64" ? 8 : 4;
@@ -40,10 +39,10 @@ if (options.type === "keyvalue") Object.assign(args, { payloadInOut: device.crea
 const median = (a) => [...a].sort((x, y) => x - y)[a.length >> 1];
 const passBytes = 2 * (keyBytes + (options.type === "keyvalue" ? 4 : 0)) * n;
 
-console.log("keys/thread  spin   tiles   pass ms   pass GB/s   sort GB/s   fallbacks per pass (% of tiles)");
-const kpts = options.datatype === "u64" ? [4, 6, 8, 10, 12] : [5, 7, 9, 11, 13, 15];
+console.log("keys/thread  spin  wg bytes   tiles   pass ms   pass GB/s   sort GB/s   fallbacks per pass (% of tiles)");
+const kpts = options.datatype === "u64" ? [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 for (const KEYS_PER_THREAD of kpts) {
-  for (const MAX_SPIN_COUNT of [4, 16, 64, 256, 4096]) {
+  for (const MAX_SPIN_COUNT of spins) {
     let sort;
     try {
       sort = new OneSweepSort({ device, adapter, ...options, direction: "ascending", KEYS_PER_THREAD, MAX_SPIN_COUNT, countFallbacks: true });
@@ -68,7 +67,7 @@ for (const KEYS_PER_THREAD of kpts) {
       const fb = fallbacks.perPass;
       const pct = ((100 * fb.reduce((a, b) => a + b, 0)) / fb.length / fallbacks.tiles).toFixed(1);
       console.log(
-        `${String(KEYS_PER_THREAD).padStart(11)} ${String(MAX_SPIN_COUNT).padStart(5)} ${String(fallbacks.tiles).padStart(7)}` +
+        `${String(KEYS_PER_THREAD).padStart(11)} ${String(MAX_SPIN_COUNT).padStart(5)} ${String(sort.passWorkgroupBytes(KEYS_PER_THREAD)).padStart(9)} ${String(fallbacks.tiles).padStart(7)}` +
           ` ${(pass / 1e6).toFixed(3).padStart(9)} ${(passBytes / pass).toFixed(1).padStart(11)}` +
           ` ${((sortBytesPerElement(options) * n) / total).toFixed(1).padStart(11)}   ${fb.join(" ")} (${pct}%)`
       );
