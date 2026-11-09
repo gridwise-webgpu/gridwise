@@ -36,6 +36,17 @@ export function nodeGPU(flags = []) {
   return gpu;
 }
 
+/** The names of the adapters Dawn can use (it lists them when asked for
+ * one that does not exist). */
+export async function availableAdapters() {
+  try {
+    await nodeGPU(["adapter=\u0001none"]).requestAdapter();
+  } catch (e) {
+    return [...String(e).matchAll(/name: '([^']*)'/g)].map((m) => m[1]);
+  }
+  return [];
+}
+
 /** create() flags that pick the adapter whose name contains `name` as a
  * word, ignoring case and with "_" for a space ("a100", "v100", "titan_v"):
  * for nodes with several kinds of GPU, where Vulkan sees them all whatever
@@ -45,12 +56,7 @@ export function nodeGPU(flags = []) {
  * names the match exactly. */
 export async function adapterFlags(name = globalThis.process?.env?.GRIDWISE_ADAPTER) {
   if (!name) return [];
-  let available = [];
-  try {
-    await nodeGPU(["adapter=\u0001none"]).requestAdapter();
-  } catch (e) {
-    available = [...String(e).matchAll(/name: '([^']*)'/g)].map((m) => m[1]);
-  }
+  const available = await availableAdapters();
   const word = new RegExp(`(^|[^a-z0-9])${name.toLowerCase().replace(/_/g, " ")}($|[^a-z0-9])`);
   const match = available.find((n) => word.test(n.toLowerCase()));
   if (!match) throw new Error(`no WebGPU adapter matches "${name}"; available: ${available.join("; ") || "none"}`);
