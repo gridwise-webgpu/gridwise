@@ -58,6 +58,15 @@ export class OneSweepSort extends BaseSort {
      * pass into a small buffer; read them with fallbackCounts(). For
      * measurement only: it adds an atomic per fallback. */
     this.MAX_SPIN_COUNT = args.MAX_SPIN_COUNT ?? 4;
+    /** ABLATE (diagnosis only: the output is NOT sorted): "scatter" writes
+     * each tile's keys and payloads back to the tile's own range (coalesced)
+     * instead of to their sorted positions; "lookback" skips the lookback
+     * (each tile assumes no predecessors); "scatter+lookback" both. Timing a
+     * pass with each removed shows what that part costs. */
+    this.ABLATE = args.ABLATE ?? "";
+    if (!["", "scatter", "lookback", "scatter+lookback"].includes(this.ABLATE)) {
+      throw new Error(`OneSweepSort: unknown ABLATE ${this.ABLATE}`);
+    }
     this.countFallbacks = !!args.countFallbacks;
 
     /** length: sort only the first `length` keys (and payloads) of the
@@ -554,7 +563,7 @@ ${this.wlmsWGSL()}
         /** we reset sortBump back to zero in a few lines to make this
          * kernel idempotent (so we can dispatch it multiple times for timing) */
         wg_broadcast_tile_id = atomicAdd(&sortBump[sortParameters.shift >> 3u], 1u);
-        atomicStore(&wg_sgCompletionCount, 0);
+        atomicStore(&wg_sgCompletionCount, ${this.ABLATE.includes("lookback") ? "BLOCK_DIM / sgsz /* ABLATE lookback: already complete */" : "0"});
         wg_incomplete = 0;
       }
       let partid = workgroupUniformLoad(&wg_broadcast_tile_id);
@@ -959,8 +968,7 @@ ${this.wlmsWGSL()}
           let digit = (key >> shift) & RADIX_MASK;`
           }
           /* difference between keysonly & keyvalue: keyvalue needs to save/reuse digit */
-          let destaddr = directionizeIndex(wg_localHist[digit] + i,
-                                           sortParameters.length);
+          let destaddr = ${this.ABLATE.includes("scatter") ? "partid * PART_SIZE + i; /* ABLATE scatter */" : `directionizeIndex(wg_localHist[digit] + i, sortParameters.length);`}
           ${this.type === "keyvalue" ? /* WGSL */ "digits[k] = digit;" : ""}
           keysOut[destaddr] = keyFromU32(key);
           i += BLOCK_DIM;
@@ -989,8 +997,7 @@ ${this.wlmsWGSL()}
         i = builtinsNonuniform.lidx;
         for (var k = 0u; k < KEYS_PER_THREAD; k += 1u) {
           var value = atomicLoad(&wg_warpHist[i]);
-          var destaddr = directionizeIndex(wg_localHist[digits[k]] + i,
-                                             sortParameters.length);
+          var destaddr = ${this.ABLATE.includes("scatter") ? "partid * PART_SIZE + i; /* ABLATE scatter */" : `directionizeIndex(wg_localHist[digits[k]] + i, sortParameters.length);`}
           payloadOut[destaddr] = value;
           i += BLOCK_DIM;
         }`
@@ -1012,8 +1019,7 @@ ${this.wlmsWGSL()}
             let digit = (key >> shift) & RADIX_MASK;`
             }
             /* difference between keysonly & keyvalue: keyvalue needs to save/reuse digit */
-            let destaddr = directionizeIndex(wg_localHist[digit] + i,
-                                             sortParameters.length);
+            let destaddr = ${this.ABLATE.includes("scatter") ? "partid * PART_SIZE + i; /* ABLATE scatter */" : `directionizeIndex(wg_localHist[digit] + i, sortParameters.length);`}
             ${this.type === "keyvalue" ? /* WGSL */ "digits[k] = digit;" : ""}
             keysOut[destaddr] = keyFromU32(key);
           }
@@ -1046,8 +1052,7 @@ ${this.wlmsWGSL()}
         for (var k = 0u; k < KEYS_PER_THREAD; k += 1u) {
           if (i < final_size) {
             var value = atomicLoad(&wg_warpHist[i]);
-            var destaddr = directionizeIndex(wg_localHist[digits[k]] + i,
-                                               sortParameters.length);
+            var destaddr = ${this.ABLATE.includes("scatter") ? "partid * PART_SIZE + i; /* ABLATE scatter */" : `directionizeIndex(wg_localHist[digits[k]] + i, sortParameters.length);`}
             payloadOut[destaddr] = value;
           }
           i += BLOCK_DIM;
