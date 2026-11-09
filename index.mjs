@@ -18,6 +18,13 @@ export {
 } from "./src/multisplitperm.mjs";
 export { ShunPerm } from "./src/shunperm.mjs";
 export {
+  SuffixArray,
+  suffixArrayReference,
+  checkSuffixArray,
+  suffixArrayTraffic,
+  suffixArrayPhase,
+} from "./src/suffixarray.mjs";
+export {
   randomBitsWGSL,
   randomBitsJS,
   PHILOX_WGSL,

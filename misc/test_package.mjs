@@ -61,6 +61,8 @@ async function main() {
       "localFinishBuffers",
       "MultisplitPerm",
       "ShunPerm",
+      "SuffixArray",
+      "checkSuffixArray",
       "tuneMultisplitPerm",
       "randomBitsWGSL",
       "randomBitsJS",
