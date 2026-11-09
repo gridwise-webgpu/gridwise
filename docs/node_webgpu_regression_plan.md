@@ -52,6 +52,15 @@ Node.js standard imports cache modules. By importing the class definitions (such
 The implementation is located at:
 * **Node Runner Script**: [examples/regression_node.mjs](../examples/regression_node.mjs)
 
+Environment variables for `node examples/regression_node.mjs`:
+
+* `CORRECTNESS_ONLY=true`: one pass, with no warm-up, timing or performance comparison.
+* `SKIP_LARGE=true`: skip the large (MB-sized) tests, for example on a GPU simulator.
+* `TEST_FILTER=<regex>`: run only the tests whose names match, for example `TEST_FILTER=u64` or `TEST_FILTER='^sort'`. In the browser, use `?filter=<regex>`. Use it with `CORRECTNESS_ONLY=true`: a filtered run is not a complete baseline.
+* `DISABLE_SUBGROUPS=true`: do not request subgroups, so Gridwise emulates them.
+* `EXPECTED_FAILURES=sort,perm`: count failures in these test families separately, for a known gap on a particular device.
+* `UPDATE_BASELINE=true`, `FAIL_ON_REGRESSION=true`: record the performance baseline, or fail when a test is slower than it.
+
 ---
 
 ## GPGPU Performance Regression Philosophy

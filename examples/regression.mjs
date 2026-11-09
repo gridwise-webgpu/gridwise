@@ -28,6 +28,11 @@ export async function main(navigator) {
   /* Runner factory — independent pass/total counters per suite           */
   /* ------------------------------------------------------------------ */
 
+  /* Run only the tests whose names match a regular expression: TEST_FILTER in
+   * Node (e.g. TEST_FILTER=u64), ?filter= in the browser. */
+  const filterSource = isNode ? globalThis.process?.env?.TEST_FILTER : new URLSearchParams(globalThis.location?.search).get("filter");
+  const testFilter = filterSource ? new RegExp(filterSource) : null;
+
   function makeRunner(listEl, summaryEl) {
     let passed = 0;
     let total = 0;
@@ -56,6 +61,7 @@ export async function main(navigator) {
     }
 
     async function runTest(name, testFn) {
+      if (testFilter && !testFilter.test(name)) return;
       try {
         const errorStr = await testFn();
         report(name, errorStr === "", errorStr.split("\n")[0]);
@@ -193,9 +199,30 @@ export async function main(navigator) {
   /* Sort helpers                                                         */
   /* ------------------------------------------------------------------ */
 
-  function generateSortInput(datatype, size) {
+  /* keys: "random" (default), or for u64 two patterns that isolate one 32-bit
+   * word, which OneSweep sorts in separate passes: "high" (random high word,
+   * constant low word) and "fewUnique" (16 distinct keys spread over both
+   * words: many ties, so a key-value sort also tests stability) */
+  const u32Random = () => Math.floor(Math.random() * 2 ** 32);
+  function generateSortInput(datatype, size, keys = "random") {
     const TypedArray = datatypeToTypedArray(datatype);
     const data = new TypedArray(size);
+    if (datatype === "u64") {
+      const distinct = Array.from({ length: 16 }, () => (BigInt(u32Random()) << 32n) | BigInt(u32Random()));
+      for (let i = 0; i < size; i++) {
+        switch (keys) {
+          case "high":
+            data[i] = (BigInt(u32Random()) << 32n) | 0x12345678n;
+            break;
+          case "fewUnique":
+            data[i] = distinct[Math.floor(Math.random() * distinct.length)];
+            break;
+          default:
+            data[i] = (BigInt(u32Random()) << 32n) | BigInt(u32Random());
+        }
+      }
+      return data;
+    }
     for (let i = 0; i < size; i++) {
       switch (datatype) {
         case "u32":
@@ -214,9 +241,9 @@ export async function main(navigator) {
     return data;
   }
 
-  async function runSortTest({ type, datatype, direction, size, keyBits, copyOutputToTemp = true }) {
+  async function runSortTest({ type, datatype, direction, size, keyBits, keys, copyOutputToTemp = true }) {
     const TypedArray = datatypeToTypedArray(datatype);
-    const memsrcKeys = generateSortInput(datatype, size);
+    const memsrcKeys = generateSortInput(datatype, size, keys);
     const isKeyValue = type === "keyvalue";
 
     let memsrcPayload = null;
@@ -351,8 +378,9 @@ export async function main(navigator) {
    * Returns "" on success, as primitive.validate() does. */
   function validatePartialKeySort({ keyBits, direction, inputKeys, outputKeys, inputPayload, outputPayload }) {
     const sortedBits = 8 * Math.ceil(keyBits / 8);
-    const mask = sortedBits >= 32 ? 0xffffffff : (2 ** sortedBits - 1);
-    const low = (k) => (k & mask) >>> 0;
+    const big = inputKeys instanceof BigUint64Array;
+    const mask = big ? (1n << BigInt(sortedBits)) - 1n : sortedBits >= 32 ? 0xffffffff : 2 ** sortedBits - 1;
+    const low = big ? (k) => k & mask : (k) => (k & mask) >>> 0;
     let errors = "", budget = 5;
     for (let i = 1; i < outputKeys.length && budget > 0; i++) {
       const a = low(outputKeys[i - 1]), b = low(outputKeys[i]);
@@ -363,8 +391,8 @@ export async function main(navigator) {
     }
     /* same multiset of (key, payload) pairs, compared as sorted lists */
     const pairs = (keys, vals) => {
-      const p = Array.from(keys, (k, i) => [k >>> 0, vals ? vals[i] : 0]);
-      p.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+      const p = Array.from(keys, (k, i) => [big ? k : k >>> 0, vals ? vals[i] : 0]);
+      p.sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : x[1] - y[1]));
       return p;
     };
     if (budget > 0) {
@@ -434,6 +462,23 @@ export async function main(navigator) {
     ["keysonly", "u32", "ascending", 4096, 16],
     ["keysonly", "u32", "ascending", 4096, 24],
     ["keyvalue", "u32", "ascending", 4096, 20],
+    /* 64-bit keys (vec2u). 8 passes for a full key; passes 5-8 sort the high
+     * word. A 64b tile is 12 keys/thread x 256 = 3072 keys. */
+    ["keysonly", "u64", "ascending", 256],
+    ["keysonly", "u64", "descending", 256],
+    ["keysonly", "u64", "ascending", 32] /* smaller than one tile */,
+    ["keysonly", "u64", "ascending", 10000] /* not a whole number of tiles */,
+    ["keysonly", "u64", "ascending", 4096, undefined, "high"] /* only the high-word passes matter */,
+    ["keyvalue", "u64", "ascending", 4096],
+    ["keyvalue", "u64", "descending", 4096],
+    ["keyvalue", "u64", "ascending", 4096, undefined, "fewUnique"] /* ties: stability */,
+    ["keyvalue", "u64", "descending", 4096, undefined, "fewUnique"],
+    /* partial 64-bit keys: the low KEY_BITS of the whole 64-bit value */
+    ["keysonly", "u64", "ascending", 4096, 8] /* 1 pass */,
+    ["keysonly", "u64", "ascending", 4096, 32] /* exactly the low word */,
+    ["keysonly", "u64", "ascending", 4096, 40] /* crosses into the high word */,
+    ["keyvalue", "u64", "ascending", 4096, 48] /* e.g. a packed pair of 24-bit ranks */,
+    ["keyvalue", "u64", "descending", 4096, 56],
   ];
 
   /* No copyOutputToTemp: the output stays in whichever buffer the last pass
@@ -445,6 +490,8 @@ export async function main(navigator) {
     ["keysonly", "u32", "ascending", 4096, 16] /* 2 passes: keysInOut */,
     ["keyvalue", "u32", "ascending", 4096, 24] /* 3 passes: keysTemp */,
     ["keyvalue", "u32", "ascending", 4096] /* 4 passes: keysInOut */,
+    ["keyvalue", "u64", "ascending", 4096, 40] /* 5 passes: keysTemp */,
+    ["keyvalue", "u64", "ascending", 4096] /* 8 passes: keysInOut */,
   ];
 
   /* Large tests: MB-sized buffers (4 bytes/element), sizes divisible by 4,
@@ -480,6 +527,11 @@ export async function main(navigator) {
     /* partial key widths at a size spanning many partitions */
     ["keysonly", "u32", "ascending", 1_048_576, 12],
     ["keyvalue", "u32", "ascending", 1_048_576, 20],
+    /* 64-bit keys: many partitions, so the lookback and fallback run on vec2u keys */
+    ["keysonly", "u64", "ascending",  1_000_000],
+    ["keysonly", "u64", "descending", 1_000_000],
+    ["keyvalue", "u64", "ascending",  1_000_000],
+    ["keyvalue", "u64", "ascending",  1_048_576, 48],
     /* one large sort (2^24 elements, 64 MiB of keys) */
     ["keysonly", "u32", "ascending", 16_777_216],
   ];
@@ -1082,9 +1134,12 @@ ${randomBitsWGSL(this.rng)}
     await runTest(name, () => runScanTest({ type, datatype, binop, size, Primitive: HierarchicalScan }));
   }
 
-  for (const [type, datatype, direction, size, keyBits] of sortTests) {
-    const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}${keyBits !== undefined ? ` keyBits=${keyBits}` : ""}`;
-    await runTest(name, () => runSortTest({ type, datatype, direction, size, keyBits }));
+  const sortName = (type, datatype, direction, size, keyBits, keys) =>
+    `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}` +
+    `${keyBits !== undefined ? ` keyBits=${keyBits}` : ""}${keys ? ` keys=${keys}` : ""}`;
+  for (const [type, datatype, direction, size, keyBits, keys] of sortTests) {
+    const name = sortName(type, datatype, direction, size, keyBits, keys);
+    await runTest(name, () => runSortTest({ type, datatype, direction, size, keyBits, keys }));
   }
 
   for (const [type, datatype, direction, size, keyBits] of sortNoCopyTests) {
@@ -1147,9 +1202,9 @@ ${randomBitsWGSL(this.rng)}
       await runLarge(name, () => runScanTest({ type, datatype, binop, size, Primitive: HierarchicalScan }));
     }
 
-    for (const [type, datatype, direction, size, keyBits] of largeSortTests) {
-      const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}${keyBits !== undefined ? ` keyBits=${keyBits}` : ""}`;
-      await runLarge(name, () => runSortTest({ type, datatype, direction, size, keyBits }));
+    for (const [type, datatype, direction, size, keyBits, keys] of largeSortTests) {
+      const name = sortName(type, datatype, direction, size, keyBits, keys);
+      await runLarge(name, () => runSortTest({ type, datatype, direction, size, keyBits, keys }));
     }
 
     for (const [n, options] of largePermTests) {
