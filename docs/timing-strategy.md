@@ -43,7 +43,7 @@ const r = await primitive.benchmark({ inputBuffer, outputBuffer }); // execute()
 2. **Time** `repeats` (5) executes with `trials` dispatches each (by default, the number the warm-up reached), with GPU timestamps if the device has them (per kernel, labeled by `kernelLabels()`), else CPU timing.
 3. **Report** medians per trial.
 
-For measurements that must be comparable between runs, also lock the GPU's clocks where you can, and use full-resolution timestamps (above). In Node, `misc/node_device.mjs` (`createNodeDevice()`) sets up a device that way, and `misc/benchmark_node.mjs` benchmarks the main primitives with `benchmark()`.
+For measurements that must be comparable between runs, also lock the GPU's clocks where you can, and use full-resolution timestamps (above). In Node, `misc/node_device.mjs` (`createNodeDevice()`) sets up a device that way, `misc/benchmark_node.mjs` benchmarks the main primitives with `benchmark()`, and `misc/device_rates.mjs` measures the rates performance models are built from: copy bandwidth, OneSweep's sort rate, and the cost of random 4-byte gathers and scatters.
 
 ## CPU timing
 

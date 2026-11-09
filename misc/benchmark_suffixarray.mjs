@@ -24,8 +24,7 @@
 import { readFileSync } from "node:fs";
 import { createNodeDevice } from "./node_device.mjs";
 import { SuffixArray, suffixArrayTraffic, suffixArrayPhase, checkSuffixArray } from "../src/suffixarray.mjs";
-import { OneSweepSort } from "../src/onesweep.mjs";
-import { BasePrimitive, Kernel, UniformStruct } from "../src/primitive.mjs";
+import { copyBandwidth, sortRate, randomAccessCost } from "./device_rates.mjs";
 
 const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const fileArg = process.argv.find((a) => a.startsWith("--file="))?.slice(7);
@@ -38,133 +37,22 @@ console.log(`adapter: ${vendor} ${architecture} ${description ?? ""}`);
 const gpuTiming = device.features.has("timestamp-query");
 console.log(`subgroups: ${device.features.has("subgroups")}, GPU timestamps: ${gpuTiming}`);
 
-/* ---- copy bandwidth: the yardstick (each byte is read once and written once) */
-async function copyBandwidth(bytes) {
-  const usage = GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
-  const a = device.createBuffer({ size: bytes, usage });
-  const b = device.createBuffer({ size: bytes, usage });
-  const run = async (reps) => {
-    const encoder = device.createCommandEncoder();
-    for (let i = 0; i < reps; i++) encoder.copyBufferToBuffer(i % 2 ? b : a, 0, i % 2 ? a : b, 0, bytes);
-    const start = performance.now();
-    device.queue.submit([encoder.finish()]);
-    await device.queue.onSubmittedWorkDone();
-    return performance.now() - start;
-  };
-  await run(4);
-  const ms = Math.min(await run(20), await run(20));
-  a.destroy();
-  b.destroy();
-  return (2 * bytes * 20) / (ms * 1e6); /* GB/s */
-}
-/* big enough to leave the caches (at least 16 bytes per character of the largest n) */
+/* ---- device rates (misc/device_rates.mjs): copy bandwidth, big enough to
+ * leave the caches; and, at each size, the rate of the sort SuffixArray uses
+ * (64-bit key-value) and the cost of random 4-byte gathers and scatters */
 const copyBytes = Math.min(device.limits.maxBufferSize, Math.max(1 << 20, Math.min(256 << 20, 16 * 2 ** Math.max(...logSizes))));
-const bandwidth = await copyBandwidth(copyBytes);
+const bandwidth = await copyBandwidth(device, copyBytes);
 console.log(`copy bandwidth (read + write): ${bandwidth.toFixed(1)} GB/s`);
-
-/* ---- device rates at size n, to calibrate the model: what this GPU achieves
- * on the sort SuffixArray uses, and on random 4-byte reads and writes into an
- * n-element array (both depend on n, through the caches) */
-const median = (a) => [...a].sort((x, y) => x - y)[a.length >> 1];
-async function gpuNS(primitive, args) {
-  await primitive.execute({ ...args, enableGPUTiming: true });
-  const { gpuTotalTimeNS } = await primitive.getTimingResult();
-  return [gpuTotalTimeNS].flat().reduce((a, b) => a + b, 0);
-}
-const storage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
-let seed = 0x2545f491;
-const randomU32 = (k) => Uint32Array.from({ length: k }, () => (seed = (Math.imul(seed ^ (seed >>> 15), 0x2c1b3c6d) + 0x9e3779b9) >>> 0));
-
-/** GB/s of a 64-bit key-value OneSweep sort of n random keys with 63-bit keys
- * (the initial round's sort), counting 8 + 24 bytes per element per pass */
-async function sortRate(n) {
-  const keys = randomU32(2 * n);
-  const keysInOut = device.createBuffer({ size: 8 * n, usage: storage });
-  const keysTemp = device.createBuffer({ size: 8 * n, usage: storage });
-  const payloadInOut = device.createBuffer({ size: 4 * n, usage: storage });
-  const payloadTemp = device.createBuffer({ size: 4 * n, usage: storage });
-  const sort = new OneSweepSort({ device, adapter, datatype: "u64", type: "keyvalue", direction: "ascending", KEY_BITS: 63 });
-  const times = [];
-  for (let i = 0; i < 4; i++) {
-    device.queue.writeBuffer(keysInOut, 0, keys); /* unsorted every time */
-    const ns = await gpuNS(sort, { keysInOut, keysTemp, payloadInOut, payloadTemp });
-    if (i > 0) times.push(ns);
-  }
-  sort.destroy();
-  for (const b of [keysInOut, keysTemp, payloadInOut, payloadTemp]) b.destroy();
-  return ((8 + 24 * 8) * n) / median(times);
-}
-
-/** ns per random 4-byte gather (out[i] = data[perm[i]]) and scatter
- * (data[perm[i]] = i) into an n-element array, perm a random permutation */
-class RandomAccess extends BasePrimitive {
-  constructor(args) {
-    super(args);
-    this.knownBuffers = ["perm", "data", "out"];
-    this.workgroupSize = 256;
-    this.datatype = "u32";
-    this.params = new UniformStruct("RAParams", { n: "u32" });
-  }
-  compute() {
-    const wgsl = () => /* wgsl */ `
-${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
-@compute @workgroup_size(256)
-fn ${this.mode}(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
-  ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
-  if (gid >= ra.n) { return; }
-  ${this.mode === "gather" ? "out[gid] = data[perm[gid]];" : "data[perm[gid]] = gid;"}
-}`;
-    return [
-      this.params.allocate("raParams", { n: this.n }),
-      new Kernel({
-        kernel: wgsl,
-        entryPoint: this.mode,
-        label: `random ${this.mode}`,
-        buffers: [
-          { name: "perm", access: "read", type: "array<u32>" },
-          { name: "data", access: "read_write", type: "array<u32>" },
-          { name: "out", access: "read_write", type: "array<u32>" },
-          { name: "ra", buffer: "raParams", uniform: this.params },
-        ],
-        getDispatchGeometry: () => this.getSimpleDispatchGeometry({ workgroupCount: Math.ceil(this.n / 256) }),
-      }),
-    ];
-  }
-}
-async function randomAccessNS(n) {
-  const perm = Uint32Array.from({ length: n }, (_, i) => i);
-  for (let i = n - 1; i > 0; i--) {
-    const j = randomU32(1)[0] % (i + 1);
-    [perm[i], perm[j]] = [perm[j], perm[i]];
-  }
-  const buffers = { perm: device.createBuffer({ size: 4 * n, usage: storage }), data: device.createBuffer({ size: 4 * n, usage: storage }), out: device.createBuffer({ size: 4 * n, usage: storage }) };
-  device.queue.writeBuffer(buffers.perm, 0, perm);
-  const result = {};
-  for (const mode of ["gather", "scatter"]) {
-    const ra = new RandomAccess({ device, adapter, n, mode });
-    const times = [];
-    for (let i = 0; i < 4; i++) {
-      const ns = await gpuNS(ra, buffers);
-      if (i > 0) times.push(ns);
-    }
-    result[mode] = median(times) / n;
-    ra.destroy();
-  }
-  for (const b of Object.values(buffers)) b.destroy();
-  return result;
-}
-
 const rates = {};
 if (gpuTiming) {
   console.log("device rates at each size (for the calibrated model):");
   for (const logN of logSizes) {
     const n = 2 ** logN;
-    const sort = await sortRate(n);
-    const { gather, scatter } = await randomAccessNS(n);
+    const sort = await sortRate(device, n, { datatype: "u64", type: "keyvalue", keyBits: 63, adapter });
+    const { gather, scatter } = await randomAccessCost(device, n, { adapter });
     rates[logN] = { sort, gather, scatter };
     console.log(
-      `  2^${logN}: 64-bit key-value sort ${sort.toFixed(1)} GB/s; random 4-byte gather ${gather.toFixed(3)} ns, scatter ${scatter.toFixed(3)} ns` +
-        ` (= ${(4 / gather).toFixed(1)}, ${(4 / scatter).toFixed(1)} GB/s of useful data)`
+      `  2^${logN}: 64-bit key-value sort ${sort.toFixed(1)} GB/s; random 4-byte gather ${gather.toFixed(3)} ns, scatter ${scatter.toFixed(3)} ns`
     );
   }
 }

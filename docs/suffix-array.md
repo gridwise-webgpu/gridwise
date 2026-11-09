@@ -150,7 +150,7 @@ Random accesses: one rank gather (pack) and one rank scatter (update) per active
 
 > T ≈ sort bytes / R<sub>sort</sub> + other bytes / BW + gathers · t<sub>gather</sub> + scatters · t<sub>scatter</sub> + (rounds + 2) · t<sub>submit</sub>
 
-with four device rates, all measured by the benchmark at each n:
+with four device rates, measured at each n by `misc/device_rates.mjs` (which the benchmark calls; run on its own, it prints the rates for any GPU):
 
 - R<sub>sort</sub>: what OneSweep achieves on 64-bit key-value data, counting 8 + 24 bytes per element per pass;
 - BW: copy bandwidth (read plus write);
