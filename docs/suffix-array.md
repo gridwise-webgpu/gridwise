@@ -197,7 +197,16 @@ With the measured sort rate and per-access costs in place of copy bandwidth, the
 4. **Speculative rounds** (decision 4) hide the per-round readback when the active count shrinks slowly.
 5. **Local scatter** (from n = 2^23, `localScatter`). The rank updates and the output no longer scatter directly. The (suffix, rank) pairs are first grouped by the suffix's block with [`Multisplit`](../multisplit/) (2^`localScatterBits` blocks, default 64), then written block by block, so each block's writes stay in cache. That replaces about 290 bytes of traffic per random write with about 32 streamed bytes.
    - First M1 Max measurement (256 blocks, n = 2^24): GPU time fell 11% on random bytes (55 → 49 ms) and 16% on English-like text (278 → 232 ms); it did not change on the Fibonacci word, and it rose 13% on all "A", whose writes were already nearly sequential. At 2^22 it made no difference, hence the 2^23 threshold.
-   - The multisplit ran at only 80–240 GB/s: with 256 buckets, a 2048-pair tile averages 8 pairs per bucket, 32-byte runs against 128-byte cache lines. Hence the default of 64 blocks.
+   - The multisplit ran at only 80–240 GB/s. With 256 buckets, a 2048-pair tile averages 8 pairs per bucket, 32-byte runs against 128-byte cache lines, so fewer blocks seemed worth trying. A sweep (n = 2^24) found 16 and 64 blocks about equal and 256 slightly worse; the default is 64. GPU time against local scatter off:
+
+     | Input | 16 blocks | 64 blocks | 256 blocks | off |
+     |---|---|---|---|---|
+     | Random bytes | 46 ms | 48 ms | 51 ms | 55 ms |
+     | English-like | 234 ms | 233 ms | 233 ms | 256 ms |
+     | Fibonacci word | 951 ms | 944 ms | 954 ms | 1,001 ms |
+     | All "A" | 773 ms | 809 ms | 778 ms | 727 ms |
+
+   - The block count is not what limits the multisplit: it still moves its bytes at 100–130 GB/s on these inputs, like OneSweep's passes.
 
 **Next, in order of expected gain:**
 
