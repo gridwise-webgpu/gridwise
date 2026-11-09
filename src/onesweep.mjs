@@ -1134,8 +1134,23 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
       this.adapterInfo?.subgroupMinSize ?? this.RADIX; // this is fragile, if RADIX changes, check it
     this.BLOCK_DIM = this.BLOCK_DIM ?? 256;
     this.workgroupSize = this.BLOCK_DIM; // this is only for subgroup emulation
-    this.KEYS_PER_THREAD =
-      this.KEYS_PER_THREAD ?? (this.keyDatatype.is64Bit ? 12 : 15); // 64b: runs out of space @ 15
+    /* Keys per thread sets the tile, which onesweep_pass stages in workgroup
+     * memory (wg_warpHist). Default 15 (32b keys) or 12 (64b keys); fewer if
+     * the tile and the kernel's other workgroup memory would not fit the
+     * device's limit, as with 64b keys and emulated subgroups (whose
+     * scratch arrays take about 14 KB) under a 32 KB limit: 8 there.
+     * Emulated subgroups need at least RADIX / 32 = 8 keys per thread: their
+     * eight 32-lane subgroups' histograms (8 x RADIX) share wg_warpHist with
+     * the tile, and with 7 the sort is wrong. */
+    if (this.KEYS_PER_THREAD === undefined) {
+      const limit = this.device.limits.maxComputeWorkgroupStorageSize;
+      const fewest = this.useSubgroups ? 1 : Math.ceil(this.RADIX / 32);
+      let kpt = this.keyDatatype.is64Bit ? 12 : 15;
+      /* passWorkgroupBytes is an upper bound (about 1 KB high with
+       * emulation), so stop at the fewest that work rather than go below */
+      while (kpt > fewest && this.passWorkgroupBytes(kpt) > limit) kpt--;
+      this.KEYS_PER_THREAD = kpt;
+    }
     this.PART_SIZE = this.KEYS_PER_THREAD * this.BLOCK_DIM;
     /* how many 32b words do we need to allocate PART_SIZE keys? */
     if (this.keyDatatype.bitsPerElement % 32 !== 0) {
@@ -1171,6 +1186,19 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
       this.passHistSize += this.passHistDelta;
     }
   }
+  /** Workgroup memory onesweep_pass declares with keysPerThread keys per
+   * thread (an upper bound: it counts all of the subgroup emulation's
+   * scratch, when subgroups are emulated). Needs BLOCK_DIM and RADIX. */
+  passWorkgroupBytes(keysPerThread) {
+    const tile = keysPerThread * this.BLOCK_DIM * this.keyDatatype.wordsPerElement * 4; /* wg_warpHist */
+    const fixed = 2 * this.RADIX * 4 + 3 * 4; /* wg_localHist, wg_fallback, three scalars */
+    const emulation = this.fnDeclarations.workgroupBytes([
+      "subgroupEmulation",
+      { datatype: "u32", workgroupSize: `${this.BLOCK_DIM}` },
+    ]);
+    return tile + fixed + emulation;
+  }
+
   compute() {
     this.finalizeRuntimeParameters();
     const alignment = this.device.limits.minUniformBufferOffsetAlignment;
