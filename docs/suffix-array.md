@@ -216,6 +216,26 @@ With the measured sort rate and per-access costs in place of copy bandwidth, the
 
 **How to measure:** `node misc/benchmark_suffixarray.mjs random256,random4,english,fibonacci,allA 20,22,24` prints the device rates at each size, then per input the rounds, work ratio, wall and GPU time, the overhead per submission, both models (copy bandwidth only, and calibrated with the device rates), and per phase the GPU time, modeled bytes and achieved bandwidth.
 
+### Measured: V100
+
+A Tesla V100 (daisy), through Dawn and Vulkan, with speculation, local scatter and the cheaper `execute()` (before the index-ordered active list). A copy kernel reaches 808 GB/s; `copyBufferToBuffer` only 307 GB/s, so the model's yardstick is now a copy kernel (`misc/device_rates.mjs`).
+
+| Input, n = 2^24 | Wall | GPU | Model at 808 GB/s |
+|---|---|---|---|
+| Random bytes | 19.4 ms (863 M symbols/s) | 14.7 ms | 7.2 ms |
+| Random over 4 symbols | 48.3 ms | 35.2 ms | 14.7 ms |
+| English-like text | 99.7 ms (168 M symbols/s) | 83.1 ms | 33.9 ms |
+| Fibonacci word | 348 ms | 334 ms | 144 ms |
+| All "A" | 285 ms | 249 ms | 146 ms |
+
+On English-like text the GPU time is 2.45 times the model's. The streaming kernels (heads, update, compact) run at 700–900 GB/s, at the model's rate. The gap is three kernels:
+
+- the sort, at 324 GB/s, 40% of copy bandwidth (57% of the time);
+- pack's random gathers, at 127 GB/s (14%);
+- the local scatter, at 246 GB/s (14%).
+
+Cutting the CPU cost of `execute()` (from 4 to 1.2 ms for a sort) brought wall time much closer to GPU time: at 2^20, English-like text went from 45 to 27 ms, and the Fibonacci word from 142 to 61 ms. About 2 ms per submission remains.
+
 ### 6. Input and alphabet
 
 - **First version:** byte text, packed four bytes per u32 word (WGSL has no `u8`), with n given explicitly.
