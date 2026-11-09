@@ -51,6 +51,15 @@ export class OneSweepSort extends BaseSort {
      */
     this.copyOutputToTemp = args.copyOutputToTemp ? true : false;
 
+    /** Lookback tuning and diagnosis. MAX_SPIN_COUNT (default 4): how many
+     * times a pass's lookback rereads a predecessor's not-yet-posted
+     * histogram entry before giving up and recomputing that tile's
+     * histogram itself (the fallback). countFallbacks: count fallbacks per
+     * pass into a small buffer; read them with fallbackCounts(). For
+     * measurement only: it adds an atomic per fallback. */
+    this.MAX_SPIN_COUNT = args.MAX_SPIN_COUNT ?? 4;
+    this.countFallbacks = !!args.countFallbacks;
+
     /** length: sort only the first `length` keys (and payloads) of the
      * buffers; the rest of each buffer is not read, and is written only by
      * the passes' ping-pong as far as `length` reaches. Undefined (the
@@ -201,7 +210,7 @@ export class OneSweepSort extends BaseSort {
     const FLAG_INCLUSIVE = 2u << 30;
     const FLAG_MASK = 3u << 30;
 
-    const MAX_SPIN_COUNT = 4u;
+    const MAX_SPIN_COUNT = ${this.MAX_SPIN_COUNT}u;
     const LOCKED = 1u;
     const UNLOCKED = 0u;
 
@@ -824,10 +833,11 @@ ${this.wlmsWGSL()}
 
           /* At least one thread saw FLAG_NOT_READY. Must fallback. */
           if (mustFallback != 0) {
-            // if we want to count fallbacks, here's a nice place to do it
-            // if (builtinsNonuniform.lidx == 0) {
-            //   atomicAdd(&debugBuffer[sortParameters.shift >> 3u], 1u);
-            // }
+            ${
+              this.countFallbacks
+                ? "if (builtinsNonuniform.lidx == 0u) { atomicAdd(&fallbackCount[sortParameters.shift / RADIX_LOG], 1u); }"
+                : "/* countFallbacks: an atomicAdd per fallback here */"
+            }
             /* clear wg_fallback array ... */
             if (builtinsNonuniform.lidx < RADIX) {
               atomicStore(&wg_fallback[builtinsNonuniform.lidx], 0);
@@ -1059,6 +1069,20 @@ ${this.wlmsWGSL()}
     const keyBits = this.KEY_BITS ?? this.keyDatatype.bitsPerElement;
     const passes = this.SORT_PASSES ?? divRoundUp(keyBits, radixLog);
     return passes % 2 === 1;
+  }
+  /** With countFallbacks: lookback fallbacks per pass since the last
+   * execute() (summed over its trials), and the tiles per pass. */
+  async fallbackCounts() {
+    if (!this.countFallbacks) throw new Error("OneSweepSort: construct with countFallbacks: true");
+    const source = this.getBuffer("fallbackCount").buffer.buffer;
+    const readback = this.device.createBuffer({ size: 64, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const encoder = this.device.createCommandEncoder();
+    encoder.copyBufferToBuffer(source, 0, readback, 0, 64);
+    this.device.queue.submit([encoder.finish()]);
+    await readback.mapAsync(GPUMapMode.READ);
+    const counts = Array.from(new Uint32Array(readback.getMappedRange()).slice(0, this.SORT_PASSES));
+    readback.destroy();
+    return { perPass: counts, tiles: this.passWorkgroupCount };
   }
   get outputKeysBufferName() {
     return this.outputIsInTemp ? "keysTemp" : "keysInOut";
@@ -1307,11 +1331,15 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
               { name: "payloadOut", buffer: odd ? "payloadInOut" : "payloadTemp", access: "read_write", type: "array<u32>" },
             ]
           : []),
+        ...(this.countFallbacks ? [{ name: "fallbackCount", access: "read_write", type: "array<atomic<u32>>" }] : []),
       ],
       [{ name: "sortParameters", buffer: this.params.slot("sortParameters", slot, alignment), uniform: this.params }],
     ];
     let actions = [
       this.params.allocateSlots("sortParameters", this.sortParameterValues, alignment),
+      ...(this.countFallbacks
+        ? [new AllocateBuffer({ label: "fallbackCount", datatype: "u32", size: 64, clearBufferOnReuse: true })]
+        : []),
       new AllocateBuffer({
         label: "sortBump",
         size: this.sortBumpSize,
