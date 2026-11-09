@@ -11,17 +11,21 @@
  * (the first n bytes of --file, repeated if shorter). Default
  * random256,random4,english,allA at 2^20 and 2^24.
  *
- * Prints, per run: rounds, the work ratio (active suffixes summed over all
- * rounds, over n), the wall time of execute() (including the host's
- * active-count readback after every round), the summed GPU kernel time, and
- * what the bandwidth model predicts (suffixArrayTraffic: bytes / copy
- * bandwidth, measured here with copyBufferToBuffer). Then, per phase, the
- * GPU time, the modeled bytes, and the achieved bandwidth. Every result is
+ * Prints the device rates the calibrated model uses at each size (64-bit
+ * key-value sort rate; cost of a random 4-byte gather and scatter), then, per
+ * run: rounds; the work ratio (active suffixes summed over the doubling
+ * rounds, over n); the wall time of execute(), which includes a readback
+ * after every round; the summed GPU kernel time; the overhead per
+ * submission; the model at copy bandwidth and calibrated with the device
+ * rates (suffixArrayTraffic); and, per phase, the GPU time, modeled bytes
+ * and achieved bandwidth. Every result is
  * checked with checkSuffixArray. See docs/suffix-array.md, "Expected
  * performance". */
 import { readFileSync } from "node:fs";
 import { createNodeDevice } from "./node_device.mjs";
 import { SuffixArray, suffixArrayTraffic, suffixArrayPhase, checkSuffixArray } from "../src/suffixarray.mjs";
+import { OneSweepSort } from "../src/onesweep.mjs";
+import { BasePrimitive, Kernel, UniformStruct } from "../src/primitive.mjs";
 
 const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const fileArg = process.argv.find((a) => a.startsWith("--file="))?.slice(7);
@@ -57,6 +61,113 @@ async function copyBandwidth(bytes) {
 const copyBytes = Math.min(device.limits.maxBufferSize, Math.max(1 << 20, Math.min(256 << 20, 16 * 2 ** Math.max(...logSizes))));
 const bandwidth = await copyBandwidth(copyBytes);
 console.log(`copy bandwidth (read + write): ${bandwidth.toFixed(1)} GB/s`);
+
+/* ---- device rates at size n, to calibrate the model: what this GPU achieves
+ * on the sort SuffixArray uses, and on random 4-byte reads and writes into an
+ * n-element array (both depend on n, through the caches) */
+const median = (a) => [...a].sort((x, y) => x - y)[a.length >> 1];
+async function gpuNS(primitive, args) {
+  await primitive.execute({ ...args, enableGPUTiming: true });
+  const { gpuTotalTimeNS } = await primitive.getTimingResult();
+  return [gpuTotalTimeNS].flat().reduce((a, b) => a + b, 0);
+}
+const storage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+let seed = 0x2545f491;
+const randomU32 = (k) => Uint32Array.from({ length: k }, () => (seed = (Math.imul(seed ^ (seed >>> 15), 0x2c1b3c6d) + 0x9e3779b9) >>> 0));
+
+/** GB/s of a 64-bit key-value OneSweep sort of n random keys with 63-bit keys
+ * (the initial round's sort), counting 8 + 24 bytes per element per pass */
+async function sortRate(n) {
+  const keys = randomU32(2 * n);
+  const keysInOut = device.createBuffer({ size: 8 * n, usage: storage });
+  const keysTemp = device.createBuffer({ size: 8 * n, usage: storage });
+  const payloadInOut = device.createBuffer({ size: 4 * n, usage: storage });
+  const payloadTemp = device.createBuffer({ size: 4 * n, usage: storage });
+  const sort = new OneSweepSort({ device, adapter, datatype: "u64", type: "keyvalue", direction: "ascending", KEY_BITS: 63 });
+  const times = [];
+  for (let i = 0; i < 4; i++) {
+    device.queue.writeBuffer(keysInOut, 0, keys); /* unsorted every time */
+    const ns = await gpuNS(sort, { keysInOut, keysTemp, payloadInOut, payloadTemp });
+    if (i > 0) times.push(ns);
+  }
+  sort.destroy();
+  for (const b of [keysInOut, keysTemp, payloadInOut, payloadTemp]) b.destroy();
+  return ((8 + 24 * 8) * n) / median(times);
+}
+
+/** ns per random 4-byte gather (out[i] = data[perm[i]]) and scatter
+ * (data[perm[i]] = i) into an n-element array, perm a random permutation */
+class RandomAccess extends BasePrimitive {
+  constructor(args) {
+    super(args);
+    this.knownBuffers = ["perm", "data", "out"];
+    this.workgroupSize = 256;
+    this.datatype = "u32";
+    this.params = new UniformStruct("RAParams", { n: "u32" });
+  }
+  compute() {
+    const wgsl = () => /* wgsl */ `
+${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
+@compute @workgroup_size(256)
+fn ${this.mode}(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
+  ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
+  if (gid >= ra.n) { return; }
+  ${this.mode === "gather" ? "out[gid] = data[perm[gid]];" : "data[perm[gid]] = gid;"}
+}`;
+    return [
+      this.params.allocate("raParams", { n: this.n }),
+      new Kernel({
+        kernel: wgsl,
+        entryPoint: this.mode,
+        label: `random ${this.mode}`,
+        buffers: [
+          { name: "perm", access: "read", type: "array<u32>" },
+          { name: "data", access: "read_write", type: "array<u32>" },
+          { name: "out", access: "read_write", type: "array<u32>" },
+          { name: "ra", buffer: "raParams", uniform: this.params },
+        ],
+        getDispatchGeometry: () => this.getSimpleDispatchGeometry({ workgroupCount: Math.ceil(this.n / 256) }),
+      }),
+    ];
+  }
+}
+async function randomAccessNS(n) {
+  const perm = Uint32Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = randomU32(1)[0] % (i + 1);
+    [perm[i], perm[j]] = [perm[j], perm[i]];
+  }
+  const buffers = { perm: device.createBuffer({ size: 4 * n, usage: storage }), data: device.createBuffer({ size: 4 * n, usage: storage }), out: device.createBuffer({ size: 4 * n, usage: storage }) };
+  device.queue.writeBuffer(buffers.perm, 0, perm);
+  const result = {};
+  for (const mode of ["gather", "scatter"]) {
+    const ra = new RandomAccess({ device, adapter, n, mode });
+    const times = [];
+    for (let i = 0; i < 4; i++) {
+      const ns = await gpuNS(ra, buffers);
+      if (i > 0) times.push(ns);
+    }
+    result[mode] = median(times) / n;
+    ra.destroy();
+  }
+  for (const b of Object.values(buffers)) b.destroy();
+  return result;
+}
+
+const rates = {};
+if (gpuTiming) {
+  console.log("device rates at each size (for the calibrated model):");
+  for (const logN of logSizes) {
+    const n = 2 ** logN;
+    const sort = await sortRate(n);
+    const { gather, scatter } = await randomAccessNS(n);
+    rates[logN] = { sort, gather, scatter };
+    console.log(
+      `  2^${logN}: 64-bit key-value sort ${sort.toFixed(1)} GB/s; random 4-byte gather ${gather.toFixed(3)} ns, scatter ${scatter.toFixed(3)} ns` +
+        ` (= ${(4 / gather).toFixed(1)}, ${(4 / scatter).toFixed(1)} GB/s of useful data)`
+    );
+  }
+}
 
 /* ---- corpora */
 function xorshift(seed) {
@@ -145,7 +256,7 @@ for (const name of corpora) {
 
     /* per-phase GPU time from one timed run */
     const phases = {};
-    let gpuNS = 0;
+    let gpuTotal = 0;
     let kernels = 0;
     if (gpuTiming) {
       await sa.execute({ inputBuffer, outputBuffer, enableGPUTiming: true });
@@ -153,7 +264,7 @@ for (const name of corpora) {
         for (const k of step.kernels) {
           const phase = suffixArrayPhase(k.label);
           phases[phase] = (phases[phase] ?? 0) + k.ns;
-          gpuNS += k.ns;
+          gpuTotal += k.ns;
           kernels++;
         }
       }
@@ -169,14 +280,24 @@ for (const name of corpora) {
     readback.destroy();
 
     const traffic = suffixArrayTraffic({ n, activeCounts: sa.activeCounts });
-    const work = sa.activeCounts.reduce((a, b) => a + b, 0) / n;
+    const work = sa.activeCounts.slice(1).reduce((a, b) => a + b, 0) / n; /* doubling rounds only */
     const modelMS = traffic.total / bandwidth / 1e6;
-    const sectorMS = (traffic.total + 28 * traffic.totalRandom) / bandwidth / 1e6;
+    /* calibrated: the sort at this GPU's sort rate, random accesses at its
+     * gather and scatter costs, everything else at copy bandwidth */
+    let calibratedMS = NaN;
+    if (rates[logN]) {
+      const { sort, gather, scatter } = rates[logN];
+      const randomNS = (traffic.random.pack ?? 0) * gather + (traffic.totalRandom - (traffic.random.pack ?? 0)) * scatter;
+      const streamBytes = traffic.total - traffic.bytes.sort - 4 * traffic.totalRandom;
+      calibratedMS = ms(traffic.bytes.sort / sort + streamBytes / bandwidth + randomNS);
+    }
+    const perRound = (wall - ms(gpuTotal)) / (sa.rounds + 2);
     console.log(
       `\n${name} 2^${logN}: ${errors ? "WRONG" + errors : "correct"}; ${sa.rounds} doubling rounds, work ${work.toFixed(2)} n` +
-        `\n  wall ${fmt(wall)} ms   GPU ${fmt(ms(gpuNS))} ms (${kernels} kernels)` +
-        `   model ${fmt(modelMS)} ms (${(traffic.total / n).toFixed(0)} B/char; ${fmt(sectorMS)} ms counting random accesses as 32 B)` +
-        `   ${fmt(n / wall / 1e3, 1)} M char/s`
+        `\n  wall ${fmt(wall)} ms (${fmt(n / wall / 1e3, 1)} M char/s)   GPU ${fmt(ms(gpuTotal))} ms (${kernels} kernels)` +
+        `   overhead ${fmt(perRound)} ms per submission` +
+        `\n  model: ${fmt(modelMS)} ms at copy bandwidth (${(traffic.total / n).toFixed(0)} B/char); calibrated ${fmt(calibratedMS)} ms` +
+        ` (GPU time / calibrated = ${(ms(gpuTotal) / calibratedMS).toFixed(2)})`
     );
     if (gpuTiming) {
       console.log("  phase           GPU ms   model MB   achieved GB/s");

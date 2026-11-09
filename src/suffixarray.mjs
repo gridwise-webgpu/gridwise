@@ -29,7 +29,7 @@
  * rounds run), `activeCounts` (active suffixes before each round), and, with
  * enableGPUTiming, `timings` ([{ stage, m, kernels: [{ label, ns }] }]).
  *
- * Limits: n <= 2^30 (OneSweep). Memory: about 44n bytes of working buffers
+ * Limits: n <= 2^30 (OneSweep). Memory: about 48n bytes of working buffers
  * plus the input and output (docs/suffix-array.md).
  */
 import {
@@ -121,7 +121,7 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   let i = activeList[p];
   let j = i + sa.h;
   let r2 = select(0u, rank[j], j < sa.n);
-  keys[p] = packRanks(rank[i], r2);
+  keys[p] = packRanks(activeRanks[p], r2); /* rank[i], carried by the list: no gather */
   payload[p] = i;
 }`;
 
@@ -155,7 +155,9 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   if (p >= sa.m) { return; }
   let k = keys[p];
   let q = subgroupStart[p];
-  rank[payload[p]] = groupRank(k) + (q - groupStart[p]);
+  let r = groupRank(k) + (q - groupStart[p]);
+  rank[payload[p]] = r;
+  newRanks[p] = r;
   /* a subgroup of one: p starts it and p + 1 does not continue it */
   let alone = q == p && (p + 1u == sa.m || !sameKey(keys[p + 1u], k));
   keep[p] = select(1u, 0u, alone);
@@ -169,8 +171,23 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
   let p = gid;
   if (p >= sa.m) { return; }
-  if (keep[p] == 1u) { nextActive[offsets[p]] = payload[p]; }
+  if (keep[p] == 1u) {
+    nextActive[offsets[p]] = payload[p];
+    nextRanks[offsets[p]] = newRanks[p];
+  }
   if (p + 1u == sa.m) { count[0] = offsets[p] + keep[p]; }
+}`;
+
+  /** when the initial round resolves every suffix, the sorted payload is
+   * the suffix array: copy it (streaming) instead of scattering by rank */
+  copyOutputWGSL = () => /* wgsl */ `
+${this.commonWGSL()}
+@compute @workgroup_size(${WORKGROUP_SIZE})
+fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
+  ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
+  let p = gid;
+  if (p >= sa.n) { return; }
+  outputBuffer[p] = sorted[p];
 }`;
 
   /** SA[rank[i] - 1] = i */
@@ -195,6 +212,7 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
       scratch("keysTemp", 8 * n),
       scratch("listA", 4 * n),
       scratch("listB", 4 * n),
+      scratch("activeRanks", 4 * n) /* rank of each suffix in the active list */,
       ...(this.hasBuffer("rankBuffer") ? [] : [scratch("rankBuffer", 4 * n)]),
       scratch("groupFlags", 4 * this.capacity4),
       scratch("subgroupFlags", 4 * this.capacity4),
@@ -239,7 +257,11 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
     const sortedKeys = sort.outputIsInTemp ? "keysTemp" : "keys";
     const sortedPayload = sort.outputIsInTemp ? spare : work;
     const nextActive = other(sortedPayload);
+    /* the key buffer the sort did not leave its output in is free: it holds
+     * each sorted position's new rank (as u32s) for the compaction */
+    const newRanks = sort.outputIsInTemp ? "keys" : "keysTemp";
     this.nextActiveList = nextActive;
+    this.sortedPayload = sortedPayload;
     const keys = (buffer, access = "read") => ({ name: "keys", buffer, access, type: "array<vec2u>" });
     return [
       this.params.allocate("saParams", { n: this.n, m, h: this.h, b: this.rankBits, initial: initial ? 1 : 0 }),
@@ -248,7 +270,13 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
         : this.kernel(
             this.packWGSL,
             `pack (h = ${this.h})`,
-            [u32s("activeList", this.activeList), u32s("rank", "rankBuffer"), keys("keys", "read_write"), u32s("payload", work, "read_write")],
+            [
+              u32s("activeList", this.activeList),
+              u32s("activeRanks", "activeRanks"),
+              u32s("rank", "rankBuffer"),
+              keys("keys", "read_write"),
+              u32s("payload", work, "read_write"),
+            ],
             m
           ),
       new ExecutePrimitive({
@@ -269,6 +297,7 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
           u32s("subgroupStart", "subgroupStart"),
           u32s("rank", "rankBuffer", "read_write"),
           u32s("keep", "groupFlags", "read_write"),
+          u32s("newRanks", newRanks, "read_write"),
         ],
         m
       ),
@@ -280,7 +309,9 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
           u32s("keep", "groupFlags"),
           u32s("offsets", "subgroupFlags"),
           u32s("payload", sortedPayload),
+          u32s("newRanks", newRanks),
           u32s("nextActive", nextActive, "read_write"),
+          u32s("nextRanks", "activeRanks", "read_write"),
           u32s("count", "count", "read_write"),
         ],
         m
@@ -296,7 +327,9 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
       if (!(outputLength >= this.n)) throw new Error(`SuffixArray: outputBuffer must hold n = ${this.n} u32s`);
       actions.push(
         this.params.allocate("saParams", { n: this.n, m: 0, h: this.h, b: this.rankBits, initial: 0 }),
-        this.kernel(this.outputWGSL, "output", [u32s("rank", "rankBuffer"), u32s("outputBuffer", "outputBuffer", "read_write")], this.n)
+        this.rounds === 0
+          ? this.kernel(this.copyOutputWGSL, "output (copy)", [u32s("sorted", this.sortedPayload), u32s("outputBuffer", "outputBuffer", "read_write")], this.n)
+          : this.kernel(this.outputWGSL, "output", [u32s("rank", "rankBuffer"), u32s("outputBuffer", "outputBuffer", "read_write")], this.n)
       );
       return actions;
     }
@@ -377,14 +410,17 @@ export function suffixArrayPhase(label = "") {
  *
  * Per element of a round over m suffixes:
  *   keys     initial: read 1 text byte, write key 8 + payload 4
- *            pack: read active 4 + rank 4 + rank 4 (random), write 12
+ *            pack: read active 4 + its rank 4 + rank[i + h] 4 (random), write 12
  *   sort     global histogram reads keys (8), then each of P passes reads and
  *            writes key + payload (24): 8 + 24P, P = ceil(key bits / 8)
  *   heads    read key 8, write 2 flags 8
  *   scans    3 scans, each read 4 + write 4
- *   update   read key 8, payload 4, 2 starts 8; write rank 4 (random), keep 4
- *   compact  read keep, offset, payload 12; write active 4 (at most)
- * and, once, output: read rank 4n, write SA 4n (random). */
+ *   update   read key 8, payload 4, 2 starts 8; write rank 4 (random), keep 4,
+ *            new rank 4
+ *   compact  read keep, offset, payload, new rank 16; write active 4 + rank 4
+ *            (at most)
+ * and, once, output: read rank 4n, write SA 4n (random); or, when the
+ * initial round resolves everything, copy the sorted payload (8n, streaming). */
 export function suffixArrayTraffic({ n, activeCounts, rankBits = Math.ceil(Math.log2(n + 1)) }) {
   const passes = (bits) => Math.ceil(bits / 8);
   const bytes = {};
@@ -396,14 +432,14 @@ export function suffixArrayTraffic({ n, activeCounts, rankBits = Math.ceil(Math.
   activeCounts.forEach((m, round) => {
     const initial = round === 0;
     if (initial) add("initial keys", 13 * m);
-    else add("pack", 24 * m, 2 * m);
+    else add("pack", 24 * m, m);
     add("sort", (8 + 24 * passes(initial ? 9 * INITIAL_SYMBOLS : 2 * rankBits)) * m);
     add("heads", 16 * m);
     add("scans", 24 * m);
-    add("update ranks", 28 * m, m);
-    add("compact", 16 * m);
+    add("update ranks", 32 * m, m);
+    add("compact", 24 * m);
   });
-  add("output", 8 * n, n);
+  add("output", 8 * n, activeCounts.length > 1 ? n : 0);
   const total = Object.values(bytes).reduce((a, b) => a + b, 0);
   const totalRandom = Object.values(random).reduce((a, b) => a + b, 0);
   return { bytes, random, total, totalRandom };

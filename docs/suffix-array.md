@@ -114,56 +114,93 @@ Per round, the cost is roughly proportional to m, the number of active suffixes:
 2. **Key width.** Early rounds sort 2b bits. Replacing `rank[i]` in the key with a dense id for its active group shrinks the key once few groups remain. The initial symbol count (7) is also a tunable.
 3. **Repetitive inputs**, such as long runs, periodic strings or duplicated documents, need about log₂ of the longest repeat in rounds, and keep m large. This is prefix doubling's known weak spot; difference-cover methods avoid it. It will be measured explicitly, starting with an all-"A" input.
 
-**Memory.** As written, the working set is about 49n bytes:
+**Memory.** As written, the working set is about 53n bytes:
 
 - the text (n);
 - ranks (4n);
 - keys and their sort buffer (16n);
 - payloads and theirs (8n), which also hold the active list;
+- the active suffixes' ranks (4n);
 - two flag and two scan buffers (16n);
 - the output (4n).
 
-Reusing the sort's temporary buffers for the flags and scans, and the key buffer for the output, would bring it to about 33n. That is in line with published GPU designs: 2016 hybrid about 46n, Osipov 32n, libcubwt 20.5n.
+Reusing the sort's temporary buffers for the flags and scans, and the key buffer for the output, would bring it to about 37n. That is in line with published GPU designs: 2016 hybrid about 46n, Osipov 32n, libcubwt 20.5n.
 
 ### Expected performance: a bandwidth model
 
-Every phase is a streaming pass or a sort, so the design should be **bound by memory bandwidth**, and its time should be the bytes it must move divided by the device's bandwidth, plus a small fixed cost per round. `suffixArrayTraffic()` in `src/suffixarray.mjs` computes those bytes from a run's active counts; `misc/benchmark_suffixarray.mjs` compares them with measured kernel times.
+Every phase is a streaming pass, a sort, or a gather or scatter, so the design should be **bound by memory traffic**: its time should be the bytes it must move at the rate the device moves them, plus a fixed cost per round. `suffixArrayTraffic()` in `src/suffixarray.mjs` computes those bytes from a run's active counts; `misc/benchmark_suffixarray.mjs` compares them with measured kernel times.
 
 **Bytes per element**, counting each element's reads and writes once:
 
 | Phase | Initial round (m = n) | Doubling round (per active suffix) |
 |---|---|---|
-| keys | read 1 text byte, write key 8 + payload 4: **13** | pack: read active 4, rank 4, rank 4 (random); write 12: **24** |
+| keys | read 1 text byte, write key 8 + payload 4: **13** | pack: read active 4, its rank 4, rank[i + h] 4 (random); write 12: **24** |
 | sort | 8 + 24 × 8 passes (63-bit keys): **200** | 8 + 24P, P = ⌈2b/8⌉: **152** at n = 2^20, **176** at 2^24 |
 | heads | read key 8, write 2 flags: **16** | **16** |
 | 3 scans | read 4 + write 4 each: **24** | **24** |
-| update | read key, payload, 2 starts (20); write rank (random) and keep flag: **28** | **28** |
-| compact | read 12, write ≤ 4: **16** | **16** |
-| **total** | **297** | **116 + 24P: 260 at 2^20, 284 at 2^24** |
+| update | read key, payload, 2 starts (20); write rank (random), keep flag, new rank: **32** | **32** |
+| compact | read 16; write active and its rank, ≤ 8: **24** | **24** |
+| **total** | **309** | **128 + 24P: 272 at 2^20, 296 at 2^24** |
 
-Plus 8 bytes per symbol for the output (`SA[rank[i] − 1] = i`, a random scatter). The sort's 8 + 24P is the cost of one OneSweep key-value sort of 64-bit keys; it is about two thirds of every round.
+Plus 8 bytes per symbol for the output: a random scatter, `SA[rank[i] − 1] = i`, or, when the initial round resolves every suffix, a streaming copy of the sorted payload.
+
+Random accesses: one rank gather (pack) and one rank scatter (update) per active suffix per round, plus one scatter per symbol in the output after doubling rounds.
 
 **The model:**
 
-> T ≈ (305 n + B<sub>round</sub> · Σ<sub>r</sub> m<sub>r</sub>) / BW + R · t<sub>round</sub>
+> T ≈ sort bytes / R<sub>sort</sub> + other bytes / BW + gathers · t<sub>gather</sub> + scatters · t<sub>scatter</sub> + (rounds + 2) · t<sub>submit</sub>
 
-where m<sub>r</sub> is the number of active suffixes in doubling round r, R the number of rounds, BW the device's achievable read-plus-write bandwidth (measured with a large buffer copy), and t<sub>round</sub> the fixed cost of a round: about P + 9 kernel launches and one 4-byte readback (`mapAsync`), on the order of 0.1–1 ms. The input decides Σ m<sub>r</sub> / n, the **work ratio**:
+with four device rates, all measured by the benchmark at each n:
 
-| Input | Rounds | Work ratio (Σ m<sub>r</sub> / n) | Bytes per symbol, n = 2^24 | At 200 GB/s, n = 2^24 |
-|---|---|---|---|---|
-| Uniform random bytes | 0 (7 symbols already distinguish almost every suffix) | 0 | 305 | 26 ms (650 M symbols/s) |
-| Natural-language text (expected) | 4–8 | 2–4 | 870–1,450 | 75–120 ms |
-| All "A" (worst case) | ⌈log₂(n / 7)⌉ = 22 | about 21 | about 6,300 | 530 ms |
+- R<sub>sort</sub>: what OneSweep achieves on 64-bit key-value data, counting 8 + 24 bytes per element per pass;
+- BW: copy bandwidth (read plus write);
+- t<sub>gather</sub>, t<sub>scatter</sub>: the cost of one random 4-byte access into an n-element array (it jumps once the array outgrows the caches);
+- t<sub>submit</sub>: the fixed cost of a submission and its 4-byte readback (`mapAsync`), plus about P + 9 kernel launches.
 
-So a typical text should cost about as much as 4–7 full 64-bit key-value sorts of n elements (200 bytes per element each), and the worst case about 30.
+The input decides how many suffixes stay active, through the **work ratio** Σ m<sub>r</sub> / n over the doubling rounds:
 
-**What the model leaves out, and how it can be wrong:**
+| Input | Rounds | Work ratio | Bytes per symbol, n = 2^24 |
+|---|---|---|---|
+| Uniform random bytes | 0 (7 symbols already distinguish almost every suffix) | 0 | 317 |
+| Random over 4 symbols | 2 | 1.1 | 630 |
+| Natural-language text | 4–8 | 2–4 | 900–1,500 |
+| Fibonacci word, all "A" (worst cases) | ⌈log₂(n / 7)⌉ ≈ 21–22 | about 20 | about 6,300 |
 
-- **Random accesses.** Pack gathers two ranks and update scatters one: three 4-byte random accesses per active suffix per round, plus one per symbol in the output. Once the rank array outgrows the cache, each moves a whole sector (32 bytes on most GPUs), which can add up to 3 × 28 = 84 bytes per active suffix. This is the cost Büren et al. measured at about 60% of their prefix-doubling time. The benchmark reports the model both ways.
-- **Small rounds.** Late rounds have small m and are bound by launch latency and the readback, not bandwidth. Their cost is R · t<sub>round</sub>, so it grows with the number of rounds, not with n.
-- **Sort efficiency.** OneSweep's achieved bandwidth on 64-bit key-value data sets the ceiling for two thirds of the work; if a kernel runs well below the copy bandwidth, that is the first place to look.
+A full 64-bit key-value sort moves 200 bytes per element, so typical text costs about as much as 5–7 such sorts, and the worst case about 30.
 
-**How to measure:** `node misc/benchmark_suffixarray.mjs random256,random4,english,allA 20,24` prints, for each input, the rounds, the work ratio, the wall time, the summed GPU time, the model's prediction, and per phase the GPU time, modeled bytes and achieved bandwidth. Wall time minus GPU time is the per-round overhead; achieved bandwidth per phase, against the copy bandwidth, shows which phase falls short of the model.
+### Measured: the first run (Apple M-series, 365 GB/s copy bandwidth)
+
+The first version, before the two changes below, on an Apple GPU through Dawn and Metal:
+
+| Input, n = 2^24 | Rounds | Work ratio | Wall | GPU | Copy-bandwidth model |
+|---|---|---|---|---|---|
+| Random bytes | 0 | 0 | 72 ms | 67 ms | 14 ms |
+| Random over 4 symbols | 2 | 1.06 | 127 ms | 117 ms | 28 ms |
+| English-like text | 6 | 3.50 | 297 ms | 270 ms | 60 ms |
+| Fibonacci word | 21 | 19.8 | 1,193 ms | 1,110 ms | 272 ms |
+| All "A" | 22 | 20.3 | 784 ms | 704 ms | 278 ms |
+
+The work ratios are as predicted. The times are 3–5 times the copy-bandwidth model, for three reasons, each now a measured rate in the model:
+
+- **The sort runs at about 107 GB/s**, 29% of copy bandwidth, at every size from 2^22 up and on every input. It is about half of the GPU time.
+- **Random access is far more expensive than its bytes.** Once the 64 MB rank array no longer fits in the cache, each 4-byte scatter costs about what a whole 128-byte line read and written back would: the output scatter took 13.3 ms at 2^24 (16.8M × 256 bytes at 365 GB/s is 12 ms). At 2^22 the same kernels run 4–6 times faster. All "A" escapes this, because its ranks arrive in nearly sequential order. On English-like text at 2^24, rank gathers and scatters took 47% of GPU time, as much as the sort.
+- **Each submission costs about 2–4 ms** beyond its kernels (wall minus GPU time). With 20 rounds this is half the wall time at n = 2^20.
+
+With the measured sort rate and per-access costs in place of copy bandwidth, the model accounts for about 90% of the GPU time (random bytes, 2^24: 31 ms sort, 3.5 ms streaming, 24 ms random access, against 67 ms measured).
+
+**Changes made in response:**
+
+1. **The active list carries each suffix's rank.** The compaction writes the new rank next to the suffix index, so pack reads `rank[i]` as a stream and gathers only `rank[i + h]`. One random access per active suffix per round becomes 8 streamed bytes.
+2. **When the initial round resolves every suffix, the output is a copy** of the sorted payload instead of a scatter by rank.
+
+**Next, in order of expected gain:**
+
+1. **Sort rate.** Find what limits OneSweep on 64-bit key-value data on this GPU (tile size under 32 KB of workgroup memory, the lookback, the scatter); the sort is half the time on every input.
+2. **Fewer key bits.** Later rounds sort 2b bits; replacing `rank[i]` with a dense id for its group (and dropping the sorted-by-construction high part) would save passes once few groups remain.
+3. **Local rank scatters.** Group the update's scatters by destination block before writing (Büren et al.), so each cache line is written once.
+4. **Fewer readbacks.** Let OneSweep take its length from a GPU buffer, so several rounds can be submitted together; this matters for repetitive inputs and small n.
+
+**How to measure:** `node misc/benchmark_suffixarray.mjs random256,random4,english,fibonacci,allA 20,22,24` prints the device rates at each size, then per input the rounds, work ratio, wall and GPU time, the overhead per submission, both models (copy bandwidth only, and calibrated with the device rates), and per phase the GPU time, modeled bytes and achieved bandwidth.
 
 ### 6. Input and alphabet
 
