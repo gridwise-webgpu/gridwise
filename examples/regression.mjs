@@ -18,6 +18,7 @@ import {
 import { OneSweepSort } from "../src/onesweep.mjs";
 import { MultisplitPerm } from "../src/multisplitperm.mjs";
 import { ShunPerm } from "../src/shunperm.mjs";
+import { SuffixArray, suffixArrayReference, checkSuffixArray } from "../src/suffixarray.mjs";
 import { Histogram } from "../src/histogram.mjs";
 import { EvenBins, RangeBins, RadixBins } from "../src/bins.mjs";
 
@@ -999,6 +1000,75 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
     return errors;
   }
 
+  /* SuffixArray test inputs: name -> n -> Uint8Array */
+  const saInputs = {
+    random2: (n) => saRandomText(n, 2),
+    random4: (n) => saRandomText(n, 4),
+    random256: (n) => saRandomText(n, 256),
+    allA: (n) => new Uint8Array(n).fill(65),
+    zeros: (n) => new Uint8Array(n) /* byte 0 must not act as a terminator */,
+    periodic: (n) => Uint8Array.from({ length: n }, (_, i) => "abcab"[i % 5].charCodeAt(0)),
+    fibonacci: (n) => {
+      /* the Fibonacci word: many long repeats, a classic hard case */
+      let a = "a", b = "ab";
+      while (b.length < n) [a, b] = [b, b + a];
+      return new TextEncoder().encode(b.slice(0, n));
+    },
+    english: (n) => {
+      const words = "the quick brown fox jumps over a lazy dog and then the dog sleeps while the fox runs".split(" ");
+      let s = "";
+      for (let i = 0; s.length < n; i++) s += words[(i * 7 + (i >> 3)) % words.length] + " ";
+      return new TextEncoder().encode(s.slice(0, n));
+    },
+  };
+  function saRandomText(n, sigma) {
+    let x = 0x9e3779b9 ^ n ^ (sigma << 20);
+    return Uint8Array.from({ length: n }, () => {
+      x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+      return (x >>> 0) % sigma;
+    });
+  }
+
+  /* SuffixArray: matches the CPU reference and passes the linear checker;
+   * for odd n, also returns the rank array (rank[SA[j]] = j + 1) */
+  async function runSuffixArrayTest({ input, n }) {
+    const withRank = n % 2 === 1;
+    const text = saInputs[input](n);
+    const padded = new Uint8Array(Math.ceil(n / 4) * 4);
+    padded.set(text);
+    const inputBuffer = device.createBuffer({ size: padded.length, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(inputBuffer, 0, padded);
+    const outputBuffer = device.createBuffer({ size: n * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const mappable = device.createBuffer({ size: n * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const rankBuffer = withRank ? device.createBuffer({ size: n * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }) : undefined;
+    const primitive = new SuffixArray({ device, n });
+    await primitive.execute({ inputBuffer, outputBuffer, ...(withRank && { rankBuffer }) });
+    const read = async (buffer) => {
+      const encoder = device.createCommandEncoder();
+      encoder.copyBufferToBuffer(buffer, 0, mappable, 0, n * 4);
+      device.queue.submit([encoder.finish()]);
+      await mappable.mapAsync(GPUMapMode.READ);
+      const data = new Uint32Array(mappable.getMappedRange().slice());
+      mappable.unmap();
+      return data;
+    };
+    const sa = await read(outputBuffer);
+    let errors = checkSuffixArray(text, sa);
+    if (withRank && !errors) {
+      const rank = await read(rankBuffer);
+      const j = sa.findIndex((i, p) => rank[i] !== p + 1);
+      if (j >= 0) errors += `\nrank[${sa[j]}] = ${rank[sa[j]]}, expected ${j + 1}`;
+    }
+    if (!errors && n <= 1 << 20) {
+      const reference = suffixArrayReference(text);
+      const j = reference.findIndex((v, i) => v !== sa[i]);
+      if (j >= 0) errors += `\nSA[${j}] = ${sa[j]}, expected ${reference[j]}`;
+    }
+    primitive.destroy();
+    for (const b of [inputBuffer, outputBuffer, mappable, rankBuffer]) b?.destroy();
+    return errors;
+  }
+
   class RandomBitsTest extends BasePrimitive {
     constructor(args) {
       super(args);
@@ -1303,6 +1373,19 @@ ${randomBitsWGSL(this.rng)}
     await runTest(`perm  ShunPerm n=${n} ${JSON.stringify(options)}`, () => runShunTest({ n, options }));
   }
 
+  for (const [input, sizes] of [
+    ["random4", [1, 2, 3, 7, 8, 1000, 4097]],
+    ["random2", [100, 10001]],
+    ["random256", [5, 65537]],
+    ["allA", [1, 2, 9, 1000]],
+    ["zeros", [6, 1000]],
+    ["periodic", [999]],
+    ["fibonacci", [4181]],
+    ["english", [20000]],
+  ]) {
+    for (const n of sizes) await runTest(`sa    SuffixArray ${input} n=${n}`, () => runSuffixArrayTest({ input, n }));
+  }
+
   for (const [label, bins, n, gen, repeat] of histogramTests) {
     await runTest(`hist  ${label} n=${n}`, () => runHistogramTest({ bins, n, gen, repeat }));
   }
@@ -1343,6 +1426,12 @@ ${randomBitsWGSL(this.rng)}
       await runLarge(name, () => runPermTest({ n, options }));
     }
     await runLarge("perm  ShunPerm n=1048576 {}", () => runShunTest({ n: 1 << 20, options: {} }));
+    for (const [input, n] of [
+      ["random256", (1 << 22) + 3],
+      ["english", 1 << 22],
+    ]) {
+      await runLarge(`sa    SuffixArray ${input} n=${n}`, () => runSuffixArrayTest({ input, n }));
+    }
 
     for (const [label, bins, n, gen] of largeHistogramTests) {
       await runLarge(`hist  ${label} n=${n}`, () => runHistogramTest({ bins, n, gen }));
