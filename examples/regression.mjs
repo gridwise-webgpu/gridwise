@@ -17,6 +17,7 @@ import {
 } from "../src/primitive.mjs";
 import { OneSweepSort } from "../src/onesweep.mjs";
 import { MultisplitPerm } from "../src/multisplitperm.mjs";
+import { Multisplit } from "../src/multisplit.mjs";
 import { ShunPerm } from "../src/shunperm.mjs";
 import { SuffixArray, suffixArrayReference, checkSuffixArray } from "../src/suffixarray.mjs";
 import { Histogram } from "../src/histogram.mjs";
@@ -1000,6 +1001,43 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
     return errors;
   }
 
+  /* Multisplit: buckets in order, the same elements, bucket offsets */
+  async function runMultisplitTest({ bins, n, keyOf, type = "keysonly", values, length }) {
+    const keys = Uint32Array.from({ length: n }, (_, i) => keyOf(i));
+    const vals = Uint32Array.from({ length: n }, (_, i) => (Math.imul(i, 0x9e3779b9) >>> 0) ^ 0x5a5a);
+    const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    const buf = (data) => {
+      const b = device.createBuffer({ size: Math.max(16, n * 4), usage });
+      if (data) device.queue.writeBuffer(b, 0, data);
+      return b;
+    };
+    const args = { keysIn: buf(keys), keysOut: buf(), bucketOffsets: device.createBuffer({ size: 4 * (bins.numBins + 4), usage }) };
+    if (type === "keyvalue") args.valuesIn = buf(vals);
+    if (type === "keyvalue" || values) args.valuesOut = buf();
+    const primitive = new Multisplit({ device, bins, type, values, length: length ?? n /* buffers are at least 16 bytes */ });
+    await primitive.execute(args);
+    const read = async (b, words) => {
+      const m = device.createBuffer({ size: words * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+      const e = device.createCommandEncoder();
+      e.copyBufferToBuffer(b, 0, m, 0, words * 4);
+      device.queue.submit([e.finish()]);
+      await m.mapAsync(GPUMapMode.READ);
+      const out = new Uint32Array(m.getMappedRange().slice(0));
+      m.destroy();
+      return out;
+    };
+    const errors = primitive.validate({
+      keysIn: keys,
+      valuesIn: vals,
+      keysOut: await read(args.keysOut, n),
+      valuesOut: args.valuesOut ? await read(args.valuesOut, n) : undefined,
+      bucketOffsets: await read(args.bucketOffsets, bins.numBins + 1),
+    });
+    primitive.destroy();
+    for (const b of Object.values(args)) b?.destroy?.(); /* execute() adds non-buffer fields (trials) */
+    return errors;
+  }
+
   /* SuffixArray test inputs: name -> n -> Uint8Array */
   const saInputs = {
     random2: (n) => saRandomText(n, 2),
@@ -1376,6 +1414,23 @@ ${randomBitsWGSL(this.rng)}
     await runTest(`perm  ShunPerm n=${n} ${JSON.stringify(options)}`, () => runShunTest({ n, options }));
   }
 
+  {
+    const hash = (i) => (Math.imul(i ^ 0x2545f491, 0x2c1b3c6d) ^ (i >>> 7)) >>> 0;
+    const f32Word = (x) => new Uint32Array(new Float32Array([x]).buffer)[0];
+    for (const [label, args] of [
+      ["radix 8 bits, keys only", { bins: new RadixBins({ shift: 24, bits: 8 }), n: 100003, keyOf: hash }],
+      ["radix 8 bits, key-value", { bins: new RadixBins({ shift: 8, bits: 8 }), n: 65536, keyOf: hash, type: "keyvalue" }],
+      ["radix 4 bits, values: index", { bins: new RadixBins({ shift: 0, bits: 4 }), n: 40000, keyOf: hash, values: "index" }],
+      ["radix 1 bit, skewed", { bins: new RadixBins({ shift: 31, bits: 1 }), n: 30000, keyOf: (i) => (i % 97 === 0 ? 0x80000000 : 5) }],
+      ["even u32 10 bins", { bins: new EvenBins({ datatype: "u32", numBins: 10, lower: 0, upper: 1000 }), n: 50001, keyOf: (i) => hash(i) % 1000 }],
+      ["even f32 256 bins, key-value", { bins: new EvenBins({ datatype: "f32", numBins: 256, lower: 0, upper: 1 }), n: 20000, keyOf: (i) => f32Word((hash(i) % 1000000) / 1e6), type: "keyvalue" }],
+      ["radix 8 bits, length 12345 of 50000", { bins: new RadixBins({ shift: 16, bits: 8 }), n: 50000, keyOf: hash, type: "keyvalue", length: 12345 }],
+      ["radix 8 bits, n = 1", { bins: new RadixBins({ shift: 0, bits: 8 }), n: 1, keyOf: () => 77, values: "index" }],
+    ]) {
+      await runTest(`msplit Multisplit ${label}`, () => runMultisplitTest(args));
+    }
+  }
+
   for (const [input, sizes] of [
     ["random4", [1, 2, 3, 7, 8, 1000, 4097]],
     ["random2", [100, 10001]],
@@ -1393,6 +1448,12 @@ ${randomBitsWGSL(this.rng)}
   await runTest("sa    SuffixArray allA n=3001 {speculate: false}", () =>
     runSuffixArrayTest({ input: "allA", n: 3001, options: { speculate: false }, expectSpeculation: false })
   );
+  /* local scatter (multisplit by destination block), forced on at small n */
+  for (const [input, n] of [["random4", 4097], ["random256", 65537], ["allA", 3001], ["english", 20000], ["fibonacci", 4181], ["random4", 1]]) {
+    await runTest(`sa    SuffixArray ${input} n=${n} {localScatter: true}`, () =>
+      runSuffixArrayTest({ input, n, options: { localScatter: true } })
+    );
+  }
   await runTest("sa    SuffixArray english n=20000 {speculate: false}", () =>
     runSuffixArrayTest({ input: "english", n: 20000, options: { speculate: false }, expectSpeculation: false })
   );

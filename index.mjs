@@ -17,6 +17,7 @@ export {
   localFinishReservedBytes,
 } from "./src/multisplitperm.mjs";
 export { ShunPerm } from "./src/shunperm.mjs";
+export { Multisplit, multisplitPassWGSL } from "./src/multisplit.mjs";
 export {
   SuffixArray,
   suffixArrayReference,

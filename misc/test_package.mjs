@@ -62,6 +62,7 @@ async function main() {
       "MultisplitPerm",
       "ShunPerm",
       "SuffixArray",
+      "Multisplit",
       "checkSuffixArray",
       "tuneMultisplitPerm",
       "randomBitsWGSL",

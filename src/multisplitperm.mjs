@@ -83,6 +83,7 @@ import { DLDFScan } from "./scandldf.mjs";
 import { BinOpAdd } from "./binop.mjs";
 import { randomBitsWGSL, randomBitsJS, pmMixJS } from "./random.mjs";
 import { RadixBins } from "./bins.mjs";
+import { multisplitPassWGSL, multisplitSlots } from "./multisplit.mjs";
 
 const WORKGROUP_SIZE = 256; /* the finish's 256 sub-buckets assume it */
 
@@ -378,9 +379,7 @@ export class MultisplitPerm extends BasePrimitive {
     let numSegs = 1;
     let bitsDone = 0;
     this.plan = this.passBits.map((bits) => {
-      const tiles = Math.ceil(n / numSegs / tile);
-      const slots =
-        Math.ceil(Math.max(1, Math.min(Math.ceil(this.targetWorkgroups / numSegs), tiles)) / 4) * 4;
+      const slots = multisplitSlots(n, numSegs, tile, this.targetWorkgroups);
       const p = {
         bits,
         radix: 1 << bits,
@@ -435,8 +434,6 @@ export class MultisplitPerm extends BasePrimitive {
 
   /** hist_main and scatter_main for one multisplit pass */
   multisplitWGSL({ radixBits, shift, fromIndex }) {
-    const W = WORKGROUP_SIZE;
-    const K = this.tileK;
     const carry = this.carry;
     const rng = this.rng;
     const RADIX = 1 << radixBits;
@@ -449,128 +446,18 @@ export class MultisplitPerm extends BasePrimitive {
           ? "vec2u(idx, pm_elem(idx))"
           : "idx";
     const keyOf = carry === "keys" ? "e" : pairs ? "e.y" : rng ? "pm_elem(e)" : "pm_mix(e, ms.seed)";
-    /* digit of the element staged at j: a key's digit is cheap to recompute;
-     * for an index, find the last digit whose run starts at or before j */
-    const stagedDigit =
-      carry === "keys"
-        ? /* wgsl */ `
-  return digitOf(stage[j]);`
-        : /* wgsl */ `
-  var lo = 0u;
-  var hi = RADIX;
-  loop {
-    if (hi - lo <= 1u) { break; }
-    let mid = (lo + hi) / 2u;
-    if (tileStart[mid] <= j) { lo = mid; } else { hi = mid; }
-  }
-  return lo;`;
-    return /* wgsl */ `
-${this.fnDeclarations.include(
-  "wgScan",
-  ["wgHistogram", { name: "cnt", numBins: RADIX, workgroupSize: W }] /* the histogram, then each tile's ranks */,
-  "computeLinearizedGridParametersSplit"
-)}
+    /* the digit of a staged element: a key's is cheap to recompute; an
+     * index's is found from the tile's digit starts (multisplitPassWGSL) */
+    const definitions = /* wgsl */ `
 ${randomBitsWGSL(rng)}
 alias Elem = ${pairs ? "vec2u" : "u32"};
-const RADIX = ${RADIX}u;
-const K = ${K}u;
-const TILE = ${K * W}u;
-
 fn elemAt(idx: u32) -> Elem { return ${elemAt}; }
 fn keyOf(e: Elem) -> u32 { return ${keyOf}; }
 ${new RadixBins({ shift, bits: radixBits }).wgsl("radixDigit")}
 fn digitOf(e: Elem) -> u32 { return radixDigit(keyOf(e)); }
-fn histIndex(seg: u32, d: u32, slot: u32) -> u32 { return (seg * RADIX + d) * ms.slots + slot; }
-
-/* This workgroup's segment and slot, and the segment's range, broadcast so
- * that loop bounds are workgroup-uniform. */
-var<workgroup> wBegin: u32;
-var<workgroup> wEnd: u32;
-struct Work { seg: u32, slot: u32, begin: u32, end: u32 };
-fn myWork(wid: u32, lidx: u32) -> Work {
-  let seg = wid / ms.slots;
-  if (lidx == 0u) {
-    wBegin = segStart[seg * ms.segStride];
-    wEnd = select(segStart[(seg + 1u) * ms.segStride], ms.n, seg + 1u >= ms.numSegs);
-  }
-  return Work(seg, wid % ms.slots, workgroupUniformLoad(&wBegin), workgroupUniformLoad(&wEnd));
-}
-
-
-@compute @workgroup_size(${W})
-fn hist_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
-  ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
-  let lidx = builtinsNonuniform.lidx;
-  if (wgid >= ms.numSegs * ms.slots) { return; }
-  let w = myWork(wgid, lidx);
-  cntClear(lidx);
-  workgroupBarrier();
-  for (var base = w.begin + w.slot * TILE; base < w.end; base += ms.slots * TILE) {
-    for (var k = 0u; k < K; k++) {
-      let idx = base + lidx + k * ${W}u;
-      if (idx < w.end) { cntAdd(digitOf(elemAt(idx)), lidx); }
-    }
-  }
-  workgroupBarrier();
-  for (var d = lidx; d < RADIX; d += ${W}u) { hist[histIndex(w.seg, d, w.slot)] = cntCount(d); }
-}
-
-var<workgroup> stage: array<Elem, TILE>;
-var<workgroup> tileStart: array<u32, RADIX>;  /* exclusive scan of this tile's digit counts */
-var<workgroup> cursor: array<u32, RADIX>;     /* next global output position for each digit */
-fn stagedDigit(j: u32) -> u32 {${stagedDigit}
-}
-
-@compute @workgroup_size(${W})
-fn scatter_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
-  ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
-  let lidx = builtinsNonuniform.lidx;
-  if (wgid >= ms.numSegs * ms.slots) { return; }
-  let w = myWork(wgid, lidx);
-  for (var d = lidx; d < RADIX; d += ${W}u) { cursor[d] = hist[histIndex(w.seg, d, w.slot)]; }
-  for (var base = w.begin + w.slot * TILE; base < w.end; base += ms.slots * TILE) {
-    let tileLen = min(TILE, w.end - base);
-    /* 1. load; rank within digit by workgroup atomics (any order is fine) */
-    cntClear(lidx);
-    workgroupBarrier();
-    var elem: array<Elem, K>;
-    var digit: array<u32, K>;
-    var rank: array<u32, K>;
-    for (var k = 0u; k < K; k++) {
-      let j = lidx + k * ${W}u;
-      if (j < tileLen) {
-        elem[k] = elemAt(base + j);
-        digit[k] = digitOf(elem[k]);
-        rank[k] = atomicAdd(&cnt[digit[k]], 1u);
-      }
-    }
-    workgroupBarrier();
-    /* 2. tile offsets per digit */
-    var count = 0u;
-    if (lidx < RADIX) { count = cntCount(lidx); }
-    var tileTotal = 0u;
-    let start = wgExclusiveScan(count, &tileTotal, builtinsUniform, builtinsNonuniform);
-    if (lidx < RADIX) { tileStart[lidx] = start; }
-    workgroupBarrier();
-    /* 3. stage the tile grouped by digit */
-    for (var k = 0u; k < K; k++) {
-      let j = lidx + k * ${W}u;
-      if (j < tileLen) { stage[tileStart[digit[k]] + rank[k]] = elem[k]; }
-    }
-    workgroupBarrier();
-    /* 4. write out: consecutive staged elements of a digit go to consecutive addresses */
-    for (var k = 0u; k < K; k++) {
-      let j = lidx + k * ${W}u;
-      if (j < tileLen) {
-        let d = stagedDigit(j);
-        keysOut[cursor[d] + j - tileStart[d]] = stage[j];
-      }
-    }
-    workgroupBarrier();
-    if (lidx < RADIX) { cursor[lidx] += count; }
-    workgroupBarrier();
-  }
-}`;
+fn histDigitAt(idx: u32) -> u32 { return digitOf(elemAt(idx)); }
+fn writeOut(pos: u32, e: Elem) { keysOut[pos] = e; }`;
+    return multisplitPassWGSL(this, { radix: RADIX, K: this.tileK, stagedDigit: carry === "keys" ? "recompute" : "search", definitions });
   }
 
   /** the buffer the element at pass `i` (0..P-1) is written to; the finish
