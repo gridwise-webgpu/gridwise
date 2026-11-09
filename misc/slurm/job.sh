@@ -11,7 +11,7 @@ if ! command -v conda >/dev/null; then
 fi
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate "${GRIDWISE_CONDA_ENV:-node22}"
-echo "== $(hostname -s), Slurm job ${SLURM_JOB_ID:-?}, gridwise ${GRIDWISE_COMMIT:-?}, GPU ${GRIDWISE_ADAPTER:-any}, node $(node --version), $(date -Is)"
+echo "== $(hostname -s), Slurm job ${SLURM_JOB_ID:-?} (${SLURM_CPUS_PER_TASK:-?} CPUs), gridwise ${GRIDWISE_COMMIT:-?}, GPU ${GRIDWISE_ADAPTER:-any}, node $(node --version), $(date -Is)"
 nvidia-smi -L 2>/dev/null || true
 node misc/list_adapters.mjs
 echo "== $1"
