@@ -36,14 +36,37 @@ export function nodeGPU(flags = []) {
   return gpu;
 }
 
+/** create() flags that pick the adapter whose name contains `name` as a
+ * word, ignoring case and with "_" for a space ("a100", "v100", "titan_v"):
+ * for nodes with several kinds of GPU, where Vulkan sees them all whatever
+ * the scheduler allocated. Default: the GRIDWISE_ADAPTER environment
+ * variable (set by misc/slurm/job.sh). [] when neither is set. Dawn lists
+ * its adapters when asked for one that does not exist; this asks, then
+ * names the match exactly. */
+export async function adapterFlags(name = globalThis.process?.env?.GRIDWISE_ADAPTER) {
+  if (!name) return [];
+  let available = [];
+  try {
+    await nodeGPU(["adapter=\u0001none"]).requestAdapter();
+  } catch (e) {
+    available = [...String(e).matchAll(/name: '([^']*)'/g)].map((m) => m[1]);
+  }
+  const word = new RegExp(`(^|[^a-z0-9])${name.toLowerCase().replace(/_/g, " ")}($|[^a-z0-9])`);
+  const match = available.find((n) => word.test(n.toLowerCase()));
+  if (!match) throw new Error(`no WebGPU adapter matches "${name}"; available: ${available.join("; ") || "none"}`);
+  return [`adapter=${match}`];
+}
+
 /** { gpu, adapter, device }.
  *   disableSubgroups: true   do not request subgroups (Gridwise then emulates them)
  *   features: [...]          more required features
  *   limits: {...}            required limits, overriding the defaults
  *   flags: [...]             more create() flags (e.g. "backend=vulkan")
- *   powerPreference          passed to requestAdapter */
+ *   powerPreference          passed to requestAdapter
+ * GRIDWISE_ADAPTER in the environment picks the adapter by name
+ * (adapterFlags). */
 export async function createNodeDevice({ disableSubgroups = false, features = [], limits = {}, flags = [], powerPreference } = {}) {
-  const gpu = nodeGPU(flags);
+  const gpu = nodeGPU([...flags, ...(await adapterFlags())]);
   const adapter = await gpu.requestAdapter(powerPreference ? { powerPreference } : undefined);
   if (!adapter) throw new Error("createNodeDevice: no WebGPU adapter");
   const wanted = [...(disableSubgroups ? [] : ["subgroups"]), "timestamp-query", ...features];
