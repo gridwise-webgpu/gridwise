@@ -19,6 +19,7 @@ The following WebGPU objects are currently cached by our library:
 - `GPUPipelineLayout`
 - `GPUBindGroupLayout`
 - `GPUComputePipeline`
+- `GPUBindGroup`
 
 Of these, `GPUShaderModule` is potentially independent of the `GPUDevice`, while the others are dependent on the specific `GPUDevice` instance.
 
@@ -32,6 +33,7 @@ The available caches are:
 - `bindGroupLayouts`
 - `computeModules`
 - `computePipelines`
+- `bindGroups`
 
 Internally, each of these caches can be individually enabled or disabled (`new WebGPUObjectCache({ enabled: [...] })`); the primitive's `webgpucache` argument enables or disables all of them.
 
@@ -54,6 +56,7 @@ class WebGPUObjectCache {
       "bindGroupLayouts",
       "computeModules",
       "computePipelines",
+      "bindGroups",
     ];
 
     for (const cache of this.caches) {
@@ -67,8 +70,20 @@ class WebGPUObjectCache {
 
 ### Bind Group Caching
 
-Bind groups are not cached. This decision was made because bind groups depend on `GPUBuffer` objects. Reliably creating a cache key from a
-`GPUBuffer` is problematic due to its dynamic state.
+A bind group is fully determined by its layout and, for each binding, the `GPUBuffer` and the range (offset and size) bound. Creating bind groups afresh on every `execute()` was about a third of the CPU time of a small execute (a 7-pass sort took 4.0 ms of CPU per execute in Node before the bind-group cache and the short module keys below; 1.2 ms after).
+
+**A canonical name for a buffer.** Gridwise's buffer names are not canonical. One `GPUBuffer` can have several names: a child primitive's `keysInOut` may be its parent's `keys`. One name can mean different buffers over time: `SuffixArray`'s `listA` and `listB` swap roles every round, and `AllocateBuffer` replaces a buffer whose size changes. So the cache does not use names. It uses the `GPUBuffer` object itself: a JavaScript object's identity is canonical for as long as the object exists.
+
+- `gpuObjectId(buffer)` gives each `GPUBuffer` a small integer, the first time it is seen, from a counter that only goes up. A module-level `WeakMap` holds the ids, so it does not keep buffers alive, and ids are never reused.
+- The key of a bind group is `pipeline key | group index | id:offset:size, …` (one entry per binding). The pipeline key pins the bind group layout.
+- A buffer's contents can change freely (`writeBuffer`, kernels) without invalidating its bind groups: they refer to the buffer, not its contents.
+
+**Eviction.** A cached bind group refers to its buffers, so entries for destroyed buffers must not accumulate.
+
+- When `AllocateBuffer` replaces a buffer, and when `destroy()` frees a primitive's own buffers, the cache drops every bind group that binds them (`forgetBuffer`, through an index from buffer id to keys).
+- Buffers that a caller passes in and destroys later are invisible to Gridwise. For those, the cache starts over once it holds 4096 bind groups.
+
+`WebGPUObjectCache.bindGroup(pipeline, index, entries, create)` does the lookup; `webgpucache: "disable"` turns it off with the others.
 
 ### Cache Key Generation
 
@@ -110,6 +125,8 @@ Example:
 
 The cache key for a `GPUShaderModule` (referred to as a compute module in the context of compute shaders) is the entire kernel string. While underlying WebGPU engines like Dawn might have their own caching mechanisms, we implement a library-level cache for them as well.
 
+The module's own `__cacheKey`, which the pipeline's key embeds, is a short id (`module3`), not the source: stringifying a sort's whole WGSL into every pipeline lookup cost about 1 ms per execute.
+
 #### Compute Pipelines
 
 The cache key for a `GPUComputePipeline` is derived from its descriptor object. Since the `GPUPipelineLayout` and `GPUShaderModule` are cached separately, we can reuse their cache keys to optimize the key generation for the pipeline itself.
@@ -128,6 +145,7 @@ Pipeline layouts: 7/1
 Bind group layouts: 0/1
 Compute modules: 4/4
 Compute pipelines: 4/4
+Bind groups: 3/3 (3 cached)
 ```
 
 ### Measuring Performance with CPU Timing
