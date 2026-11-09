@@ -78,3 +78,13 @@ webgpu-benchmarking % ~/Documents/src/deno/target/release/deno run --allow-env -
 ```
 
 `const isDeno = typeof Deno !== "undefined";`
+
+## Running on a Slurm cluster
+
+`misc/slurm/submit.sh` runs a command on one or more GPU nodes through Slurm, from the login node. It checks out the requested commit as a worktree (once per commit, with `npm ci`), so queued jobs are unaffected by later changes to your checkout. It submits one job per `NODE:GPU`, and writes each job's output to `~/gridwise-results/`.
+
+```
+misc/slurm/submit.sh -r origin/main -n probe daisy:v100,wario:a100 'node misc/onesweep_probe.mjs 24 u32'
+```
+
+Each job (`misc/slurm/job.sh`) activates a conda environment with Node 22 (`node22` by default; `GRIDWISE_CONDA_ENV` overrides). It records the host, commit and adapter, then runs the command. It sets `GRIDWISE_ADAPTER` to the requested GPU type, which makes `createNodeDevice()` pick that GPU by name. That matters on nodes with several kinds of GPU, because Vulkan sees all of them whatever Slurm allocated.
