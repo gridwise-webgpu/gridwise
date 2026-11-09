@@ -1175,12 +1175,21 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
      * the tile and the kernel's other workgroup memory would not fit the
      * device's limit, as with 64b keys and emulated subgroups (whose
      * scratch arrays take about 14 KB) under a 32 KB limit: 8 there.
-     * Emulated subgroups need at least RADIX / 32 = 8 keys per thread: their
-     * eight 32-lane subgroups' histograms (8 x RADIX) share wg_warpHist with
-     * the tile, and with 7 the sort is wrong. */
+     * Each subgroup's histogram (RADIX counts) is staged in the tile, so
+     * the tile must hold (BLOCK_DIM / subgroup size) x RADIX entries:
+     * KEYS_PER_THREAD >= RADIX / subgroup size. Subgroups of 32 lanes (and
+     * emulated ones) need 8; with fewer the sort is wrong. Only an adapter
+     * whose subgroups are never narrower than 64 lanes allows 4. */
+    const narrowestSubgroup = this.useSubgroups ? Math.max(32, this.adapterInfo?.subgroupMinSize ?? 32) : 32;
+    const fewest = Math.ceil(this.RADIX / narrowestSubgroup);
+    if (this.KEYS_PER_THREAD !== undefined && this.KEYS_PER_THREAD < fewest) {
+      throw new Error(
+        `OneSweepSort: KEYS_PER_THREAD ${this.KEYS_PER_THREAD} is too few: each subgroup's histogram needs ` +
+          `at least ${fewest} (RADIX / subgroup size, with ${narrowestSubgroup}-lane subgroups)`
+      );
+    }
     if (this.KEYS_PER_THREAD === undefined) {
       const limit = this.device.limits.maxComputeWorkgroupStorageSize;
-      const fewest = this.useSubgroups ? 1 : Math.ceil(this.RADIX / 32);
       let kpt = this.keyDatatype.is64Bit ? 12 : 15;
       /* passWorkgroupBytes is an upper bound (about 1 KB high with
        * emulation), so stop at the fewest that work rather than go below */

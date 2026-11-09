@@ -8,10 +8,12 @@
  *   node misc/onesweep_probe.mjs 24 u32
  *
  * On an M1 Max (2^24): the spin limit made no difference (fallbacks were a
- * few percent of tiles at any limit); the tile size did, through occupancy.
- * A pass was fastest with the largest tile that still let two (u32 keys, 11
- * keys per thread, 1.4x the default's speed) or three (u64 key-value, 4 keys
- * per thread, 1.35x) workgroups share a core's 32 KB of workgroup memory.
+ * few percent of tiles at any limit). For u32 keys, 11 keys per thread made
+ * a pass 1.4x faster than the default 15, likely because two workgroups then
+ * share a core's 32 KB of workgroup memory; for u64 key-value, the default
+ * 12 was already the fastest valid tile. Fewer than RADIX / subgroup size
+ * (8 with 32-lane subgroups) sort wrongly: OneSweep now refuses them, and
+ * the probe skips them and checks that every sort it times is correct.
  * Keys are random each run; each point is the median of 5 runs after a
  * warm-up. */
 import { createNodeDevice } from "./node_device.mjs";
@@ -40,7 +42,23 @@ const median = (a) => [...a].sort((x, y) => x - y)[a.length >> 1];
 const passBytes = 2 * (keyBytes + (options.type === "keyvalue" ? 4 : 0)) * n;
 
 console.log("keys/thread  spin  wg bytes   tiles   pass ms   pass GB/s   sort GB/s   fallbacks per pass (% of tiles)");
-const kpts = options.datatype === "u64" ? [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+const kpts = options.datatype === "u64" ? [4, 5, 6, 7, 8, 9, 10, 11, 12] : [4, 6, 8, 9, 10, 11, 12, 13, 14, 15];
+/* the keys, sorted on the CPU, to check each configuration's output */
+const sortedKeys =
+  keyBytes === 8 ? new BigUint64Array(keys.buffer).slice().sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)) : keys.slice().sort();
+async function sortedCorrectly(sort) {
+  const bytes = keyBytes * n;
+  const readback = device.createBuffer({ size: bytes, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+  const encoder = device.createCommandEncoder();
+  encoder.copyBufferToBuffer(args[sort.outputKeysBufferName], 0, readback, 0, bytes);
+  device.queue.submit([encoder.finish()]);
+  await readback.mapAsync(GPUMapMode.READ);
+  const out = keyBytes === 8 ? new BigUint64Array(readback.getMappedRange()) : new Uint32Array(readback.getMappedRange());
+  let ok = true;
+  for (let i = 0; i < n && ok; i++) ok = out[i] === sortedKeys[i];
+  readback.destroy();
+  return ok;
+}
 for (const KEYS_PER_THREAD of kpts) {
   for (const MAX_SPIN_COUNT of spins) {
     let sort;
@@ -60,7 +78,10 @@ for (const KEYS_PER_THREAD of kpts) {
         totals.push(ns.reduce((a, b) => a + b, 0));
         const passNS = ns.filter((_, i) => labels[i].includes("onesweep_pass"));
         passes.push(passNS.reduce((a, b) => a + b, 0) / passNS.length);
-        if (r === 0) fallbacks = await sort.fallbackCounts();
+        if (r === 0) {
+          fallbacks = await sort.fallbackCounts();
+          if (!(await sortedCorrectly(sort))) throw new Error("sorted WRONGLY");
+        }
       }
       const pass = median(passes);
       const total = median(totals);
