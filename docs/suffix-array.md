@@ -195,11 +195,13 @@ With the measured sort rate and per-access costs in place of copy bandwidth, the
 2. **When the initial round resolves every suffix, the output is a copy** of the sorted payload instead of a scatter by rank.
 3. **Unchanged ranks are not rewritten.** The first subgroup of each group keeps its rank, so update skips its scatter: on English-like text that is 57% of the rank writes (20% on the Fibonacci word, 12% on random ACGT, measured on the CPU at 2^17).
 4. **Speculative rounds** (decision 4) hide the per-round readback when the active count shrinks slowly.
-5. **Local scatter** (from n = 2^22, `localScatter`). The rank updates and the output no longer scatter directly. The (suffix, rank) pairs are first grouped by the suffix's block with [`Multisplit`](../multisplit/) (256 blocks), then written block by block, so each block's writes stay in cache. That replaces about 290 bytes of traffic per random write with about 32 streamed bytes.
+5. **Local scatter** (from n = 2^23, `localScatter`). The rank updates and the output no longer scatter directly. The (suffix, rank) pairs are first grouped by the suffix's block with [`Multisplit`](../multisplit/) (2^`localScatterBits` blocks, default 64), then written block by block, so each block's writes stay in cache. That replaces about 290 bytes of traffic per random write with about 32 streamed bytes.
+   - First M1 Max measurement (256 blocks, n = 2^24): GPU time fell 11% on random bytes (55 → 49 ms) and 16% on English-like text (278 → 232 ms); it did not change on the Fibonacci word, and it rose 13% on all "A", whose writes were already nearly sequential. At 2^22 it made no difference, hence the 2^23 threshold.
+   - The multisplit ran at only 80–240 GB/s: with 256 buckets, a 2048-pair tile averages 8 pairs per bucket, 32-byte runs against 128-byte cache lines. Hence the default of 64 blocks.
 
 **Next, in order of expected gain:**
 
-1. **Sort rate.** OneSweep's tile size sets how many workgroups share a core; on the M1 Max, 4 keys per thread for 64-bit key-value (instead of 12) made a pass 1.35 times faster (`misc/onesweep_probe.mjs`). The default needs measurements on other GPUs before it changes; meanwhile `sortOptions: { KEYS_PER_THREAD }` sets it.
+1. **Sort rate.** On the M1 Max, OneSweep's 64-bit key-value passes run at about 100 GB/s, and the default tile (12 keys per thread) is already the fastest valid one (`misc/onesweep_probe.mjs`; fewer than 8 keys per thread sort wrongly with 32-lane subgroups). The spin limit of the lookback does not matter. What limits a pass is still open.
 2. **Local gathers.** Pack's `rank[i + h]` gather is still random. The same multisplit, applied to the requests and then to the answers, would make it local too, at about twice the streaming cost.
 3. **Fewer key bits.** Later rounds sort 2b bits; replacing `rank[i]` with a dense id for its group would save passes once few groups remain.
 

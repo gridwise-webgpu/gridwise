@@ -53,9 +53,11 @@ const MAX_ROUNDS = 40;
  * read back when that count shrank by less than this factor, or is this small */
 const SPECULATE_RATIO = 0.75;
 const SPECULATE_SMALL = 1 << 16;
-/* localScatter "auto": from this n up (on an M1 Max a random 4-byte write
- * cost 0.23 ns at 2^20, 0.34 at 2^22, 0.80 at 2^24) */
-const LOCAL_SCATTER_FROM = 1 << 22;
+/* localScatter "auto": from this n up. On an M1 Max a random 4-byte write
+ * cost 0.23 ns at 2^20, 0.34 at 2^22, 0.80 at 2^24; local scatter gained
+ * 11-16% of GPU time at 2^24 on random and English-like text, nothing at
+ * 2^22. */
+const LOCAL_SCATTER_FROM = 1 << 23;
 
 export class SuffixArray extends BasePrimitive {
   constructor(args) {
@@ -76,12 +78,17 @@ export class SuffixArray extends BasePrimitive {
     /* localScatter: apply the rank writes (and the output's) through a
      * Multisplit by destination block, so that each block's writes stay in
      * cache, instead of scattering them directly. "auto" (default): for
-     * n >= 2^22, where the rank array outgrows the caches. */
+     * n >= 2^23, where the rank array outgrows the caches. localScatterBits
+     * (default 6, at most 8): log2 of the number of blocks. Fewer blocks
+     * mean longer runs per bucket in each multisplit tile (2048 pairs over
+     * 64 buckets: 32 pairs, a 128-byte line of each array), and bigger
+     * blocks (2^24 / 64: 1 MB of ranks each, still in cache). */
     this.localScatter ??= "auto";
     if (this.localScatter === "auto") this.localScatter = this.n >= LOCAL_SCATTER_FROM;
     if (this.localScatter) {
       const L = Math.max(1, Math.ceil(Math.log2(this.n + 1)));
-      const bits = Math.min(8, L);
+      this.localScatterBits ??= 6;
+      const bits = Math.min(this.localScatterBits, L);
       /* destination's top bits (a rank of n may wrap to bucket 0: only
        * locality, not correctness, depends on the bucket) */
       const bins = new RadixBins({ shift: L - bits, bits });
