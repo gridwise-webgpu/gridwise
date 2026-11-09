@@ -168,9 +168,9 @@ The input decides how many suffixes stay active, through the **work ratio** Σ m
 
 A full 64-bit key-value sort moves 200 bytes per element, so typical text costs about as much as 5–7 such sorts, and the worst case about 30.
 
-### Measured: the first run (Apple M-series, 365 GB/s copy bandwidth)
+### Measured: the first run (Apple M1 Max, 365 GB/s copy bandwidth)
 
-The first version, before the two changes below, on an Apple GPU through Dawn and Metal:
+The first version, before the two changes below, on a MacBook Pro with an M1 Max, through Dawn and Metal:
 
 | Input, n = 2^24 | Rounds | Work ratio | Wall | GPU | Copy-bandwidth model |
 |---|---|---|---|---|---|
