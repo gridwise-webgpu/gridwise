@@ -4,7 +4,7 @@
  * need timestamp queries.
  *
  *   import { copyBandwidth, sortRate, randomAccessCost } from "./device_rates.mjs";
- *   const gbps = await copyBandwidth(device, 256 << 20);
+ *   const gbps = await copyBandwidth(device, 256 << 20);      // a copy kernel
  *   const sort = await sortRate(device, n, { datatype: "u64", type: "keyvalue", keyBits: 63 });
  *   const { gather, scatter } = await randomAccessCost(device, n);   // ns each
  *
@@ -31,9 +31,13 @@ export async function gpuNS(primitive, args) {
   return [gpuTotalTimeNS].flat().reduce((a, b) => a + b, 0);
 }
 
-/** Median GPU time (ns) of `repeats` executes after one warm-up; `before`
- * runs ahead of each (e.g., to restore unsorted input). */
+/** Median GPU time (ns) of `repeats` executes, after warming the GPU to
+ * full clock (warmUp: an idle GPU's clocks fall, and the first executes of
+ * a run measured a V100's sort at a fifth of its speed); `before` runs ahead
+ * of each (e.g., to restore unsorted input). */
 async function timeGPU(primitive, args, { repeats = 3, before = () => {} } = {}) {
+  before();
+  await primitive.warmUp(args);
   const times = [];
   for (let i = 0; i <= repeats; i++) {
     before();
@@ -43,10 +47,63 @@ async function timeGPU(primitive, args, { repeats = 3, before = () => {} } = {})
   return median(times);
 }
 
+/** A compute kernel that copies one buffer to another, 16 bytes per
+ * invocation: the memory bandwidth kernels can reach. */
+class CopyKernel extends BasePrimitive {
+  constructor(args) {
+    super(args);
+    this.knownBuffers = ["src", "dst"];
+    this.workgroupSize = 256;
+    this.datatype = "u32";
+    this.params = new UniformStruct("CopyParams", { n: "u32" });
+  }
+  compute() {
+    const n = this.bytes / 16;
+    return [
+      this.params.allocate("copyParams", { n }),
+      new Kernel({
+        kernel: () => /* wgsl */ `
+${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
+@compute @workgroup_size(256)
+fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
+  ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
+  if (gid < cp.n) { dst[gid] = src[gid]; }
+}`,
+        entryPoint: "main",
+        label: "copy kernel",
+        buffers: [
+          { name: "src", access: "read", type: "array<vec4u>" },
+          { name: "dst", access: "read_write", type: "array<vec4u>" },
+          { name: "cp", buffer: "copyParams", uniform: this.params },
+        ],
+        getDispatchGeometry: () => this.getSimpleDispatchGeometry({ workgroupCount: Math.ceil(n / 256) }),
+      }),
+    ];
+  }
+}
+
 /** Copy bandwidth in GB/s, counting each byte read once and written once:
- * copyBufferToBuffer between two buffers of `bytes`, CPU-timed over 20
- * copies. Make bytes large enough to leave the caches. */
-export async function copyBandwidth(device, bytes) {
+ * a compute kernel copying `bytes` (a multiple of 16; large enough to leave
+ * the caches), GPU-timed when the device has timestamps. This is the
+ * yardstick for kernels: copyBufferToBuffer (copyEngineBandwidth) can be
+ * far slower (a V100: 307 GB/s against about 800 for a kernel). */
+export async function copyBandwidth(device, bytes, { adapter } = {}) {
+  if (!device.features.has("timestamp-query")) return copyEngineBandwidth(device, bytes);
+  bytes = Math.floor(Math.min(bytes, device.limits.maxStorageBufferBindingSize) / 16) * 16;
+  const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+  const src = device.createBuffer({ size: bytes, usage });
+  const dst = device.createBuffer({ size: bytes, usage });
+  const copy = new CopyKernel({ device, adapter, bytes });
+  const ns = await timeGPU(copy, { src, dst }, { repeats: 5 });
+  copy.destroy();
+  src.destroy();
+  dst.destroy();
+  return (2 * bytes) / ns;
+}
+
+/** copyBufferToBuffer bandwidth in GB/s (read + write), CPU-timed over 20
+ * copies of `bytes`. */
+export async function copyEngineBandwidth(device, bytes) {
   const usage = GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
   const a = device.createBuffer({ size: bytes, usage });
   const b = device.createBuffer({ size: bytes, usage });
@@ -156,7 +213,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const { vendor, architecture, description } = adapter.info;
   console.log(`adapter: ${vendor} ${architecture} ${description ?? ""}`);
   const copyBytes = Math.min(device.limits.maxBufferSize, 256 << 20);
-  console.log(`copy bandwidth (read + write, ${copyBytes >> 20} MiB): ${(await copyBandwidth(device, copyBytes)).toFixed(1)} GB/s`);
+  console.log(
+    `copy bandwidth (read + write, ${copyBytes >> 20} MiB): kernel ${(await copyBandwidth(device, copyBytes, { adapter })).toFixed(1)} GB/s,` +
+      ` copyBufferToBuffer ${(await copyEngineBandwidth(device, copyBytes)).toFixed(1)} GB/s`
+  );
   if (!device.features.has("timestamp-query")) {
     console.log("no GPU timestamps: sort and random-access rates need them");
     process.exit(0);

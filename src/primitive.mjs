@@ -58,6 +58,17 @@ Compute pipelines: ${this.computePipelines.hits}/${this.computePipelines.misses}
   }
 }
 
+/* a small integer per GPU object (e.g., a GPUBuffer), for cache keys */
+const gpuObjectIds = new WeakMap();
+function gpuObjectId(object) {
+  let id = gpuObjectIds.get(object);
+  if (id === undefined) {
+    id = (gpuObjectId.next = (gpuObjectId.next ?? 0) + 1);
+    gpuObjectIds.set(object, id);
+  }
+  return id;
+}
+
 function generateCacheKey(obj) {
   // Handle non-object types (primitives, null, undefined) directly.
   if (typeof obj !== "object" || obj === null) {
@@ -595,7 +606,10 @@ export class BasePrimitive {
             computeModule = this.device.createShaderModule({
               code: kernelString,
             });
-            computeModule.__cacheKey = computeModuleCacheKey;
+            /* a short id, not the source: the pipeline's cache key embeds
+             * this, and stringifying the whole WGSL into every pipeline
+             * lookup cost about 1 ms per execute of a sort */
+            computeModule.__cacheKey = `module${webGPUObjectCache.computeModules.size}`;
             webGPUObjectCache.computeModules.set(
               computeModuleCacheKey,
               computeModule
@@ -728,22 +742,31 @@ export class BasePrimitive {
             label: `${this.label} compute pass`,
           };
 
-          /* create kernelBindGroups here */
+          /* bind groups, cached per primitive by pipeline and the GPU
+           * buffers (and ranges) bound: the same buffers bind the same way
+           * every execute, and creating them was about a third of the CPU
+           * time of a small execute */
           let kernelBindGroups = {};
           for (const [bindGroupIndex, bindGroup] of action.bindings.entries()) {
             const entries = bindGroup.map((binding, bindingIndex) => ({
               binding: bindingIndex,
               resource: this.getBufferResource(binding),
             }));
-            /** Don't think it's feasible to cache bind groups because we don't have a
-             * canonical way to name a buffer */
-            const kernelBindGroup = this.device.createBindGroup({
-              label: `bindGroup ${bindGroupIndex} for ${this.label} ${
-                action.entryPoint && action.entryPoint
-              } kernel`,
-              layout: computePipeline.getBindGroupLayout(bindGroupIndex),
-              entries,
-            });
+            const key = `${computePipelineCacheKey}|${bindGroupIndex}|${entries
+              .map(({ resource: r }) => `${gpuObjectId(r.buffer)}:${r.offset ?? 0}:${r.size ?? ""}`)
+              .join(",")}`;
+            this.__bindGroups ??= new Map();
+            let kernelBindGroup = this.__bindGroups.get(key);
+            if (!kernelBindGroup) {
+              kernelBindGroup = this.device.createBindGroup({
+                label: `bindGroup ${bindGroupIndex} for ${this.label} ${
+                  action.entryPoint && action.entryPoint
+                } kernel`,
+                layout: computePipeline.getBindGroupLayout(bindGroupIndex),
+                entries,
+              });
+              this.__bindGroups.set(key, kernelBindGroup);
+            }
             kernelBindGroups[bindGroupIndex] = kernelBindGroup;
           }
 
@@ -1263,6 +1286,7 @@ dispatchGeometry: ${indirect ? "indirect" : dispatchGeometry}`);
     return { gpuTotalTimeNS, cpuTotalTimeNS };
   }
   destroy() {
+    this.__bindGroups?.clear();
     /* destroy the GPU buffers this primitive allocated itself (AllocateBuffer);
      * buffers passed in by the caller belong to the caller */
     const owned = this.__ownedBuffers ?? new Set();

@@ -41,8 +41,8 @@ console.log(`subgroups: ${device.features.has("subgroups")}, GPU timestamps: ${g
  * leave the caches; and, at each size, the rate of the sort SuffixArray uses
  * (64-bit key-value) and the cost of random 4-byte gathers and scatters */
 const copyBytes = Math.min(device.limits.maxBufferSize, Math.max(1 << 20, Math.min(256 << 20, 16 * 2 ** Math.max(...logSizes))));
-const bandwidth = await copyBandwidth(device, copyBytes);
-console.log(`copy bandwidth (read + write): ${bandwidth.toFixed(1)} GB/s`);
+const bandwidth = await copyBandwidth(device, copyBytes, { adapter });
+console.log(`copy bandwidth (copy kernel, read + write): ${bandwidth.toFixed(1)} GB/s`);
 const rates = {};
 if (gpuTiming) {
   console.log("device rates at each size (for the calibrated model):");
