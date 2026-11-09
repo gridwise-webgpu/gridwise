@@ -83,8 +83,9 @@ The chosen design is, in effect, one partition of Cascade's design, or a single-
 ### 4. Fit to WebGPU
 
 - **32-bit WGSL only.** WGSL has no 64-bit integers. The 64-bit keys are OneSweep's existing `vec2u` type, and the new kernels pack and unpack the high and low words with shifts.
-- **One readback per round.** WebGPU has no device-side kernel launch, and OneSweep's length is set on the host. So the host reads the active count after each round: 4 bytes and one `mapAsync`, typically 10–25 times per input.
-  - Over-provisioning rounds with indirect dispatch, as `ShunPerm` does, could remove the readback for the small kernels but not for the sort. It is not worth the complexity until a profile shows readback time matters.
+- **One readback per round, overlapped when it pays.** WebGPU has no device-side kernel launch, and OneSweep's length is set on the host. So the host reads the active count after each round: 4 bytes and one `mapAsync`. On an M1 Max each submission and readback cost 2–4 ms beyond its kernels.
+  - **Speculation.** Each round's kernels read the actual active count from the GPU (`count[k − 1]`), and the host gives the round a *capacity*: the sort length and dispatch size. Counts only shrink, so the last count the host has read is a valid capacity even if a newer round's count is still on its way. Positions past the actual count get keys that sort after every real key, and the other kernels ignore them.
+  - So the host can submit round k + 1 before reading round k's count, hiding the readback and the next round's encoding behind the GPU's work. The price is sorting the spare positions. The host speculates only when the count shrank by less than a quarter in the last round, or is below 2^16; at most one round is in flight beyond the last count read. `speculate: false` turns it off.
 - **Sorting a prefix of a buffer.** Each round sorts the first m elements of buffers sized for n, with OneSweep's `length` option; the scans likewise use DLDFScan's `length`. Buffers are allocated once, for n.
 - **Workgroup memory.** OneSweep sizes its tile to `maxComputeWorkgroupStorageSize`. The new kernels use little or no workgroup memory.
 - **Buffer limits.** The largest buffers hold the 8n-byte keys.
@@ -192,6 +193,8 @@ With the measured sort rate and per-access costs in place of copy bandwidth, the
 
 1. **The active list carries each suffix's rank.** The compaction writes the new rank next to the suffix index, so pack reads `rank[i]` as a stream and gathers only `rank[i + h]`. One random access per active suffix per round becomes 8 streamed bytes.
 2. **When the initial round resolves every suffix, the output is a copy** of the sorted payload instead of a scatter by rank.
+3. **Unchanged ranks are not rewritten.** The first subgroup of each group keeps its rank, so update skips its scatter: on English-like text that is 57% of the rank writes (20% on the Fibonacci word, 12% on random ACGT, measured on the CPU at 2^17).
+4. **Speculative rounds** (decision 4) hide the per-round readback when the active count shrinks slowly.
 
 **Next, in order of expected gain:**
 

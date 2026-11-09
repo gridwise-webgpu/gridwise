@@ -3,6 +3,7 @@
  *   node misc/benchmark_suffixarray.mjs [corpora] [log2 sizes] [--file=path]
  *   node misc/benchmark_suffixarray.mjs random256,english 20,24
  *   node misc/benchmark_suffixarray.mjs file 24 --file=enwik8
+ *   node misc/benchmark_suffixarray.mjs english 24 --kpt=4 --no-speculate
  *
  * corpora: random256 (uniform bytes: almost every suffix is resolved by its
  * first 7 bytes), random4 (uniform over ACGT), english (a word salad with
@@ -28,6 +29,12 @@ import { copyBandwidth, sortRate, randomAccessCost } from "./device_rates.mjs";
 
 const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const fileArg = process.argv.find((a) => a.startsWith("--file="))?.slice(7);
+/* --kpt=K: OneSweep's KEYS_PER_THREAD for SuffixArray's sorts; --no-speculate */
+const kptArg = process.argv.find((a) => a.startsWith("--kpt="))?.slice(6);
+const saOptions = {
+  ...(kptArg && { sortOptions: { KEYS_PER_THREAD: Number(kptArg) } }),
+  ...(process.argv.includes("--no-speculate") && { speculate: false }),
+};
 const corpora = (positional[0] ?? "random256,random4,english,allA").split(",");
 const logSizes = (positional[1] ?? "20,24").split(",").map(Number);
 
@@ -128,7 +135,7 @@ for (const name of corpora) {
     const inputBuffer = device.createBuffer({ size: padded.length, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(inputBuffer, 0, padded);
     const outputBuffer = device.createBuffer({ size: n * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-    const sa = new SuffixArray({ device, adapter, n });
+    const sa = new SuffixArray({ device, adapter, n, ...saOptions });
 
     /* warm up (compiles pipelines, allocates), then the median of 3 wall times */
     for (let i = 0; i < 2; i++) await sa.execute({ inputBuffer, outputBuffer });
@@ -167,7 +174,7 @@ for (const name of corpora) {
     const errors = checkSuffixArray(text, new Uint32Array(readback.getMappedRange().slice(0)));
     readback.destroy();
 
-    const traffic = suffixArrayTraffic({ n, activeCounts: sa.activeCounts });
+    const traffic = suffixArrayTraffic({ n, activeCounts: sa.activeCounts, capacities: sa.capacities });
     const work = sa.activeCounts.slice(1).reduce((a, b) => a + b, 0) / n; /* doubling rounds only */
     const modelMS = traffic.total / bandwidth / 1e6;
     /* calibrated: the sort at this GPU's sort rate, random accesses at its
@@ -181,7 +188,7 @@ for (const name of corpora) {
     }
     const perRound = (wall - ms(gpuTotal)) / (sa.rounds + 2);
     console.log(
-      `\n${name} 2^${logN}: ${errors ? "WRONG" + errors : "correct"}; ${sa.rounds} doubling rounds, work ${work.toFixed(2)} n` +
+      `\n${name} 2^${logN}: ${errors ? "WRONG" + errors : "correct"}; ${sa.rounds} doubling rounds (${sa.speculatedRounds} speculative), work ${work.toFixed(2)} n` +
         `\n  wall ${fmt(wall)} ms (${fmt(n / wall / 1e3, 1)} M char/s)   GPU ${fmt(ms(gpuTotal))} ms (${kernels} kernels)` +
         `   overhead ${fmt(perRound)} ms per submission` +
         `\n  model: ${fmt(modelMS)} ms at copy bandwidth (${(traffic.total / n).toFixed(0)} B/char); calibrated ${fmt(calibratedMS)} ms` +

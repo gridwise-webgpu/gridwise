@@ -47,6 +47,10 @@ import { BinOpAdd, BinOpMax } from "./binop.mjs";
 const WORKGROUP_SIZE = 256;
 const INITIAL_SYMBOLS = 7; /* 7 x 9 bits = 63 bits */
 const MAX_ROUNDS = 40;
+/* speculation (see execute()): run the next round before the last count is
+ * read back when that count shrank by less than this factor, or is this small */
+const SPECULATE_RATIO = 0.75;
+const SPECULATE_SMALL = 1 << 16;
 
 export class SuffixArray extends BasePrimitive {
   constructor(args) {
@@ -60,8 +64,12 @@ export class SuffixArray extends BasePrimitive {
     this.singleTrialOnly = true;
     this.rankBits = Math.ceil(Math.log2(this.n + 1));
     this.capacity4 = Math.ceil(this.n / 4) * 4; /* DLDFScan buffers: whole vec4s */
-    this.params = new UniformStruct("SAParams", { n: "u32", m: "u32", h: "u32", b: "u32", initial: "u32" });
-    const sortArgs = { device: this.device, adapter: this.adapter, datatype: "u64", type: "keyvalue", direction: "ascending" };
+    /* m: the round's capacity, an upper bound on its active suffixes (the
+     * actual number is count[round - 1], on the GPU); round: 0 = initial */
+    this.params = new UniformStruct("SAParams", { n: "u32", m: "u32", h: "u32", b: "u32", initial: "u32", round: "u32" });
+    this.speculate ??= true;
+    /* sortOptions: passed to both OneSweep sorts (e.g., KEYS_PER_THREAD) */
+    const sortArgs = { device: this.device, adapter: this.adapter, datatype: "u64", type: "keyvalue", direction: "ascending", ...this.sortOptions };
     this.initialSort = new OneSweepSort({ ...sortArgs, KEY_BITS: 9 * INITIAL_SYMBOLS });
     this.roundSort = new OneSweepSort({ ...sortArgs, KEY_BITS: 2 * this.rankBits });
     const scan = (type, Op) => new DLDFScan({ device: this.device, adapter: this.adapter, datatype: "u32", type, binop: new Op({ datatype: "u32" }) });
@@ -89,6 +97,15 @@ fn groupRank(k: vec2u) -> u32 {
 fn sameKey(a: vec2u, b: vec2u) -> bool { return all(a == b); }
 `;
 
+  /** the round's actual number of active suffixes (kernels that bind count):
+   * n in the initial round, else what the last round's compaction counted */
+  activeCountWGSL = () => /* wgsl */ `
+fn activeCount() -> u32 {
+  if (sa.initial == 1u) { return sa.n; }
+  return count[sa.round - 1u];
+}
+`;
+
   /** initial round: 7 symbols of 9 bits (byte + 1, 0 past the end) per suffix */
   initialWGSL = () => /* wgsl */ `
 ${this.commonWGSL()}
@@ -101,6 +118,7 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
   let i = gid;
   if (i >= sa.n) { return; }
+  if (i == 0u) { count[0] = 0u; } /* the compaction overwrites it */
   /* symbol k sits at bit 9 * (6 - k): bits 54, 45, 36 in y; 27 straddles; 18, 9, 0 in x */
   let s0 = symbol(i); let s1 = symbol(i + 1u); let s2 = symbol(i + 2u); let s3 = symbol(i + 3u);
   let s4 = symbol(i + 4u); let s5 = symbol(i + 5u); let s6 = symbol(i + 6u);
@@ -118,6 +136,15 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
   let p = gid;
   if (p >= sa.m) { return; }
+  if (p == 0u) { count[sa.round] = 0u; } /* in case no suffix is active */
+  if (p >= count[sa.round - 1u]) {
+    /* past the actual count (a speculative round's spare capacity): a key
+     * above every real one, which the sort moves to the end */
+    let ones = (1u << sa.b) - 1u;
+    keys[p] = packRanks(ones, ones);
+    payload[p] = 0u;
+    return;
+  }
   let i = activeList[p];
   let j = i + sa.h;
   let r2 = select(0u, rank[j], j < sa.n);
@@ -128,11 +155,13 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   /** heads: group starts (old rank changes) and subgroup starts (key changes) */
   headsWGSL = () => /* wgsl */ `
 ${this.commonWGSL()}
+${this.activeCountWGSL()}
 @compute @workgroup_size(${WORKGROUP_SIZE})
 fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
   ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
   let p = gid;
-  if (p >= sa.m) { return; }
+  let m = activeCount();
+  if (p >= m) { return; }
   let k = keys[p];
   var groupHead = p == 0u;
   var subgroupHead = p == 0u;
@@ -148,34 +177,41 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   /** new ranks, and which suffixes stay active */
   updateWGSL = () => /* wgsl */ `
 ${this.commonWGSL()}
+${this.activeCountWGSL()}
 @compute @workgroup_size(${WORKGROUP_SIZE})
 fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
   ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
   let p = gid;
-  if (p >= sa.m) { return; }
+  let m = activeCount();
+  if (p >= m) { return; }
   let k = keys[p];
   let q = subgroupStart[p];
-  let r = groupRank(k) + (q - groupStart[p]);
-  rank[payload[p]] = r;
+  let g = groupStart[p];
+  let r = groupRank(k) + (q - g);
+  /* the first subgroup of a group keeps its rank: skip its (random) write,
+   * about half of them on text; the initial round writes every rank */
+  if (sa.initial == 1u || q != g) { rank[payload[p]] = r; }
   newRanks[p] = r;
   /* a subgroup of one: p starts it and p + 1 does not continue it */
-  let alone = q == p && (p + 1u == sa.m || !sameKey(keys[p + 1u], k));
+  let alone = q == p && (p + 1u == m || !sameKey(keys[p + 1u], k));
   keep[p] = select(1u, 0u, alone);
 }`;
 
   /** the next active list, and its length */
   compactWGSL = () => /* wgsl */ `
 ${this.commonWGSL()}
+${this.activeCountWGSL()}
 @compute @workgroup_size(${WORKGROUP_SIZE})
 fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
   ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
   let p = gid;
-  if (p >= sa.m) { return; }
+  let m = activeCount();
+  if (p >= m) { return; }
   if (keep[p] == 1u) {
     nextActive[offsets[p]] = payload[p];
     nextRanks[offsets[p]] = newRanks[p];
   }
-  if (p + 1u == sa.m) { count[0] = offsets[p] + keep[p]; }
+  if (p + 1u == m) { count[sa.round] = offsets[p] + keep[p]; }
 }`;
 
   /** when the initial round resolves every suffix, the sorted payload is
@@ -218,13 +254,8 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
       scratch("subgroupFlags", 4 * this.capacity4),
       scratch("groupStart", 4 * this.capacity4),
       scratch("subgroupStart", 4 * this.capacity4),
-      new AllocateBuffer({ label: "count", size: 16, clearBufferOnReuse: false }),
-      new AllocateBuffer({
-        label: "countReadback",
-        size: 16,
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-        clearBufferOnReuse: false,
-      }),
+      /* count[k]: suffixes left active after round k (0 = initial) */
+      new AllocateBuffer({ label: "count", size: 16 * Math.ceil((MAX_ROUNDS + 2) / 4), clearBufferOnReuse: false }),
     ];
   }
 
@@ -264,9 +295,14 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
     this.sortedPayload = sortedPayload;
     const keys = (buffer, access = "read") => ({ name: "keys", buffer, access, type: "array<vec2u>" });
     return [
-      this.params.allocate("saParams", { n: this.n, m, h: this.h, b: this.rankBits, initial: initial ? 1 : 0 }),
+      this.params.allocate("saParams", { n: this.n, m, h: this.h, b: this.rankBits, initial: initial ? 1 : 0, round: this.round }),
       initial
-        ? this.kernel(this.initialWGSL, "initial keys", [u32s("text", "inputBuffer"), keys("keys", "read_write"), u32s("payload", work, "read_write")], m)
+        ? this.kernel(
+            this.initialWGSL,
+            "initial keys",
+            [u32s("text", "inputBuffer"), keys("keys", "read_write"), u32s("payload", work, "read_write"), u32s("count", "count", "read_write")],
+            m
+          )
         : this.kernel(
             this.packWGSL,
             `pack (h = ${this.h})`,
@@ -276,6 +312,7 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
               u32s("rank", "rankBuffer"),
               keys("keys", "read_write"),
               u32s("payload", work, "read_write"),
+              u32s("count", "count", "read_write"),
             ],
             m
           ),
@@ -283,7 +320,12 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
         primitive: sort,
         buffers: { keysInOut: "keys", keysTemp: "keysTemp", payloadInOut: work, payloadTemp: spare },
       }),
-      this.kernel(this.headsWGSL, "heads", [keys(sortedKeys), u32s("groupFlags", "groupFlags", "read_write"), u32s("subgroupFlags", "subgroupFlags", "read_write")], m),
+      this.kernel(
+        this.headsWGSL,
+        "heads",
+        [keys(sortedKeys), u32s("groupFlags", "groupFlags", "read_write"), u32s("subgroupFlags", "subgroupFlags", "read_write"), u32s("count", "count")],
+        m
+      ),
       new ExecutePrimitive({ primitive: this.groupScan, buffers: { inputBuffer: "groupFlags", outputBuffer: "groupStart" } }),
       new ExecutePrimitive({ primitive: this.subgroupScan, buffers: { inputBuffer: "subgroupFlags", outputBuffer: "subgroupStart" } }),
       /* keep flags reuse groupFlags; their exclusive scan reuses subgroupFlags */
@@ -298,6 +340,7 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
           u32s("rank", "rankBuffer", "read_write"),
           u32s("keep", "groupFlags", "read_write"),
           u32s("newRanks", newRanks, "read_write"),
+          u32s("count", "count"),
         ],
         m
       ),
@@ -316,7 +359,6 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
         ],
         m
       ),
-      new CopyBufferToBuffer({ source: "count", destination: "countReadback", size: 4 }),
     ];
   }
 
@@ -326,7 +368,7 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
       const outputLength = this.getBuffer("outputBuffer")?.size / 4;
       if (!(outputLength >= this.n)) throw new Error(`SuffixArray: outputBuffer must hold n = ${this.n} u32s`);
       actions.push(
-        this.params.allocate("saParams", { n: this.n, m: 0, h: this.h, b: this.rankBits, initial: 0 }),
+        this.params.allocate("saParams", { n: this.n, m: 0, h: this.h, b: this.rankBits, initial: 0, round: 0 }),
         this.rounds === 0
           ? this.kernel(this.copyOutputWGSL, "output (copy)", [u32s("sorted", this.sortedPayload), u32s("outputBuffer", "outputBuffer", "read_write")], this.n)
           : this.kernel(this.outputWGSL, "output", [u32s("rank", "rankBuffer"), u32s("outputBuffer", "outputBuffer", "read_write")], this.n)
@@ -347,9 +389,12 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
     }
     const timing = !!args.enableGPUTiming;
     this.timings = timing ? [] : undefined;
-    const step = async (stage, m) => {
+    /* encode and submit one stage */
+    const step = async (stage, round, m) => {
       this.stage = stage;
+      this.round = round;
       this.m = m;
+      this.h = INITIAL_SYMBOLS * 2 ** Math.max(0, round - 1);
       await super.execute(args);
       if (timing) {
         const { gpuTotalTimeNS } = await this.getTimingResult();
@@ -357,28 +402,63 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
         this.timings.push({ stage, m, h: this.h, kernels: [gpuTotalTimeNS].flat().map((ns, i) => ({ label: labels[i], ns })) });
       }
     };
-    this.h = INITIAL_SYMBOLS;
-    this.rounds = 0;
-    this.activeCounts = [this.n];
-    await step("initial", this.n);
-    let m = await this.readCount();
-    while (m > 0) {
-      if (this.rounds >= MAX_ROUNDS) throw new Error(`SuffixArray: not done after ${MAX_ROUNDS} rounds`);
-      this.activeCounts.push(m);
+    /* Round k reads its active count from count[k - 1] on the GPU, so it can
+     * be submitted before the host has read that count back: its capacity
+     * (sort length and dispatch size) is then the last count the host knows,
+     * an upper bound, since counts only shrink; the spare positions get keys
+     * that sort last and are ignored. That hides the readback's latency and
+     * the next round's encoding behind the GPU's work, at the price of
+     * sorting the spare positions, so it is done only when the count is
+     * shrinking slowly or is small (shouldSpeculate). At most one round is
+     * in flight beyond the last count read. */
+    const counts = []; /* counts[k]: active after round k, as read back */
+    const reads = [];
+    let k = 0; /* the last round submitted */
+    this.capacities = [this.n];
+    await step("initial", 0, this.n);
+    reads[0] = this.readCount(0);
+    for (;;) {
+      const known = counts.length;
+      const bound = known ? counts[known - 1] : this.n;
+      if (known && bound === 0) break;
+      const outstanding = k + 1 - known;
+      if (outstanding > 0 && !(outstanding === 1 && this.shouldSpeculate(counts))) {
+        counts.push(await reads[known]);
+        continue;
+      }
+      if (k + 1 > MAX_ROUNDS) throw new Error(`SuffixArray: not done after ${MAX_ROUNDS} rounds`);
+      k++;
       this.activeList = this.nextActiveList;
-      await step("round", m);
-      this.rounds++;
-      this.h *= 2;
-      m = await this.readCount();
+      this.capacities.push(bound);
+      await step("round", k, bound);
+      reads[k] = this.readCount(k);
     }
-    await step("output", 0);
+    /* rounds submitted past the last real one found nothing to do */
+    await Promise.all(reads.slice(counts.length));
+    this.rounds = counts.length - 1;
+    this.activeCounts = [this.n, ...counts.slice(0, -1)];
+    this.capacities = this.capacities.slice(0, this.rounds + 1);
+    this.speculatedRounds = this.capacities.filter((c, r) => r > 0 && c !== this.activeCounts[r]).length;
+    await step("output", 0, 0);
   }
 
-  async readCount() {
-    const buffer = this.getBuffer("countReadback").buffer.buffer;
-    await buffer.mapAsync(GPUMapMode.READ);
-    const m = new Uint32Array(buffer.getMappedRange(0, 4))[0];
-    buffer.unmap();
+  /** run the next round before the last count is known? */
+  shouldSpeculate(counts) {
+    if (!this.speculate || counts.length < 2) return false;
+    const [before, last] = counts.slice(-2);
+    return last <= SPECULATE_SMALL || last >= SPECULATE_RATIO * before;
+  }
+
+  /** count[k], read back (a promise; one small buffer per read, so several
+   * can be in flight) */
+  async readCount(k) {
+    const readback = this.device.createBuffer({ size: 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const encoder = this.device.createCommandEncoder({ label: "SuffixArray count readback" });
+    encoder.copyBufferToBuffer(this.getBuffer("count").buffer.buffer, 4 * k, readback, 0, 4);
+    this.device.queue.submit([encoder.finish()]);
+    await readback.mapAsync(GPUMapMode.READ);
+    const m = new Uint32Array(readback.getMappedRange())[0];
+    readback.destroy();
     return m;
   }
 
@@ -420,8 +500,14 @@ export function suffixArrayPhase(label = "") {
  *   compact  read keep, offset, payload, new rank 16; write active 4 + rank 4
  *            (at most)
  * and, once, output: read rank 4n, write SA 4n (random); or, when the
- * initial round resolves everything, copy the sorted payload (8n, streaming). */
-export function suffixArrayTraffic({ n, activeCounts, rankBits = Math.ceil(Math.log2(n + 1)) }) {
+ * initial round resolves everything, copy the sorted payload (8n, streaming).
+ *
+ * Rank writes are counted for every active suffix, though update skips the
+ * suffixes whose rank does not change (about half on text), so the random
+ * count is an upper bound. With speculation (execute()), a round's
+ * capacity can exceed its active count: pass the run's `capacities` and the
+ * sort and scans are counted at the capacity. */
+export function suffixArrayTraffic({ n, activeCounts, capacities = activeCounts, rankBits = Math.ceil(Math.log2(n + 1)) }) {
   const passes = (bits) => Math.ceil(bits / 8);
   const bytes = {};
   const random = {};
@@ -431,11 +517,12 @@ export function suffixArrayTraffic({ n, activeCounts, rankBits = Math.ceil(Math.
   };
   activeCounts.forEach((m, round) => {
     const initial = round === 0;
+    const c = capacities[round] ?? m;
     if (initial) add("initial keys", 13 * m);
-    else add("pack", 24 * m, m);
-    add("sort", (8 + 24 * passes(initial ? 9 * INITIAL_SYMBOLS : 2 * rankBits)) * m);
+    else add("pack", 24 * m + 12 * (c - m), m);
+    add("sort", (8 + 24 * passes(initial ? 9 * INITIAL_SYMBOLS : 2 * rankBits)) * c);
     add("heads", 16 * m);
-    add("scans", 24 * m);
+    add("scans", 24 * c);
     add("update ranks", 32 * m, m);
     add("compact", 24 * m);
   });

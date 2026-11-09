@@ -1031,7 +1031,7 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
 
   /* SuffixArray: matches the CPU reference and passes the linear checker;
    * for odd n, also returns the rank array (rank[SA[j]] = j + 1) */
-  async function runSuffixArrayTest({ input, n }) {
+  async function runSuffixArrayTest({ input, n, options = {}, expectSpeculation }) {
     const withRank = n % 2 === 1;
     const text = saInputs[input](n);
     const padded = new Uint8Array(Math.ceil(n / 4) * 4);
@@ -1041,7 +1041,7 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
     const outputBuffer = device.createBuffer({ size: n * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
     const mappable = device.createBuffer({ size: n * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
     const rankBuffer = withRank ? device.createBuffer({ size: n * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }) : undefined;
-    const primitive = new SuffixArray({ device, n });
+    const primitive = new SuffixArray({ device, n, ...options });
     await primitive.execute({ inputBuffer, outputBuffer, ...(withRank && { rankBuffer }) });
     const read = async (buffer) => {
       const encoder = device.createCommandEncoder();
@@ -1054,6 +1054,9 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
     };
     const sa = await read(outputBuffer);
     let errors = checkSuffixArray(text, sa);
+    if (expectSpeculation !== undefined && (primitive.speculatedRounds > 0) !== expectSpeculation) {
+      errors += `\nspeculated ${primitive.speculatedRounds} rounds; expected ${expectSpeculation ? "some" : "none"}`;
+    }
     if (withRank && !errors) {
       const rank = await read(rankBuffer);
       const j = sa.findIndex((i, p) => rank[i] !== p + 1);
@@ -1385,6 +1388,14 @@ ${randomBitsWGSL(this.rng)}
   ]) {
     for (const n of sizes) await runTest(`sa    SuffixArray ${input} n=${n}`, () => runSuffixArrayTest({ input, n }));
   }
+  /* rounds submitted before the last count is read back (speculation), and not */
+  await runTest("sa    SuffixArray allA n=3001 speculating", () => runSuffixArrayTest({ input: "allA", n: 3001, expectSpeculation: true }));
+  await runTest("sa    SuffixArray allA n=3001 {speculate: false}", () =>
+    runSuffixArrayTest({ input: "allA", n: 3001, options: { speculate: false }, expectSpeculation: false })
+  );
+  await runTest("sa    SuffixArray english n=20000 {speculate: false}", () =>
+    runSuffixArrayTest({ input: "english", n: 20000, options: { speculate: false }, expectSpeculation: false })
+  );
 
   for (const [label, bins, n, gen, repeat] of histogramTests) {
     await runTest(`hist  ${label} n=${n}`, () => runHistogramTest({ bins, n, gen, repeat }));
