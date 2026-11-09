@@ -102,6 +102,14 @@ const sortedValues = sort.getBuffer(sort.outputPayloadBufferName);  // payloadIn
 
 If only the low bits of `u32` keys vary (for instance, keys known to be below 2^20), pass `KEY_BITS` to the constructor to sort only those bits. That saves passes: `KEY_BITS: 20` takes 3 passes instead of 4. Because the pass count can then be odd, use `outputKeysBufferName` (or `copyOutputToTemp: true`) to find the result.
 
+### 64-bit keys
+
+With `datatype: "u64"`, keys are WGSL `vec2u` values, 8 bytes each: element `[0]` (`x`) holds the low 32 bits and element `[1]` (`y`) the high 32 bits. A full key takes 8 passes, low word first. In JavaScript, fill and read the buffers as `BigUint64Array`s, which use the same layout. Payloads in a key-value sort are still `u32`.
+
+`KEY_BITS` counts the low bits of the whole 64-bit value, so `KEY_BITS: 48` sorts all 32 bits of `x` and the low 16 bits of `y`, in 6 passes. To sort on two fields, pack them into one 64-bit value with the more significant field in the higher bits. For example, to sort by a pair of 24-bit numbers (a, b), first by a and then by b, store `(a << 24) | b` and use `KEY_BITS: 48`: that is `x = (a << 24) | b` (keeping the low 32 bits) and `y = a >> 8`. Putting `a` in `y` and `b` in `x` instead would need `KEY_BITS: 64`.
+
+A 64-bit pass moves 8-byte keys, so it costs more than a 32-bit pass, and each workgroup handles a smaller tile (12 rather than 15 keys per thread, to fit workgroup memory).
+
 ### Calling sort
 
 Once the primitive is defined and configured, simply call its `execute()` method.
