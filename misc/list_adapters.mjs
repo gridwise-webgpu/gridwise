@@ -2,7 +2,8 @@
  * description, subgroup sizes and whether it has subgroups and timestamps.
  * EXPECT_VENDOR=<vendor> makes it fail if the adapter is someone else's
  * (e.g., a software renderer standing in for a simulated GPU). */
-import { nodeGPU, adapterFlags } from "./node_device.mjs";
+import { nodeGPU, adapterFlags, availableAdapters } from "./node_device.mjs";
+console.log("Available adapters:", JSON.stringify(await availableAdapters()));
 /* GRIDWISE_ADAPTER=<name> picks one adapter by name (see adapterFlags) */
 const adapter = await nodeGPU(await adapterFlags()).requestAdapter();
 if (!adapter) {
