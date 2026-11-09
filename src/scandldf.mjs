@@ -507,8 +507,15 @@ fn main(builtinsUniform: BuiltinsUniform,
     this.SUBGROUP_MIN_SIZE =
       this.adapterInfo?.subgroupMinSize ?? this.workgroupSize;
     const inputSize = this.getBuffer("inputBuffer").size; // bytes
-    const inputLength = inputSize / 4; /* 4 is size of datatype */
-    if (inputLength % 4 !== 0) {
+    const capacity = inputSize / 4; /* 4 is size of datatype */
+    /* length: scan only the first `length` elements (rounded up to whole
+     * vec4s; outputs past `length` are then unspecified); may change between
+     * executes. Undefined scans the whole buffer. */
+    if (this.length !== undefined && !(Number.isInteger(this.length) && this.length >= 1 && this.length <= capacity)) {
+      throw new Error(`DLDFScan: length ${this.length} must be an integer in [1, ${capacity}] (the input buffer's length)`);
+    }
+    const inputLength = this.length === undefined ? capacity : Math.ceil(this.length / 4) * 4;
+    if (inputLength % 4 !== 0 || inputLength > capacity) {
       /* the shader reads and writes whole vec4s; a partial last vec4 would be
        * out of bounds, and WebGPU's robustness rules leave its result undefined */
       throw new Error(
@@ -520,8 +527,9 @@ fn main(builtinsUniform: BuiltinsUniform,
     this.vec_size = Math.ceil(inputLength / 4); /* 4 is sizeof vec4 */
     this.work_tiles = this.workgroupCount;
     this.scanBumpSize = datatypeToBytes(this.datatype);
-    // one vec4 per workgroup in spine
-    this.spineSize = 4 * this.workgroupCount * datatypeToBytes(this.datatype);
+    // one vec4 per workgroup in spine, sized for the whole buffer so that a
+    // changing length does not reallocate it
+    this.spineSize = 4 * Math.ceil(capacity / this.PART_SIZE) * datatypeToBytes(this.datatype);
     this.miscSize = 5 * datatypeToBytes(this.datatype);
 
     this.inputLength = inputLength;

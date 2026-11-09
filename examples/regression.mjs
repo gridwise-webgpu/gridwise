@@ -195,6 +195,45 @@ export async function main(navigator) {
     return primitive.validate({ inputBuffer: memsrc, outputBuffer: memdest });
   }
 
+  /* DLDFScan `length`: one primitive scans the first lengths[j] elements of a
+   * buffer of capacity elements, execute after execute; outputs before
+   * lengths[j] must match a CPU scan of those elements */
+  async function runScanLengthTest({ type, binop, capacity, lengths }) {
+    const primitive = new DLDFScan({ device, binop, type, datatype: "u32" });
+    const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    const input = device.createBuffer({ size: capacity * 4, usage });
+    const output = device.createBuffer({ size: capacity * 4, usage });
+    const mappable = device.createBuffer({ size: capacity * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const op = binop instanceof BinOpMax ? (a, b) => Math.max(a, b) : (a, b) => (a + b) >>> 0;
+    const identity = 0; /* for both add and max over u32 */
+    let errors = "";
+    for (const length of lengths) {
+      const data = Uint32Array.from({ length: capacity }, () => Math.floor(Math.random() * 1000));
+      device.queue.writeBuffer(input, 0, data);
+      primitive.length = length;
+      await primitive.execute({ inputBuffer: input, outputBuffer: output });
+      const encoder = device.createCommandEncoder();
+      encoder.copyBufferToBuffer(output, 0, mappable, 0, capacity * 4);
+      device.queue.submit([encoder.finish()]);
+      await mappable.mapAsync(GPUMapMode.READ);
+      const out = new Uint32Array(mappable.getMappedRange().slice(0));
+      mappable.unmap();
+      let acc = identity, budget = 3;
+      for (let i = 0; i < length && budget > 0; i++) {
+        const inclusive = op(acc, data[i]);
+        const expected = type === "inclusive" ? inclusive : acc;
+        if (out[i] !== expected) {
+          errors += `\nlength ${length}, position ${i}: expected ${expected}, got ${out[i]}`;
+          budget--;
+        }
+        acc = inclusive;
+      }
+    }
+    for (const b of [input, output, mappable]) b.destroy();
+    primitive.destroy();
+    return errors;
+  }
+
   /* ------------------------------------------------------------------ */
   /* Sort helpers                                                         */
   /* ------------------------------------------------------------------ */
@@ -1212,6 +1251,14 @@ ${randomBitsWGSL(this.rng)}
   for (const [type, datatype, direction, size, keyBits, keys] of sortTests) {
     const name = sortName(type, datatype, direction, size, keyBits, keys);
     await runTest(name, () => runSortTest({ type, datatype, direction, size, keyBits, keys }));
+  }
+
+  for (const [type, BinOpClass, capacity, lengths] of [
+    ["exclusive", BinOpAdd, 20000, [20000, 13001, 4096, 4097, 3, 1]],
+    ["inclusive", BinOpMax, 20000, [19999, 8191, 2]],
+  ]) {
+    const name = `scan  ${type.padEnd(9)} u32  ${BinOpClass.name.replace("BinOp", "").toLowerCase().padEnd(8)} length=${lengths.join(",")} of ${capacity}`;
+    await runTest(name, () => runScanLengthTest({ type, binop: new BinOpClass({ datatype: "u32" }), capacity, lengths }));
   }
 
   /* [type, datatype, capacity, lengths, keyBits] */
