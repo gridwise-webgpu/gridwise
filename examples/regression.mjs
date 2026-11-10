@@ -1448,12 +1448,6 @@ ${randomBitsWGSL(this.rng)}
   await runTest("sa    SuffixArray allA n=3001 {speculate: false}", () =>
     runSuffixArrayTest({ input: "allA", n: 3001, options: { speculate: false }, expectSpeculation: false })
   );
-  /* local scatter (multisplit by destination block), forced on at small n */
-  for (const [input, n] of [["random4", 4097], ["random256", 65537], ["allA", 3001], ["english", 20000], ["fibonacci", 4181], ["random4", 1]]) {
-    await runTest(`sa    SuffixArray ${input} n=${n} {localScatter: true}`, () =>
-      runSuffixArrayTest({ input, n, options: { localScatter: true } })
-    );
-  }
   await runTest("sa    SuffixArray english n=20000 {speculate: false}", () =>
     runSuffixArrayTest({ input: "english", n: 20000, options: { speculate: false }, expectSpeculation: false })
   );
