@@ -164,3 +164,40 @@ Sort works with subgroups of any width up to 128 lanes. Its warp-level multispli
 Ascending key-value sort is stable. Elements with equal keys preserve their original order from the input.
 
 Descending key-value sort's ordering is more complicated to specify. Gridwise does not guarantee a particular tie-breaking order, only that keys will be properly ordered. Gridwise's validation has no dependence on any descending tie-breaking convention.
+
+### Keys per thread (the tile size)
+
+Each pass works on tiles of `KEYS_PER_THREAD` × 256 keys. The default is 15 for 32-bit keys and 12 for 64-bit keys, reduced if the tile and the pass's other workgroup memory would not fit the device's limit. `KEYS_PER_THREAD` can also be given explicitly. Each subgroup's digit histogram is staged in the tile, so the tile must hold (256 / subgroup width) × 256 entries. That means at least 8 keys per thread with 32-lane subgroups, or with emulated subgroups; with fewer, the sort is silently wrong, so OneSweep refuses them. A tile that does not fit workgroup memory is refused too.
+
+### Measured performance and where a pass's time goes
+
+These measurements come from `misc/onesweep_probe.mjs`, which sweeps `KEYS_PER_THREAD`, checks every sort, and compares a pass with a copy kernel. They were taken at 2^24 keys, through Dawn in Node.
+
+| GPU | Copy kernel | 32-bit keys, per pass | 64-bit key-value, per pass |
+|---|---|---|---|
+| Apple M1 Max | 360–370 GB/s | 15 keys/thread (default): 2.6 ms; 11: 1.8 ms (1.4× faster) | 12 (default) is the fastest valid tile, about 100 GB/s (29% of copy) |
+| NVIDIA V100 | 808 GB/s | 15 (default) is the fastest: 0.585 ms, 230 GB/s (28%) | 8–12 all about 1.31 ms, 308 GB/s (38%); 14 and 16 are slower |
+
+So the best tile size depends on the GPU, and the defaults are right for the V100 but not for 32-bit keys on the M1 Max.
+
+To see where a 64-bit key-value pass's 1.31 ms goes on the V100 (against 0.50 ms at copy bandwidth), an experimental build removed parts of the pass and timed it. These builds give wrong output and are kept only on the `onesweep-instruments` branch:
+
+| Part of the pass | Time | Share |
+|---|---|---|
+| Moving the bytes at copy bandwidth | 0.50 ms | 38% |
+| Work inside each tile: ranking keys by digit, per-subgroup histograms, staging keys and then payloads through workgroup memory | about 0.5 ms | 38% |
+| The scattered global writes | about 0.26 ms | 20% |
+| The decoupled lookback (fallbacks were 4–6% of tiles; raising the spin limit did not help) | about 0.05 ms | ≤5% |
+
+For 32-bit keys the lookback mattered more (about 22% of a pass) and the scatter much less (3%).
+
+### Possible improvements not made
+
+These could make a pass faster, but each adds complexity to code that is hard to get right across hardware, and the gain may not carry over between GPUs. They are recorded here rather than implemented.
+
+- **Stage keys and payloads in non-atomic workgroup memory.** The tile is staged through `wg_warpHist`, an `array<atomic<u32>>`, because the same memory also holds the per-subgroup histograms, which need atomics. So every staged key and payload costs atomic loads and stores: two each for a 64-bit key. WGSL cannot alias one workgroup variable as both atomic and non-atomic.
+  - The `buffer_view` language extension (WGSL; [proposal](https://github.com/gpuweb/gpuweb/blob/main/proposals/buffer-view.md), [issue 5338](https://github.com/gpuweb/gpuweb/issues/5338)) adds `var<workgroup> scratch: buffer<N>` and `bufferView`/`bufferArrayView`. One workgroup allocation can then be viewed as different non-atomic types, for example `array<u32>` and `array<vec2u>`. Dawn supports it, and the `webgpu` package for Node lists it in `wgslLanguageFeatures`.
+  - But a view may not be or contain an atomic type, because Metal cannot cast non-atomic memory to atomic. We confirmed this: Dawn rejects `bufferArrayView<array<atomic<u32>>>` with "return type of bufferArrayView cannot contain an atomic type".
+  - Using it would therefore mean building the histograms without workgroup atomics (each subgroup owning its histogram, written by one lane per digit after the subgroup match), or giving the histograms their own atomic array. Either way, a staging buffer can then be non-atomic and shared between keys and payloads.
+- **One staging round for key and payload together**, instead of keys, a barrier, then payloads: one fewer trip through workgroup memory and one fewer barrier for key-value sorts.
+- **Per-vendor tile sizes:** for example 11 keys per thread for 32-bit keys on Apple GPUs. This is simple, but needs measurements on more GPUs before a default changes, and must not slow the others.
