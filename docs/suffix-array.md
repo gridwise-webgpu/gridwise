@@ -255,6 +255,23 @@ Cutting the CPU cost of `execute()` (from 4 to 1.2 ms for a sort) brought wall t
 
 With the index-ordered active list, pack ran at copy bandwidth on both GPUs, and GPU time at 2^24 fell to 73 ms on English-like text and 284 ms on the Fibonacci word (V100), and to 196 and 800 ms (M1 Max). The sort is now 65% (V100) to 73% (M1 Max) of the GPU time on English-like text.
 
+### Measured: the merged code on a V100 and an A100
+
+The code as merged (index-ordered active list, speculation, local scatter from 2^23), with the benchmark warming each GPU up for 1 s before every measurement, at n = 2^24. Copy bandwidth: 809 GB/s on the V100 and 1,351 GB/s on the A100 (PCIe, 40 GB). "Calibrated" is the model with the measured sort rate and random-access costs at that size.
+
+| Input, n = 2^24 | V100 wall | V100 GPU | V100 calibrated | A100 wall | A100 GPU | A100 calibrated | A100 speedup (GPU) |
+|---|---|---|---|---|---|---|---|
+| Random bytes | 18.1 ms (926 M symbols/s) | 14.8 ms | 13.7 ms | 11.8 ms (1,427 M symbols/s) | 8.6 ms | 8.0 ms | 1.71× |
+| Random over 4 symbols | 44.6 ms | 32.4 ms | 27.8 ms | 30.8 ms | 18.4 ms | 16.3 ms | 1.77× |
+| English-like text | 90.0 ms (187 M symbols/s) | 73.2 ms | 65.2 ms | 59.7 ms (281 M symbols/s) | 43.0 ms | 38.2 ms | 1.70× |
+| Fibonacci word | 304 ms | 284 ms | 270 ms | 187 ms | 170 ms | 158 ms | 1.67× |
+| All "A" | 263 ms | 245 ms | 273 ms | 187 ms | 160 ms | 160 ms | 1.53× |
+
+- **The calibrated model accounts for the GPU time.** GPU time is 0.90–1.16 times the calibrated model at 2^24 on both GPUs, so the time is where the model says it is.
+- **The speedup is the bandwidth ratio.** The A100 has 1.67 times the V100's copy bandwidth, and the suffix array runs 1.5–1.8 times faster.
+- **The sort is the cost.** It runs at 40–46% of copy bandwidth on the V100 and 39–42% on the A100, and takes 65% (V100) and 69% (A100) of the GPU time on English-like text. Its pass efficiency is a property of OneSweep, not of one GPU; see future direction 1.
+- **Small inputs are a different regime.** At 2^20 the A100 is no faster than the V100 (English-like text: 8.1 ms against 6.1 ms), and its sorts there reach only 100–180 GB/s, below the 288 GB/s it measures sorting 2^20 random keys. These runs are hundreds of small kernels (about 70 µs each on both GPUs), so they are bound by per-kernel latency rather than bandwidth; we have not looked further.
+
 ### 6. Input and alphabet
 
 - **First version:** byte text, packed four bytes per u32 word (WGSL has no `u8`), with n given explicitly.
