@@ -1193,6 +1193,7 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
           `at least ${fewest} (RADIX / subgroup size, with ${narrowestSubgroup}-lane subgroups)`
       );
     }
+    const keysPerThreadGiven = this.KEYS_PER_THREAD !== undefined;
     if (this.KEYS_PER_THREAD === undefined) {
       const limit = this.device.limits.maxComputeWorkgroupStorageSize;
       let kpt = this.keyDatatype.is64Bit ? 12 : 15;
@@ -1201,7 +1202,14 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
       while (kpt > fewest && this.passWorkgroupBytes(kpt) > limit) kpt--;
       this.KEYS_PER_THREAD = kpt;
     }
-    if (this.passWorkgroupBytes(this.KEYS_PER_THREAD) > this.device.limits.maxComputeWorkgroupStorageSize) {
+    /* a KEYS_PER_THREAD the caller chose must fit workgroup memory. Only
+     * checked with hardware subgroups: with emulation passWorkgroupBytes is
+     * an upper bound (about 1 KB high), and would refuse tiles that fit */
+    if (
+      keysPerThreadGiven &&
+      this.useSubgroups &&
+      this.passWorkgroupBytes(this.KEYS_PER_THREAD) > this.device.limits.maxComputeWorkgroupStorageSize
+    ) {
       throw new Error(
         `OneSweepSort: KEYS_PER_THREAD ${this.KEYS_PER_THREAD} needs ${this.passWorkgroupBytes(this.KEYS_PER_THREAD)} bytes of ` +
           `workgroup memory; the device allows ${this.device.limits.maxComputeWorkgroupStorageSize}`
