@@ -25,6 +25,9 @@ const kind = process.argv[3] ?? "u32";
 const spins = process.argv.includes("--spin") ? [4, 16, 64, 256, 4096] : [4];
 /* --ablate: also time each pass with its global scatter and/or its lookback
  * removed (OneSweep's ABLATE; the output is then not sorted) */
+/* (removing the lookback alone is not informative: every tile then
+ * scatters to the same low addresses, which collide; compare
+ * "scatter+lookback" with "scatter" for the lookback's cost) */
 const ablations = process.argv.includes("--ablate") ? ["", "scatter", "lookback", "scatter+lookback"] : [""];
 const kptArg = process.argv.find((a) => a.startsWith("--kpt="))?.slice(6);
 const n = 2 ** logN;
@@ -53,7 +56,7 @@ console.log("keys/thread  spin  ablate             wg bytes   tiles   pass ms   
 const kpts = kptArg
   ? kptArg.split(",").map(Number)
   : options.datatype === "u64"
-    ? [4, 5, 6, 7, 8, 9, 10, 11, 12]
+    ? [8, 10, 12, 14, 16] /* above 12 only where workgroup memory allows (48 KB on NVIDIA) */
     : [4, 6, 8, 9, 10, 11, 12, 13, 14, 15];
 /* the keys, sorted on the CPU, to check each configuration's output */
 const sortedKeys =
@@ -79,7 +82,7 @@ for (const KEYS_PER_THREAD of kpts) {
     try {
       sort = new OneSweepSort({ device, adapter, ...options, direction: "ascending", KEYS_PER_THREAD, MAX_SPIN_COUNT, ABLATE, countFallbacks: true });
       device.queue.writeBuffer(args.keysInOut, 0, keys);
-      await sort.warmUp(args, 150);
+      await sort.warmUp(args, 1000); /* a V100 took over 150 ms to reach full clock */
       const totals = [];
       const passes = [];
       let fallbacks;
