@@ -20,16 +20,20 @@
  * suffixes: pack (rank[i] << b | rank[i + h]) as a 2b-bit key; sort the
  * first m keys; flag group and subgroup heads; two inclusive max-scans give
  * each sorted position p its group start g and subgroup start q; the new
- * rank is rank[i] + (q - g); singletons retire; an exclusive scan compacts
- * the rest into the next active list. The host reads the active count after
- * each round (one 4-byte map) and stops at 0. Then SA[rank[i] - 1] = i.
+ * rank is rank[i] + (q - g), written with bit 31 set while the suffix is
+ * still tied; singletons retire (bit 31 clear). A compaction over all n by
+ * index (flags, exclusive scan, scatter) builds the next active list, in
+ * index order, so the next round's pack reads rank[i] and rank[i + h] in
+ * nearly sequential order. The host reads the active count after each round
+ * (one 4-byte map) and stops at 0; it may submit a round before reading the
+ * last count back (speculation, in execute()). Then SA[rank[i] - 1] = i.
  *
  * execute() runs several GPU submissions (one per round), so it cannot take
  * an encoder, and trials must be 1. After execute(): `rounds` (doubling
  * rounds run), `activeCounts` (active suffixes before each round), and, with
  * enableGPUTiming, `timings` ([{ stage, m, kernels: [{ label, ns }] }]).
  *
- * Limits: n <= 2^30 (OneSweep). Memory: about 48n bytes of working buffers
+ * Limits: n <= 2^30 (OneSweep). Memory: about 44n bytes of working buffers
  * plus the input and output (docs/suffix-array.md).
  */
 import {
@@ -43,8 +47,6 @@ import {
 import { OneSweepSort } from "./onesweep.mjs";
 import { DLDFScan } from "./scandldf.mjs";
 import { BinOpAdd, BinOpMax } from "./binop.mjs";
-import { Multisplit } from "./multisplit.mjs";
-import { RadixBins } from "./bins.mjs";
 
 const WORKGROUP_SIZE = 256;
 const INITIAL_SYMBOLS = 7; /* 7 x 9 bits = 63 bits */
@@ -53,12 +55,6 @@ const MAX_ROUNDS = 40;
  * read back when that count shrank by less than this factor, or is this small */
 const SPECULATE_RATIO = 0.75;
 const SPECULATE_SMALL = 1 << 16;
-/* localScatter "auto": from this n up. On an M1 Max a random 4-byte write
- * cost 0.23 ns at 2^20, 0.34 at 2^22, 0.80 at 2^24; local scatter gained
- * 11-16% of GPU time at 2^24 on random and English-like text, nothing at
- * 2^22. */
-const LOCAL_SCATTER_FROM = 1 << 23;
-
 export class SuffixArray extends BasePrimitive {
   constructor(args) {
     super(args);
@@ -75,27 +71,6 @@ export class SuffixArray extends BasePrimitive {
      * actual number is count[round - 1], on the GPU); round: 0 = initial */
     this.params = new UniformStruct("SAParams", { n: "u32", m: "u32", h: "u32", b: "u32", initial: "u32", round: "u32" });
     this.speculate ??= true;
-    /* localScatter: apply the rank writes (and the output's) through a
-     * Multisplit by destination block, so that each block's writes stay in
-     * cache, instead of scattering them directly. "auto" (default): for
-     * n >= 2^23, where the rank array outgrows the caches. localScatterBits
-     * (default 6, at most 8): log2 of the number of blocks. Fewer blocks
-     * mean longer runs per bucket in each multisplit tile (2048 pairs over
-     * 64 buckets: 32 pairs, a 128-byte line of each array), and bigger
-     * blocks (2^24 / 64: 1 MB of ranks each, still in cache). */
-    this.localScatter ??= "auto";
-    if (this.localScatter === "auto") this.localScatter = this.n >= LOCAL_SCATTER_FROM;
-    if (this.localScatter) {
-      const L = Math.max(1, Math.ceil(Math.log2(this.n + 1)));
-      this.localScatterBits ??= 6;
-      const bits = Math.min(this.localScatterBits, L);
-      /* destination's top bits (a rank of n may wrap to bucket 0: only
-       * locality, not correctness, depends on the bucket) */
-      const bins = new RadixBins({ shift: L - bits, bits });
-      const split = (options) => new Multisplit({ device: this.device, adapter: this.adapter, bins, ...options });
-      this.rankSplit = split({ type: "keyvalue" }); /* (suffix, new rank) by suffix */
-      this.outputSplit = split({ values: "index" }); /* (rank, suffix) by rank */
-    }
     /* sortOptions: passed to both OneSweep sorts (e.g., KEYS_PER_THREAD) */
     const sortArgs = { device: this.device, adapter: this.adapter, datatype: "u64", type: "keyvalue", direction: "ascending", ...this.sortOptions };
     this.initialSort = new OneSweepSort({ ...sortArgs, KEY_BITS: 9 * INITIAL_SYMBOLS });
@@ -123,7 +98,9 @@ fn groupRank(k: vec2u) -> u32 {
   return (k.x >> sa.b) | (k.y << (32u - sa.b));
 }
 fn sameKey(a: vec2u, b: vec2u) -> bool { return all(a == b); }
-const RANK_MASK = 0x7fffffffu; /* with localScatter, bit 31 of rank[i]: still active */
+/* bit 31 of rank[i]: suffix i is still tied (active); the rank is below it */
+const RANK_MASK = 0x7fffffffu;
+const ACTIVE = 0x80000000u;
 `;
 
   /** the round's actual number of active suffixes (kernels that bind count):
@@ -171,20 +148,15 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
      * above every real one, which the sort moves to the end */
     let ones = (1u << sa.b) - 1u;
     keys[p] = packRanks(ones, ones);
-    payload[p] = sa.n; /* no suffix: a local-scatter write to it is dropped */
+    payload[p] = sa.n; /* no suffix (never read: later kernels stop at the count) */
     return;
   }
   let i = activeList[p];
   let j = i + sa.h;
-  ${
-    this.localScatter
-      ? `/* the list is in index order, so rank[i] and rank[i + h] are read in
-   * nearly sequential order; bit 31 of a rank is its suffix's "active" flag */
+  /* the list is in index order, so rank[i] and rank[i + h] are read in
+   * nearly sequential order, not gathered at random */
   let r2 = select(0u, rank[j] & RANK_MASK, j < sa.n);
-  keys[p] = packRanks(rank[i] & RANK_MASK, r2);`
-      : `let r2 = select(0u, rank[j], j < sa.n);
-  keys[p] = packRanks(activeRanks[p], r2); /* rank[i], carried by the list: no gather */`
-  }
+  keys[p] = packRanks(rank[i] & RANK_MASK, r2);
   payload[p] = i;
 }`;
 
@@ -224,38 +196,20 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   let q = subgroupStart[p];
   let g = groupStart[p];
   let r = groupRank(k) + (q - g);
-  /* the first subgroup of a group keeps its rank: skip its (random) write,
-   * about half of them on text; the initial round writes every rank */
-  ${this.localScatter ? "/* the rank is written later, through a multisplit (applyWGSL) */" : "if (sa.initial == 1u || q != g) { rank[payload[p]] = r; }"}
   /* a subgroup of one: p starts it and p + 1 does not continue it */
   let alone = q == p && (p + 1u == m || !sameKey(keys[p + 1u], k));
-  ${
-    this.localScatter
-      ? `newRanks[p] = r | select(1u << 31u, 0u, alone); /* the rank and its active flag, applied later */`
-      : `newRanks[p] = r;
-  keep[p] = select(1u, 0u, alone);`
+  /* write the rank and the active bit (set unless the suffix retires). The
+   * first subgroup of a group keeps its rank, and a suffix that stays active
+   * keeps its bit: when both hold, skip the (random) write, about half of
+   * them on text. The initial round writes every rank. */
+  if (sa.initial == 1u || q != g || alone) {
+    rank[payload[p]] = r | select(ACTIVE, 0u, alone);
   }
 }`;
 
-  /** the next active list, and its length */
-  compactWGSL = () => /* wgsl */ `
-${this.commonWGSL()}
-${this.activeCountWGSL()}
-@compute @workgroup_size(${WORKGROUP_SIZE})
-fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
-  ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
-  let p = gid;
-  let m = activeCount();
-  if (p >= m) { return; }
-  if (keep[p] == 1u) {
-    nextActive[offsets[p]] = payload[p];
-    nextRanks[offsets[p]] = newRanks[p];
-  }
-  if (p + 1u == m) { count[sa.round] = offsets[p] + keep[p]; }
-}`;
-
-  /** localScatter: the next active list in index order, from the active
-   * flags (bit 31 of each rank): the flags, then (after a scan) the list */
+  /** the next active list, in index order, from the active bits (bit 31 of
+   * each rank): the flags, then (after an exclusive scan) the list and its
+   * length */
   activeFlagsWGSL = () => /* wgsl */ `
 ${this.commonWGSL()}
 @compute @workgroup_size(${WORKGROUP_SIZE})
@@ -289,19 +243,6 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   outputBuffer[p] = sorted[p];
 }`;
 
-  /** apply multisplit (destination, value) pairs: written[dest - offset] = value;
-   * a destination of n or more (a speculative round's spare) is dropped */
-  applyWGSL = (offset) => () => /* wgsl */ `
-${this.commonWGSL()}
-@compute @workgroup_size(${WORKGROUP_SIZE})
-fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
-  ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
-  let p = gid;
-  if (p >= sa.m) { return; }
-  let d = dest[p];
-  if (d - ${offset}u < sa.n) { written[d - ${offset}u] = value[p]; }
-}`;
-
   /** SA[rank[i] - 1] = i */
   outputWGSL = () => /* wgsl */ `
 ${this.commonWGSL()}
@@ -310,7 +251,7 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
   let i = gid;
   if (i >= sa.n) { return; }
-  outputBuffer[rank[i] - 1u] = i;
+  outputBuffer[(rank[i] & RANK_MASK) - 1u] = i;
 }`;
 
   /* ---------------------------------------------------------------- actions */
@@ -324,7 +265,6 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
       scratch("keysTemp", 8 * n),
       scratch("listA", 4 * n),
       scratch("listB", 4 * n),
-      scratch("activeRanks", 4 * n) /* rank of each suffix in the active list */,
       ...(this.hasBuffer("rankBuffer") ? [] : [scratch("rankBuffer", 4 * n)]),
       scratch("groupFlags", 4 * this.capacity4),
       scratch("subgroupFlags", 4 * this.capacity4),
@@ -358,18 +298,13 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
     const sort = initial ? this.initialSort : this.roundSort;
     sort.length = m;
     for (const scan of [this.groupScan, this.subgroupScan]) scan.length = m;
-    /* the active list's compaction: by sorted position over the m actives,
-     * or (localScatter) by index over all n */
-    this.keepScan.length = this.localScatter ? this.n : m;
+    this.keepScan.length = this.n; /* the compaction is over all n, by index */
     const other = (list) => (list === "listA" ? "listB" : "listA");
     const work = initial ? "listA" : other(this.activeList);
     const spare = other(work);
     const sortedKeys = sort.outputIsInTemp ? "keysTemp" : "keys";
     const sortedPayload = sort.outputIsInTemp ? spare : work;
     const nextActive = other(sortedPayload);
-    /* the key buffer the sort did not leave its output in is free: it holds
-     * each sorted position's new rank (as u32s) for the compaction */
-    const newRanks = sort.outputIsInTemp ? "keys" : "keysTemp";
     this.nextActiveList = nextActive;
     this.sortedPayload = sortedPayload;
     const keys = (buffer, access = "read") => ({ name: "keys", buffer, access, type: "array<vec2u>" });
@@ -387,7 +322,6 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
             `pack (h = ${this.h})`,
             [
               u32s("activeList", this.activeList),
-              ...(this.localScatter ? [] : [u32s("activeRanks", "activeRanks")]),
               u32s("rank", "rankBuffer"),
               keys("keys", "read_write"),
               u32s("payload", work, "read_write"),
@@ -407,7 +341,6 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
       ),
       new ExecutePrimitive({ primitive: this.groupScan, buffers: { inputBuffer: "groupFlags", outputBuffer: "groupStart" } }),
       new ExecutePrimitive({ primitive: this.subgroupScan, buffers: { inputBuffer: "subgroupFlags", outputBuffer: "subgroupStart" } }),
-      /* keep flags reuse groupFlags; their exclusive scan reuses subgroupFlags */
       this.kernel(
         this.updateWGSL,
         "update ranks",
@@ -417,59 +350,20 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
           u32s("groupStart", "groupStart"),
           u32s("subgroupStart", "subgroupStart"),
           u32s("rank", "rankBuffer", "read_write"),
-          u32s("keep", "groupFlags", "read_write"),
-          u32s("newRanks", newRanks, "read_write"),
           u32s("count", "count"),
         ],
         m
       ),
-      ...(this.localScatter
-        ? [
-            /* local scatter: group (suffix, new rank and active flag) by the
-             * suffix's block, into the free start buffers, then write the
-             * ranks block by block */
-            new ExecutePrimitive({
-              primitive: Object.assign(this.rankSplit, { length: m }),
-              buffers: { keysIn: sortedPayload, valuesIn: newRanks, keysOut: "groupStart", valuesOut: "subgroupStart" },
-            }),
-            this.kernel(
-              this.applyWGSL(0),
-              "apply ranks",
-              [u32s("dest", "groupStart"), u32s("value", "subgroupStart"), u32s("written", "rankBuffer", "read_write")],
-              m
-            ),
-            /* the next active list, in index order: flags, scan, compact */
-            this.kernel(this.activeFlagsWGSL, "compact flags", [u32s("rank", "rankBuffer"), u32s("flags", "groupFlags", "read_write")], this.n),
-            new ExecutePrimitive({ primitive: this.keepScan, buffers: { inputBuffer: "groupFlags", outputBuffer: "subgroupFlags" } }),
-            this.kernel(
-              this.compactByIndexWGSL,
-              "compact by index",
-              [
-                u32s("flags", "groupFlags"),
-                u32s("offsets", "subgroupFlags"),
-                u32s("nextActive", nextActive, "read_write"),
-                u32s("count", "count", "read_write"),
-              ],
-              this.n
-            ),
-          ]
-        : [
-            new ExecutePrimitive({ primitive: this.keepScan, buffers: { inputBuffer: "groupFlags", outputBuffer: "subgroupFlags" } }),
-            this.kernel(
-              this.compactWGSL,
-              "compact",
-              [
-                u32s("keep", "groupFlags"),
-                u32s("offsets", "subgroupFlags"),
-                u32s("payload", sortedPayload),
-                u32s("newRanks", newRanks),
-                u32s("nextActive", nextActive, "read_write"),
-                u32s("nextRanks", "activeRanks", "read_write"),
-                u32s("count", "count", "read_write"),
-              ],
-              m
-            ),
-          ]),
+      /* the next active list, in index order: flags (into groupFlags, free
+       * now), their exclusive scan (into subgroupFlags), the list */
+      this.kernel(this.activeFlagsWGSL, "compact flags", [u32s("rank", "rankBuffer"), u32s("flags", "groupFlags", "read_write")], this.n),
+      new ExecutePrimitive({ primitive: this.keepScan, buffers: { inputBuffer: "groupFlags", outputBuffer: "subgroupFlags" } }),
+      this.kernel(
+        this.compactByIndexWGSL,
+        "compact by index",
+        [u32s("flags", "groupFlags"), u32s("offsets", "subgroupFlags"), u32s("nextActive", nextActive, "read_write"), u32s("count", "count", "read_write")],
+        this.n
+      ),
     ];
   }
 
@@ -481,22 +375,8 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
       const output =
         this.rounds === 0
           ? this.kernel(this.copyOutputWGSL, "output (copy)", [u32s("sorted", this.sortedPayload), u32s("outputBuffer", "outputBuffer", "read_write")], this.n)
-          : this.localScatter
-            ? [
-                /* group (rank, suffix) by the rank's block, then write SA block by block */
-                new ExecutePrimitive({
-                  primitive: Object.assign(this.outputSplit, { length: this.n }),
-                  buffers: { keysIn: "rankBuffer", keysOut: "listA", valuesOut: "listB" },
-                }),
-                this.kernel(
-                  this.applyWGSL(1),
-                  "output",
-                  [u32s("dest", "listA"), u32s("value", "listB"), u32s("written", "outputBuffer", "read_write")],
-                  this.n
-                ),
-              ]
-            : this.kernel(this.outputWGSL, "output", [u32s("rank", "rankBuffer"), u32s("outputBuffer", "outputBuffer", "read_write")], this.n);
-      actions.push(this.params.allocate("saParams", { n: this.n, m: this.n, h: this.h, b: this.rankBits, initial: 0, round: 0 }), ...[output].flat());
+          : this.kernel(this.outputWGSL, "output", [u32s("rank", "rankBuffer"), u32s("outputBuffer", "outputBuffer", "read_write")], this.n);
+      actions.push(this.params.allocate("saParams", { n: this.n, m: this.n, h: this.h, b: this.rankBits, initial: 0, round: 0 }), output);
       return actions;
     }
     return [...actions, ...this.roundActions()];
@@ -587,7 +467,7 @@ fn main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform
   }
 
   destroy() {
-    for (const p of [this.initialSort, this.roundSort, this.groupScan, this.subgroupScan, this.keepScan, this.rankSplit, this.outputSplit]) p?.destroy();
+    for (const p of [this.initialSort, this.roundSort, this.groupScan, this.subgroupScan, this.keepScan]) p.destroy();
     super.destroy();
   }
 }
@@ -599,7 +479,6 @@ const u32s = (name, buffer, access = "read") => ({ name, buffer, access, type: "
 /** Which phase of the algorithm a kernel label belongs to. */
 export function suffixArrayPhase(label = "") {
   if (label.startsWith("OneSweep")) return "sort";
-  if (label.startsWith("Multisplit") || label.startsWith("SuffixArray apply ranks")) return "local scatter";
   if (/scan/i.test(label)) return "scans";
   const m = label.match(/^SuffixArray (initial keys|pack|heads|update ranks|compact|output)/);
   return m ? m[1] : "other";
@@ -609,48 +488,29 @@ export function suffixArrayPhase(label = "") {
  * counts of a run (activeCounts[0] = n for the initial round, then one per
  * doubling round). Each element's bytes are counted once (neighbor reads and
  * the scans' and sort's small spine traffic are ignored), so this is a lower
- * bound. `random` counts the 4-byte gathers and scatters (rank reads in pack,
- * rank writes in update and output): each moves a whole memory sector (32
- * bytes on most GPUs) when the rank array does not fit in cache.
+ * bound. `random` counts the 4-byte random writes (rank writes in update,
+ * the output's scatter): each moves at least a whole memory sector (32 bytes
+ * on most GPUs; more on Apple GPUs) once the rank array outgrows the cache.
  *
- * Per element of a round over m suffixes:
+ * Per element of a round over m active suffixes (capacity c >= m with
+ * speculation, see execute(); pass the run's `capacities`):
  *   keys     initial: read 1 text byte, write key 8 + payload 4
- *            pack: read active 4 + its rank 4 + rank[i + h] 4 (random), write 12
+ *            pack: read the list 4 and rank[i], rank[i + h] 8 (in nearly
+ *            sequential order: the list is in index order), write 12; spare
+ *            positions write a sentinel key 12
  *   sort     global histogram reads keys (8), then each of P passes reads and
- *            writes key + payload (24): 8 + 24P, P = ceil(key bits / 8)
+ *            writes key + payload (24): (8 + 24P) per capacity element,
+ *            P = ceil(key bits / 8)
  *   heads    read key 8, write 2 flags 8
- *   scans    3 scans, each read 4 + write 4
- *   update   read key 8, payload 4, 2 starts 8; write rank 4 (random), keep 4,
- *            new rank 4
- *   compact  read keep, offset, payload, new rank 16; write active 4 + rank 4
- *            (at most)
+ *   scans    2 scans over c, each read 4 + write 4; the compaction's scan
+ *            over n, 8
+ *   update   read key 8, payload 4, 2 starts 8; write rank 4 (random; skipped
+ *            when neither rank nor active bit changes, so an upper bound)
+ *   compact  over all n: flags (read rank 4, write flag 4), the list (read
+ *            flag and offset 8, write 4 per active)
  * and, once, output: read rank 4n, write SA 4n (random); or, when the
- * initial round resolves everything, copy the sorted payload (8n, streaming).
- *
- * Rank writes are counted for every active suffix, though update skips the
- * suffixes whose rank does not change (about half on text), so the random
- * count is an upper bound. With speculation (execute()), a round's
- * capacity can exceed its active count: pass the run's `capacities` and the
- * sort and scans are counted at the capacity.
- *
- * With localScatter, update writes no ranks; instead a Multisplit of the
- * (suffix, rank) pairs by the suffix's block (read 4 to count, read 8 and
- * write 8 to scatter) and an apply kernel (read 8, write 4 within one block
- * at a time) do, all streaming: 32 bytes. The output likewise: a
- * Multisplit of (rank, index) (read 4 + 4, write 8), then apply (read 8,
- * write 4). (The multisplits' own small scans are not counted.)
- * The active list is then kept in index order, so pack reads both ranks in
- * nearly sequential order (no random access), update writes no keep flags
- * (24 bytes), and the compaction runs over all n each round: flags (read
- * the rank, write a flag: 8), an exclusive scan (8), and the compaction
- * (read flag and offset 8, write the list 4 per active). */
-export function suffixArrayTraffic({
-  n,
-  activeCounts,
-  capacities = activeCounts,
-  localScatter = false,
-  rankBits = Math.ceil(Math.log2(n + 1)),
-}) {
+ * initial round resolves everything, copy the sorted payload (8n, streaming). */
+export function suffixArrayTraffic({ n, activeCounts, capacities = activeCounts, rankBits = Math.ceil(Math.log2(n + 1)) }) {
   const passes = (bits) => Math.ceil(bits / 8);
   const bytes = {};
   const random = {};
@@ -662,25 +522,15 @@ export function suffixArrayTraffic({
     const initial = round === 0;
     const c = capacities[round] ?? m;
     if (initial) add("initial keys", 13 * m);
-    else add("pack", 24 * m + 12 * (c - m), localScatter ? 0 : m);
+    else add("pack", 24 * m + 12 * (c - m));
     add("sort", (8 + 24 * passes(initial ? 9 * INITIAL_SYMBOLS : 2 * rankBits)) * c);
     add("heads", 16 * m);
-    if (localScatter) {
-      add("scans", 16 * c + 8 * n);
-      add("update ranks", 24 * m);
-      add("local scatter", 20 * c + 12 * m);
-      add("compact", 16 * n + 4 * m);
-    } else {
-      add("scans", 24 * c);
-      add("update ranks", 32 * m, m);
-      add("compact", 24 * m);
-    }
+    add("scans", 16 * c + 8 * n);
+    add("update ranks", 24 * m, m);
+    add("compact", 16 * n + 4 * m);
   });
   if (activeCounts.length === 1) add("output", 8 * n);
-  else if (localScatter) {
-    add("local scatter", 16 * n);
-    add("output", 12 * n);
-  } else add("output", 8 * n, n);
+  else add("output", 8 * n, n);
   const total = Object.values(bytes).reduce((a, b) => a + b, 0);
   const totalRandom = Object.values(random).reduce((a, b) => a + b, 0);
   return { bytes, random, total, totalRandom };

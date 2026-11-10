@@ -423,6 +423,8 @@ export function multisplitPassWGSL(
   options: { radix: number; K: number; stagedDigit?: "recompute" | "search"; definitions: string }
 ): string;
 
+/** The suffix array of a byte string: prefix doubling over OneSweepSort of
+ * the still-tied suffixes (docs/suffix-array.md) */
 export class SuffixArray extends BasePrimitive {
   n: number;
   rankBits: number;
@@ -430,9 +432,23 @@ export class SuffixArray extends BasePrimitive {
   rounds: number;
   /** active suffixes before each round (activeCounts[0] = n, the initial round) */
   activeCounts: number[];
+  /** each round's capacity (sort length); above its active count when the
+   * round was submitted before the last count was read back */
+  capacities: number[];
+  /** rounds submitted before the last count was read back */
+  speculatedRounds: number;
   /** with enableGPUTiming: kernel times, per round */
   timings?: { stage: string; m: number; h: number; kernels: { label: string; ns: number }[] }[];
-  constructor(args: { device: GPUDevice; n: number; adapter?: GPUAdapter; [key: string]: any });
+  constructor(args: {
+    device: GPUDevice;
+    n: number;
+    adapter?: GPUAdapter;
+    /** submit a round before the last count is read back when it pays (default true) */
+    speculate?: boolean;
+    /** options for both OneSweepSorts (e.g. KEYS_PER_THREAD) */
+    sortOptions?: { [key: string]: any };
+    [key: string]: any;
+  });
   /** inputBuffer: the n bytes, 4 per u32 word, padded to a multiple of 4 bytes;
    * outputBuffer: n u32s; rankBuffer (optional): n u32s, rank[i] = 1 + position of suffix i */
   execute(args: {
@@ -448,7 +464,7 @@ export function suffixArrayReference(text: Uint8Array): Uint32Array;
 /** "" if sa is text's suffix array (Burkhardt and Kärkkäinen's linear check) */
 export function checkSuffixArray(text: Uint8Array, sa: Uint32Array): string;
 /** modeled DRAM bytes by phase for a run's active counts (a lower bound) */
-export function suffixArrayTraffic(args: { n: number; activeCounts: number[]; rankBits?: number }): {
+export function suffixArrayTraffic(args: { n: number; activeCounts: number[]; capacities?: number[]; rankBits?: number }): {
   bytes: { [phase: string]: number };
   random: { [phase: string]: number };
   total: number;
