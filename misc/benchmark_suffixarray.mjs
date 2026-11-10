@@ -29,11 +29,14 @@ import { copyBandwidth, sortRate, randomAccessCost } from "./device_rates.mjs";
 
 const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const fileArg = process.argv.find((a) => a.startsWith("--file="))?.slice(7);
-/* --kpt=K: OneSweep's KEYS_PER_THREAD for SuffixArray's sorts; --no-speculate */
+/* --kpt=K: OneSweep's KEYS_PER_THREAD for SuffixArray's sorts; --no-speculate;
+ * --local-scatter / --no-local-scatter (default: on from 2^23) */
 const kptArg = process.argv.find((a) => a.startsWith("--kpt="))?.slice(6);
 const saOptions = {
   ...(kptArg && { sortOptions: { KEYS_PER_THREAD: Number(kptArg) } }),
   ...(process.argv.includes("--no-speculate") && { speculate: false }),
+  ...(process.argv.includes("--local-scatter") && { localScatter: true }),
+  ...(process.argv.includes("--no-local-scatter") && { localScatter: false }),
 };
 const corpora = (positional[0] ?? "random256,random4,english,allA").split(",");
 const logSizes = (positional[1] ?? "20,24").split(",").map(Number);
@@ -174,7 +177,7 @@ for (const name of corpora) {
     const errors = checkSuffixArray(text, new Uint32Array(readback.getMappedRange().slice(0)));
     readback.destroy();
 
-    const traffic = suffixArrayTraffic({ n, activeCounts: sa.activeCounts, capacities: sa.capacities });
+    const traffic = suffixArrayTraffic({ n, activeCounts: sa.activeCounts, capacities: sa.capacities, localScatter: sa.localScatter });
     const work = sa.activeCounts.slice(1).reduce((a, b) => a + b, 0) / n; /* doubling rounds only */
     const modelMS = traffic.total / bandwidth / 1e6;
     /* calibrated: the sort at this GPU's sort rate, random accesses at its
@@ -188,7 +191,7 @@ for (const name of corpora) {
     }
     const perRound = (wall - ms(gpuTotal)) / (sa.rounds + 2);
     console.log(
-      `\n${name} 2^${logN}: ${errors ? "WRONG" + errors : "correct"}; ${sa.rounds} doubling rounds (${sa.speculatedRounds} speculative), work ${work.toFixed(2)} n` +
+      `\n${name} 2^${logN}: ${errors ? "WRONG" + errors : "correct"}; ${sa.rounds} doubling rounds (${sa.speculatedRounds} speculative), local scatter ${sa.localScatter ? "on" : "off"}, work ${work.toFixed(2)} n` +
         `\n  wall ${fmt(wall)} ms (${fmt(n / wall / 1e3, 1)} M char/s)   GPU ${fmt(ms(gpuTotal))} ms (${kernels} kernels)` +
         `   overhead ${fmt(perRound)} ms per submission` +
         `\n  model: ${fmt(modelMS)} ms at copy bandwidth (${(traffic.total / n).toFixed(0)} B/char); calibrated ${fmt(calibratedMS)} ms` +
