@@ -32,12 +32,14 @@ export async function gpuNS(primitive, args) {
 }
 
 /** Median GPU time (ns) of `repeats` executes, after warming the GPU to
- * full clock (warmUp: an idle GPU's clocks fall, and the first executes of
- * a run measured a V100's sort at a fifth of its speed); `before` runs ahead
- * of each (e.g., to restore unsorted input). */
+ * full clock for 1 s (warmUp: an idle GPU's clocks fall, and the first
+ * executes of a run measured a V100's sort at a fifth of its speed; with
+ * warmUp's default 200 ms, a V100 fresh from idle measured copy bandwidth at
+ * 389 GB/s instead of 808); `before` runs ahead of each (e.g., to restore
+ * unsorted input). */
 async function timeGPU(primitive, args, { repeats = 3, before = () => {} } = {}) {
   before();
-  await primitive.warmUp(args);
+  await primitive.warmUp(args, 1000);
   const times = [];
   for (let i = 0; i <= repeats; i++) {
     before();
