@@ -51,6 +51,13 @@ export class OneSweepSort extends BaseSort {
      */
     this.copyOutputToTemp = args.copyOutputToTemp ? true : false;
 
+    /** length: sort only the first `length` keys (and payloads) of the
+     * buffers; the rest of each buffer is not read, and is written only by
+     * the passes' ping-pong as far as `length` reaches. Undefined (the
+     * default) sorts the whole keysInOut buffer. It can be changed between
+     * executes (e.g., a shrinking working set over larger buffers); the
+     * pipelines do not depend on it. */
+
     this.knownBuffers = [
       "keysInOut",
       "keysTemp",
@@ -312,7 +319,7 @@ export class OneSweepSort extends BaseSort {
         /* last workgroup */
         if (builtinsUniform.wgid.x == builtinsUniform.nwg.x - 1) {
           for (var k = 0u; k < REDUCE_KEYS_PER_THREAD; k += 1u) {
-            if (i < arrayLength(&keysIn)) {
+            if (i < sortParameters.length) {
               ${
                 this.keyDatatype.is64Bit
                   ? "let key01 = keyToU32(keysIn[i]); let key0 = key01[0];"
@@ -583,7 +590,7 @@ ${this.wlmsWGSL()}
                 : "0xffffffff"
             },
                              keyToU32(keysIn[i]),
-                             i < arrayLength(&keysIn));
+                             i < sortParameters.length);
             i += sgsz;
           }
         }
@@ -943,7 +950,7 @@ ${this.wlmsWGSL()}
           }
           /* difference between keysonly & keyvalue: keyvalue needs to save/reuse digit */
           let destaddr = directionizeIndex(wg_localHist[digit] + i,
-                                           arrayLength(&keysIn));
+                                           sortParameters.length);
           ${this.type === "keyvalue" ? /* WGSL */ "digits[k] = digit;" : ""}
           keysOut[destaddr] = keyFromU32(key);
           i += BLOCK_DIM;
@@ -973,7 +980,7 @@ ${this.wlmsWGSL()}
         for (var k = 0u; k < KEYS_PER_THREAD; k += 1u) {
           var value = atomicLoad(&wg_warpHist[i]);
           var destaddr = directionizeIndex(wg_localHist[digits[k]] + i,
-                                             arrayLength(&keysIn));
+                                             sortParameters.length);
           payloadOut[destaddr] = value;
           i += BLOCK_DIM;
         }`
@@ -982,7 +989,7 @@ ${this.wlmsWGSL()}
       }
 
       if (partid == builtinsUniform.nwg.x - 1u) { /* last workgroup */
-        let final_size = arrayLength(&keysIn) - partid * PART_SIZE;
+        let final_size = sortParameters.length - partid * PART_SIZE;
         var i = builtinsNonuniform.lidx; /* WGSL doesn't let me put this in for initializer */
         for (var k = 0u; k < KEYS_PER_THREAD; k += 1u) { /* scatter keys */
           if (i < final_size) {
@@ -996,7 +1003,7 @@ ${this.wlmsWGSL()}
             }
             /* difference between keysonly & keyvalue: keyvalue needs to save/reuse digit */
             let destaddr = directionizeIndex(wg_localHist[digit] + i,
-                                             arrayLength(&keysIn));
+                                             sortParameters.length);
             ${this.type === "keyvalue" ? /* WGSL */ "digits[k] = digit;" : ""}
             keysOut[destaddr] = keyFromU32(key);
           }
@@ -1013,7 +1020,7 @@ ${this.wlmsWGSL()}
           let s_offset = sid * sgsz * KEYS_PER_THREAD;
           var i = sgid + s_offset + dev_offset;
           for (var k = 0u; k < KEYS_PER_THREAD; k += 1u) { /* load payloads */
-            if (i < arrayLength(&keysIn)) {
+            if (i < sortParameters.length) {
               values[k] = payloadIn[i];
             }
             i += sgsz;
@@ -1030,7 +1037,7 @@ ${this.wlmsWGSL()}
           if (i < final_size) {
             var value = atomicLoad(&wg_warpHist[i]);
             var destaddr = directionizeIndex(wg_localHist[digits[k]] + i,
-                                               arrayLength(&keysIn));
+                                               sortParameters.length);
             payloadOut[destaddr] = value;
           }
           i += BLOCK_DIM;
@@ -1110,8 +1117,13 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
   finalizeRuntimeParameters() {
     /** Constant factors below can be overriden by constructor; anything
      * marked as `this.FOO = this.FOO ?? val` uses 'val' as the default */
-    const inputSize = this.getBuffer("keysInOut").size; // bytes
-    this.inputLength = inputSize / this.keyDatatype.bytesPerElement;
+    /* sort the first `length` keys (and payloads) of the buffers, or all of
+     * them; `length` may change between executes */
+    const capacity = this.getBuffer("keysInOut").size / this.keyDatatype.bytesPerElement;
+    if (this.length !== undefined && !(Number.isInteger(this.length) && this.length >= 1 && this.length <= capacity)) {
+      throw new Error(`OneSweepSort: length ${this.length} must be an integer in [1, ${capacity}] (the keys buffer's length)`);
+    }
+    this.inputLength = this.length ?? capacity;
     if (this.inputLength > 2 ** 30) {
       console.warn(
         "OneSweep sort is limited to 2^30 elements; this is not easily fixed.",
@@ -1134,8 +1146,23 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
       this.adapterInfo?.subgroupMinSize ?? this.RADIX; // this is fragile, if RADIX changes, check it
     this.BLOCK_DIM = this.BLOCK_DIM ?? 256;
     this.workgroupSize = this.BLOCK_DIM; // this is only for subgroup emulation
-    this.KEYS_PER_THREAD =
-      this.KEYS_PER_THREAD ?? (this.keyDatatype.is64Bit ? 12 : 15); // 64b: runs out of space @ 15
+    /* Keys per thread sets the tile, which onesweep_pass stages in workgroup
+     * memory (wg_warpHist). Default 15 (32b keys) or 12 (64b keys); fewer if
+     * the tile and the kernel's other workgroup memory would not fit the
+     * device's limit, as with 64b keys and emulated subgroups (whose
+     * scratch arrays take about 14 KB) under a 32 KB limit: 8 there.
+     * Emulated subgroups need at least RADIX / 32 = 8 keys per thread: their
+     * eight 32-lane subgroups' histograms (8 x RADIX) share wg_warpHist with
+     * the tile, and with 7 the sort is wrong. */
+    if (this.KEYS_PER_THREAD === undefined) {
+      const limit = this.device.limits.maxComputeWorkgroupStorageSize;
+      const fewest = this.useSubgroups ? 1 : Math.ceil(this.RADIX / 32);
+      let kpt = this.keyDatatype.is64Bit ? 12 : 15;
+      /* passWorkgroupBytes is an upper bound (about 1 KB high with
+       * emulation), so stop at the fewest that work rather than go below */
+      while (kpt > fewest && this.passWorkgroupBytes(kpt) > limit) kpt--;
+      this.KEYS_PER_THREAD = kpt;
+    }
     this.PART_SIZE = this.KEYS_PER_THREAD * this.BLOCK_DIM;
     /* how many 32b words do we need to allocate PART_SIZE keys? */
     if (this.keyDatatype.bitsPerElement % 32 !== 0) {
@@ -1171,6 +1198,19 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
       this.passHistSize += this.passHistDelta;
     }
   }
+  /** Workgroup memory onesweep_pass declares with keysPerThread keys per
+   * thread (an upper bound: it counts all of the subgroup emulation's
+   * scratch, when subgroups are emulated). Needs BLOCK_DIM and RADIX. */
+  passWorkgroupBytes(keysPerThread) {
+    const tile = keysPerThread * this.BLOCK_DIM * this.keyDatatype.wordsPerElement * 4; /* wg_warpHist */
+    const fixed = 2 * this.RADIX * 4 + 3 * 4; /* wg_localHist, wg_fallback, three scalars */
+    const emulation = this.fnDeclarations.workgroupBytes([
+      "subgroupEmulation",
+      { datatype: "u32", workgroupSize: `${this.BLOCK_DIM}` },
+    ]);
+    return tile + fixed + emulation;
+  }
+
   compute() {
     this.finalizeRuntimeParameters();
     const alignment = this.device.limits.minUniformBufferOffsetAlignment;
@@ -1344,6 +1384,7 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
         new CopyBufferToBuffer({
           source: "keysInOut",
           destination: "keysTemp",
+          size: this.inputLength * this.keyDatatype.bytesPerElement,
         }),
       );
       if (this.type === "keyvalue") {
@@ -1351,6 +1392,7 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
           new CopyBufferToBuffer({
             source: "payloadInOut",
             destination: "payloadTemp",
+            size: this.inputLength * 4,
           }),
         );
       }

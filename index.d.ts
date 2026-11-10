@@ -431,6 +431,81 @@ export class MitchellPerm extends BijectionPerm {
   scans: BasePrimitive[];
   constructor(args: BijectionPermOptions & { rounds?: number; mode?: "scan" | "walk" });
 }
+/** Group elements by bucket (a bin function of the key, up to 256 buckets);
+ * unstable. docs/multisplit.md */
+export class Multisplit extends BasePrimitive {
+  bins: Bins;
+  type: "keysonly" | "keyvalue";
+  values?: "index";
+  length?: number;
+  constructor(args: {
+    device: GPUDevice;
+    bins: Bins;
+    type?: "keysonly" | "keyvalue";
+    values?: "index";
+    length?: number;
+    tileK?: number;
+    targetWorkgroups?: number;
+    [key: string]: any;
+  });
+  execute(args: {
+    keysIn: GPUBuffer;
+    keysOut: GPUBuffer;
+    valuesIn?: GPUBuffer;
+    valuesOut?: GPUBuffer;
+    bucketOffsets?: GPUBuffer;
+    [key: string]: any;
+  }): Promise<void>;
+  /** "" if the outputs are a multisplit of the inputs (typed arrays) */
+  validate(args: {
+    keysIn: Uint32Array;
+    valuesIn?: Uint32Array;
+    keysOut: Uint32Array;
+    valuesOut?: Uint32Array;
+    bucketOffsets?: Uint32Array;
+  }): string;
+}
+/** WGSL of one multisplit pass (hist_main, scatter_main), shared with MultisplitPerm */
+export function multisplitPassWGSL(
+  env: BasePrimitive,
+  options: { radix: number; K: number; stagedDigit?: "recompute" | "search"; definitions: string }
+): string;
+
+/** The suffix array of a byte string: prefix doubling over OneSweepSort of
+ * the still-tied suffixes (docs/suffix-array.md) */
+export class SuffixArray extends BasePrimitive {
+  n: number;
+  rankBits: number;
+  /** doubling rounds the last execute() ran */
+  rounds: number;
+  /** active suffixes before each round (activeCounts[0] = n, the initial round) */
+  activeCounts: number[];
+  /** with enableGPUTiming: kernel times, per round */
+  timings?: { stage: string; m: number; h: number; kernels: { label: string; ns: number }[] }[];
+  constructor(args: { device: GPUDevice; n: number; adapter?: GPUAdapter; [key: string]: any });
+  /** inputBuffer: the n bytes, 4 per u32 word, padded to a multiple of 4 bytes;
+   * outputBuffer: n u32s; rankBuffer (optional): n u32s, rank[i] = 1 + position of suffix i */
+  execute(args: {
+    inputBuffer: GPUBuffer;
+    outputBuffer: GPUBuffer;
+    rankBuffer?: GPUBuffer;
+    enableGPUTiming?: boolean;
+    [key: string]: any;
+  }): Promise<void>;
+}
+/** the suffix array on the CPU (prefix doubling, O(n log n)) */
+export function suffixArrayReference(text: Uint8Array): Uint32Array;
+/** "" if sa is text's suffix array (Burkhardt and Kärkkäinen's linear check) */
+export function checkSuffixArray(text: Uint8Array, sa: Uint32Array): string;
+/** modeled DRAM bytes by phase for a run's active counts (a lower bound) */
+export function suffixArrayTraffic(args: { n: number; activeCounts: number[]; rankBits?: number }): {
+  bytes: { [phase: string]: number };
+  random: { [phase: string]: number };
+  total: number;
+  totalRandom: number;
+};
+/** the phase a SuffixArray kernel label belongs to */
+export function suffixArrayPhase(label: string): string;
 
 export function tuneMultisplitPerm(args: {
   device: GPUDevice;

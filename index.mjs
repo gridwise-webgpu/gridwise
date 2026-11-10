@@ -18,6 +18,14 @@ export {
 } from "./src/multisplitperm.mjs";
 export { ShunPerm } from "./src/shunperm.mjs";
 export { BijectionPerm, FeistelPerm, SwapOrNotPerm, MitchellPerm } from "./src/bijectionperm.mjs";
+export { Multisplit, multisplitPassWGSL } from "./src/multisplit.mjs";
+export {
+  SuffixArray,
+  suffixArrayReference,
+  checkSuffixArray,
+  suffixArrayTraffic,
+  suffixArrayPhase,
+} from "./src/suffixarray.mjs";
 export {
   randomBitsWGSL,
   randomBitsJS,

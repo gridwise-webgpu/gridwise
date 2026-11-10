@@ -145,6 +145,8 @@ await dldfscanPrimitive.execute({
 
 `DLDFScan`'s input length _must be_ a multiple of 4, and it throws an error otherwise. Pad the end of your input array with enough identity elements to make this work. (This is because internally, it reads and writes `vec4`s.) `HierarchicalScan` accepts any input length.
 
+To scan only the start of a larger buffer, set `length` on a `DLDFScan` (in the constructor, or between executes): it scans the first `length` elements, rounded up to a multiple of 4, and outputs past `length` are unspecified. The buffer itself must still be a multiple of 4 elements long. The pipelines do not depend on `length`, so one primitive can scan a shrinking working set.
+
 `DLDFScan` has had extensive performance testing and the defaults are fairly stable across different GPUs. The workgroup size, for instance, is set to 256. This particular iteration of the scan kernel has barely been tested with other workgroup sizes and they are unlikely to work out of the box.
 
 If we extended scan to larger datatypes (beyond 32 bits), we expect that workgroup memory consumption would become an issue. We expect we would have to reduce workgroup size accordingly.

@@ -17,8 +17,10 @@ import {
 } from "../src/primitive.mjs";
 import { OneSweepSort } from "../src/onesweep.mjs";
 import { MultisplitPerm } from "../src/multisplitperm.mjs";
+import { Multisplit } from "../src/multisplit.mjs";
 import { ShunPerm } from "../src/shunperm.mjs";
 import { FeistelPerm, SwapOrNotPerm, MitchellPerm } from "../src/bijectionperm.mjs";
+import { SuffixArray, suffixArrayReference, checkSuffixArray } from "../src/suffixarray.mjs";
 import { Histogram } from "../src/histogram.mjs";
 import { EvenBins, RangeBins, RadixBins } from "../src/bins.mjs";
 
@@ -28,6 +30,11 @@ export async function main(navigator) {
   /* ------------------------------------------------------------------ */
   /* Runner factory — independent pass/total counters per suite           */
   /* ------------------------------------------------------------------ */
+
+  /* Run only the tests whose names match a regular expression: TEST_FILTER in
+   * Node (e.g. TEST_FILTER=u64), ?filter= in the browser. */
+  const filterSource = isNode ? globalThis.process?.env?.TEST_FILTER : new URLSearchParams(globalThis.location?.search).get("filter");
+  const testFilter = filterSource ? new RegExp(filterSource) : null;
 
   function makeRunner(listEl, summaryEl) {
     let passed = 0;
@@ -57,6 +64,7 @@ export async function main(navigator) {
     }
 
     async function runTest(name, testFn) {
+      if (testFilter && !testFilter.test(name)) return;
       try {
         const errorStr = await testFn();
         report(name, errorStr === "", errorStr.split("\n")[0]);
@@ -190,13 +198,73 @@ export async function main(navigator) {
     return primitive.validate({ inputBuffer: memsrc, outputBuffer: memdest });
   }
 
+  /* DLDFScan `length`: one primitive scans the first lengths[j] elements of a
+   * buffer of capacity elements, execute after execute; outputs before
+   * lengths[j] must match a CPU scan of those elements */
+  async function runScanLengthTest({ type, binop, capacity, lengths }) {
+    const primitive = new DLDFScan({ device, binop, type, datatype: "u32" });
+    const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    const input = device.createBuffer({ size: capacity * 4, usage });
+    const output = device.createBuffer({ size: capacity * 4, usage });
+    const mappable = device.createBuffer({ size: capacity * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const op = binop instanceof BinOpMax ? (a, b) => Math.max(a, b) : (a, b) => (a + b) >>> 0;
+    const identity = 0; /* for both add and max over u32 */
+    let errors = "";
+    for (const length of lengths) {
+      const data = Uint32Array.from({ length: capacity }, () => Math.floor(Math.random() * 1000));
+      device.queue.writeBuffer(input, 0, data);
+      primitive.length = length;
+      await primitive.execute({ inputBuffer: input, outputBuffer: output });
+      const encoder = device.createCommandEncoder();
+      encoder.copyBufferToBuffer(output, 0, mappable, 0, capacity * 4);
+      device.queue.submit([encoder.finish()]);
+      await mappable.mapAsync(GPUMapMode.READ);
+      const out = new Uint32Array(mappable.getMappedRange().slice(0));
+      mappable.unmap();
+      let acc = identity, budget = 3;
+      for (let i = 0; i < length && budget > 0; i++) {
+        const inclusive = op(acc, data[i]);
+        const expected = type === "inclusive" ? inclusive : acc;
+        if (out[i] !== expected) {
+          errors += `\nlength ${length}, position ${i}: expected ${expected}, got ${out[i]}`;
+          budget--;
+        }
+        acc = inclusive;
+      }
+    }
+    for (const b of [input, output, mappable]) b.destroy();
+    primitive.destroy();
+    return errors;
+  }
+
   /* ------------------------------------------------------------------ */
   /* Sort helpers                                                         */
   /* ------------------------------------------------------------------ */
 
-  function generateSortInput(datatype, size) {
+  /* keys: "random" (default), or for u64 two patterns that isolate one 32-bit
+   * word, which OneSweep sorts in separate passes: "high" (random high word,
+   * constant low word) and "fewUnique" (16 distinct keys spread over both
+   * words: many ties, so a key-value sort also tests stability) */
+  const u32Random = () => Math.floor(Math.random() * 2 ** 32);
+  function generateSortInput(datatype, size, keys = "random") {
     const TypedArray = datatypeToTypedArray(datatype);
     const data = new TypedArray(size);
+    if (datatype === "u64") {
+      const distinct = Array.from({ length: 16 }, () => (BigInt(u32Random()) << 32n) | BigInt(u32Random()));
+      for (let i = 0; i < size; i++) {
+        switch (keys) {
+          case "high":
+            data[i] = (BigInt(u32Random()) << 32n) | 0x12345678n;
+            break;
+          case "fewUnique":
+            data[i] = distinct[Math.floor(Math.random() * distinct.length)];
+            break;
+          default:
+            data[i] = (BigInt(u32Random()) << 32n) | BigInt(u32Random());
+        }
+      }
+      return data;
+    }
     for (let i = 0; i < size; i++) {
       switch (datatype) {
         case "u32":
@@ -215,9 +283,9 @@ export async function main(navigator) {
     return data;
   }
 
-  async function runSortTest({ type, datatype, direction, size, keyBits, copyOutputToTemp = true }) {
+  async function runSortTest({ type, datatype, direction, size, keyBits, keys, copyOutputToTemp = true }) {
     const TypedArray = datatypeToTypedArray(datatype);
-    const memsrcKeys = generateSortInput(datatype, size);
+    const memsrcKeys = generateSortInput(datatype, size, keys);
     const isKeyValue = type === "keyvalue";
 
     let memsrcPayload = null;
@@ -344,6 +412,78 @@ export async function main(navigator) {
     return primitive.validate(validateArgs);
   }
 
+  /* `length`: one primitive sorts the first lengths[j] elements of buffers of
+   * capacity elements, execute after execute (the suffix array's pattern:
+   * a shrinking working set). Each result must be the sorted first
+   * lengths[j] input elements, with their payloads. */
+  async function runSortLengthTest({ type, datatype, capacity, lengths, keyBits }) {
+    const isKeyValue = type === "keyvalue";
+    const primitive = new OneSweepSort({
+      device,
+      datatype,
+      type: isKeyValue ? "keyvalue" : "keysonly",
+      direction: "ascending",
+      copyOutputToTemp: true,
+      ...(keyBits !== undefined ? { KEY_BITS: keyBits } : {}),
+    });
+    const bytes = datatype === "u64" ? 8 : 4;
+    const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    const keysInOut = device.createBuffer({ size: capacity * bytes, usage });
+    const keysTemp = device.createBuffer({ size: capacity * bytes, usage });
+    const payloadInOut = isKeyValue ? device.createBuffer({ size: capacity * 4, usage }) : null;
+    const payloadTemp = isKeyValue ? device.createBuffer({ size: capacity * 4, usage }) : null;
+    const read = async (buffer, size) => {
+      const mappable = device.createBuffer({ size, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+      const encoder = device.createCommandEncoder();
+      encoder.copyBufferToBuffer(buffer, 0, mappable, 0, size);
+      device.queue.submit([encoder.finish()]);
+      await mappable.mapAsync(GPUMapMode.READ);
+      const copy = mappable.getMappedRange().slice(0);
+      mappable.destroy();
+      return copy;
+    };
+    let errors = "";
+    for (const length of lengths) {
+      const keys = generateSortInput(datatype, capacity, keyBits !== undefined ? "random" : "fewUnique");
+      const payload = Uint32Array.from({ length: capacity }, (_, i) => i);
+      device.queue.writeBuffer(keysInOut, 0, keys);
+      if (isKeyValue) device.queue.writeBuffer(payloadInOut, 0, payload);
+      primitive.length = length;
+      await primitive.execute({ keysInOut, keysTemp, ...(isKeyValue && { payloadInOut, payloadTemp }) });
+      const TypedArray = datatypeToTypedArray(datatype);
+      const outKeys = new TypedArray(await read(keysTemp, length * bytes));
+      const outPayload = isKeyValue ? new Uint32Array(await read(payloadTemp, length * 4)) : null;
+      const inKeys = keys.slice(0, length);
+      const inPayload = payload.slice(0, length);
+      const err =
+        keyBits !== undefined
+          ? validatePartialKeySort({ keyBits, direction: "ascending", inputKeys: inKeys, outputKeys: outKeys, inputPayload: isKeyValue ? inPayload : null, outputPayload: outPayload })
+          : validateStableSort({ inputKeys: inKeys, outputKeys: outKeys, inputPayload: isKeyValue ? inPayload : null, outputPayload: outPayload });
+      if (err) errors += `\nlength ${length}:${err}`;
+    }
+    for (const b of [keysInOut, keysTemp, payloadInOut, payloadTemp]) b?.destroy();
+    primitive.destroy();
+    return errors;
+  }
+
+  /* the output must be the input stably sorted (ascending): keys and, for a
+   * key-value sort, payloads */
+  function validateStableSort({ inputKeys, outputKeys, inputPayload, outputPayload }) {
+    const order = Array.from(inputKeys, (_, i) => i).sort((a, b) =>
+      inputKeys[a] < inputKeys[b] ? -1 : inputKeys[a] > inputKeys[b] ? 1 : a - b
+    );
+    let errors = "";
+    let budget = 5;
+    for (let i = 0; i < order.length && budget > 0; i++) {
+      const k = inputKeys[order[i]];
+      if (outputKeys[i] !== k || (outputPayload && outputPayload[i] !== inputPayload[order[i]])) {
+        errors += `\nposition ${i}: expected (${k}${outputPayload ? `, ${inputPayload[order[i]]}` : ""}), got (${outputKeys[i]}${outputPayload ? `, ${outputPayload[i]}` : ""})`;
+        budget--;
+      }
+    }
+    return errors;
+  }
+
   /* A sort with KEY_BITS < key width. OneSweep runs ceil(KEY_BITS / 8)
    * passes of 8-bit digits, so it sorts on the low 8 * ceil(KEY_BITS / 8)
    * bits; the output must be ordered by those bits and must hold the same
@@ -352,8 +492,9 @@ export async function main(navigator) {
    * Returns "" on success, as primitive.validate() does. */
   function validatePartialKeySort({ keyBits, direction, inputKeys, outputKeys, inputPayload, outputPayload }) {
     const sortedBits = 8 * Math.ceil(keyBits / 8);
-    const mask = sortedBits >= 32 ? 0xffffffff : (2 ** sortedBits - 1);
-    const low = (k) => (k & mask) >>> 0;
+    const big = inputKeys instanceof BigUint64Array;
+    const mask = big ? (1n << BigInt(sortedBits)) - 1n : sortedBits >= 32 ? 0xffffffff : 2 ** sortedBits - 1;
+    const low = big ? (k) => k & mask : (k) => (k & mask) >>> 0;
     let errors = "", budget = 5;
     for (let i = 1; i < outputKeys.length && budget > 0; i++) {
       const a = low(outputKeys[i - 1]), b = low(outputKeys[i]);
@@ -364,8 +505,8 @@ export async function main(navigator) {
     }
     /* same multiset of (key, payload) pairs, compared as sorted lists */
     const pairs = (keys, vals) => {
-      const p = Array.from(keys, (k, i) => [k >>> 0, vals ? vals[i] : 0]);
-      p.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+      const p = Array.from(keys, (k, i) => [big ? k : k >>> 0, vals ? vals[i] : 0]);
+      p.sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : x[1] - y[1]));
       return p;
     };
     if (budget > 0) {
@@ -435,6 +576,23 @@ export async function main(navigator) {
     ["keysonly", "u32", "ascending", 4096, 16],
     ["keysonly", "u32", "ascending", 4096, 24],
     ["keyvalue", "u32", "ascending", 4096, 20],
+    /* 64-bit keys (vec2u). 8 passes for a full key; passes 5-8 sort the high
+     * word. A 64b tile is 12 keys/thread x 256 = 3072 keys. */
+    ["keysonly", "u64", "ascending", 256],
+    ["keysonly", "u64", "descending", 256],
+    ["keysonly", "u64", "ascending", 32] /* smaller than one tile */,
+    ["keysonly", "u64", "ascending", 10000] /* not a whole number of tiles */,
+    ["keysonly", "u64", "ascending", 4096, undefined, "high"] /* only the high-word passes matter */,
+    ["keyvalue", "u64", "ascending", 4096],
+    ["keyvalue", "u64", "descending", 4096],
+    ["keyvalue", "u64", "ascending", 4096, undefined, "fewUnique"] /* ties: stability */,
+    ["keyvalue", "u64", "descending", 4096, undefined, "fewUnique"],
+    /* partial 64-bit keys: the low KEY_BITS of the whole 64-bit value */
+    ["keysonly", "u64", "ascending", 4096, 8] /* 1 pass */,
+    ["keysonly", "u64", "ascending", 4096, 32] /* exactly the low word */,
+    ["keysonly", "u64", "ascending", 4096, 40] /* crosses into the high word */,
+    ["keyvalue", "u64", "ascending", 4096, 48] /* e.g. a packed pair of 24-bit ranks */,
+    ["keyvalue", "u64", "descending", 4096, 56],
   ];
 
   /* No copyOutputToTemp: the output stays in whichever buffer the last pass
@@ -446,6 +604,8 @@ export async function main(navigator) {
     ["keysonly", "u32", "ascending", 4096, 16] /* 2 passes: keysInOut */,
     ["keyvalue", "u32", "ascending", 4096, 24] /* 3 passes: keysTemp */,
     ["keyvalue", "u32", "ascending", 4096] /* 4 passes: keysInOut */,
+    ["keyvalue", "u64", "ascending", 4096, 40] /* 5 passes: keysTemp */,
+    ["keyvalue", "u64", "ascending", 4096] /* 8 passes: keysInOut */,
   ];
 
   /* Large tests: MB-sized buffers (4 bytes/element), sizes divisible by 4,
@@ -481,6 +641,11 @@ export async function main(navigator) {
     /* partial key widths at a size spanning many partitions */
     ["keysonly", "u32", "ascending", 1_048_576, 12],
     ["keyvalue", "u32", "ascending", 1_048_576, 20],
+    /* 64-bit keys: many partitions, so the lookback and fallback run on vec2u keys */
+    ["keysonly", "u64", "ascending",  1_000_000],
+    ["keysonly", "u64", "descending", 1_000_000],
+    ["keyvalue", "u64", "ascending",  1_000_000],
+    ["keyvalue", "u64", "ascending",  1_048_576, 48],
     /* one large sort (2^24 elements, 64 MiB of keys) */
     ["keysonly", "u32", "ascending", 16_777_216],
   ];
@@ -875,6 +1040,115 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
     return errors;
   }
 
+  /* Multisplit: buckets in order, the same elements, bucket offsets */
+  async function runMultisplitTest({ bins, n, keyOf, type = "keysonly", values, length }) {
+    const keys = Uint32Array.from({ length: n }, (_, i) => keyOf(i));
+    const vals = Uint32Array.from({ length: n }, (_, i) => (Math.imul(i, 0x9e3779b9) >>> 0) ^ 0x5a5a);
+    const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    const buf = (data) => {
+      const b = device.createBuffer({ size: Math.max(16, n * 4), usage });
+      if (data) device.queue.writeBuffer(b, 0, data);
+      return b;
+    };
+    const args = { keysIn: buf(keys), keysOut: buf(), bucketOffsets: device.createBuffer({ size: 4 * (bins.numBins + 4), usage }) };
+    if (type === "keyvalue") args.valuesIn = buf(vals);
+    if (type === "keyvalue" || values) args.valuesOut = buf();
+    const primitive = new Multisplit({ device, bins, type, values, length: length ?? n /* buffers are at least 16 bytes */ });
+    await primitive.execute(args);
+    const read = async (b, words) => {
+      const m = device.createBuffer({ size: words * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+      const e = device.createCommandEncoder();
+      e.copyBufferToBuffer(b, 0, m, 0, words * 4);
+      device.queue.submit([e.finish()]);
+      await m.mapAsync(GPUMapMode.READ);
+      const out = new Uint32Array(m.getMappedRange().slice(0));
+      m.destroy();
+      return out;
+    };
+    const errors = primitive.validate({
+      keysIn: keys,
+      valuesIn: vals,
+      keysOut: await read(args.keysOut, n),
+      valuesOut: args.valuesOut ? await read(args.valuesOut, n) : undefined,
+      bucketOffsets: await read(args.bucketOffsets, bins.numBins + 1),
+    });
+    primitive.destroy();
+    for (const b of Object.values(args)) b?.destroy?.(); /* execute() adds non-buffer fields (trials) */
+    return errors;
+  }
+
+  /* SuffixArray test inputs: name -> n -> Uint8Array */
+  const saInputs = {
+    random2: (n) => saRandomText(n, 2),
+    random4: (n) => saRandomText(n, 4),
+    random256: (n) => saRandomText(n, 256),
+    allA: (n) => new Uint8Array(n).fill(65),
+    zeros: (n) => new Uint8Array(n) /* byte 0 must not act as a terminator */,
+    periodic: (n) => Uint8Array.from({ length: n }, (_, i) => "abcab"[i % 5].charCodeAt(0)),
+    fibonacci: (n) => {
+      /* the Fibonacci word: many long repeats, a classic hard case */
+      let a = "a", b = "ab";
+      while (b.length < n) [a, b] = [b, b + a];
+      return new TextEncoder().encode(b.slice(0, n));
+    },
+    english: (n) => {
+      const words = "the quick brown fox jumps over a lazy dog and then the dog sleeps while the fox runs".split(" ");
+      let s = "";
+      for (let i = 0; s.length < n; i++) s += words[(i * 7 + (i >> 3)) % words.length] + " ";
+      return new TextEncoder().encode(s.slice(0, n));
+    },
+  };
+  function saRandomText(n, sigma) {
+    let x = 0x9e3779b9 ^ n ^ (sigma << 20);
+    return Uint8Array.from({ length: n }, () => {
+      x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+      return (x >>> 0) % sigma;
+    });
+  }
+
+  /* SuffixArray: matches the CPU reference and passes the linear checker;
+   * for odd n, also returns the rank array (rank[SA[j]] = j + 1) */
+  async function runSuffixArrayTest({ input, n, options = {}, expectSpeculation }) {
+    const withRank = n % 2 === 1;
+    const text = saInputs[input](n);
+    const padded = new Uint8Array(Math.ceil(n / 4) * 4);
+    padded.set(text);
+    const inputBuffer = device.createBuffer({ size: padded.length, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(inputBuffer, 0, padded);
+    const outputBuffer = device.createBuffer({ size: n * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const mappable = device.createBuffer({ size: n * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const rankBuffer = withRank ? device.createBuffer({ size: n * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }) : undefined;
+    const primitive = new SuffixArray({ device, n, ...options });
+    await primitive.execute({ inputBuffer, outputBuffer, ...(withRank && { rankBuffer }) });
+    const read = async (buffer) => {
+      const encoder = device.createCommandEncoder();
+      encoder.copyBufferToBuffer(buffer, 0, mappable, 0, n * 4);
+      device.queue.submit([encoder.finish()]);
+      await mappable.mapAsync(GPUMapMode.READ);
+      const data = new Uint32Array(mappable.getMappedRange().slice());
+      mappable.unmap();
+      return data;
+    };
+    const sa = await read(outputBuffer);
+    let errors = checkSuffixArray(text, sa);
+    if (expectSpeculation !== undefined && (primitive.speculatedRounds > 0) !== expectSpeculation) {
+      errors += `\nspeculated ${primitive.speculatedRounds} rounds; expected ${expectSpeculation ? "some" : "none"}`;
+    }
+    if (withRank && !errors) {
+      const rank = await read(rankBuffer);
+      const j = sa.findIndex((i, p) => rank[i] !== p + 1);
+      if (j >= 0) errors += `\nrank[${sa[j]}] = ${rank[sa[j]]}, expected ${j + 1}`;
+    }
+    if (!errors && n <= 1 << 20) {
+      const reference = suffixArrayReference(text);
+      const j = reference.findIndex((v, i) => v !== sa[i]);
+      if (j >= 0) errors += `\nSA[${j}] = ${sa[j]}, expected ${reference[j]}`;
+    }
+    primitive.destroy();
+    for (const b of [inputBuffer, outputBuffer, mappable, rankBuffer]) b?.destroy();
+    return errors;
+  }
+
   class RandomBitsTest extends BasePrimitive {
     constructor(args) {
       super(args);
@@ -1121,9 +1395,32 @@ ${randomBitsWGSL(this.rng)}
     await runTest(name, () => runScanTest({ type, datatype, binop, size, Primitive: HierarchicalScan }));
   }
 
-  for (const [type, datatype, direction, size, keyBits] of sortTests) {
-    const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}${keyBits !== undefined ? ` keyBits=${keyBits}` : ""}`;
-    await runTest(name, () => runSortTest({ type, datatype, direction, size, keyBits }));
+  const sortName = (type, datatype, direction, size, keyBits, keys) =>
+    `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}` +
+    `${keyBits !== undefined ? ` keyBits=${keyBits}` : ""}${keys ? ` keys=${keys}` : ""}`;
+  for (const [type, datatype, direction, size, keyBits, keys] of sortTests) {
+    const name = sortName(type, datatype, direction, size, keyBits, keys);
+    await runTest(name, () => runSortTest({ type, datatype, direction, size, keyBits, keys }));
+  }
+
+  for (const [type, BinOpClass, capacity, lengths] of [
+    ["exclusive", BinOpAdd, 20000, [20000, 13001, 4096, 4097, 3, 1]],
+    ["inclusive", BinOpMax, 20000, [19999, 8191, 2]],
+  ]) {
+    const name = `scan  ${type.padEnd(9)} u32  ${BinOpClass.name.replace("BinOp", "").toLowerCase().padEnd(8)} length=${lengths.join(",")} of ${capacity}`;
+    await runTest(name, () => runScanLengthTest({ type, binop: new BinOpClass({ datatype: "u32" }), capacity, lengths }));
+  }
+
+  /* [type, datatype, capacity, lengths, keyBits] */
+  for (const [type, datatype, capacity, lengths, keyBits] of [
+    ["keysonly", "u32", 10000, [10000, 9999, 3073, 1]],
+    ["keyvalue", "u32", 10000, [7000, 3840, 3841, 17]] /* a whole tile, a tile + 1 */,
+    ["keyvalue", "u64", 10000, [10000, 6000, 3072, 3073, 2]],
+    ["keyvalue", "u64", 10000, [9000, 5000, 100], 48] /* 6 passes */,
+    ["keyvalue", "u64", 10000, [9000, 5000, 100], 40] /* 5 passes: odd */,
+  ]) {
+    const name = `sort  ${type.padEnd(9)} ${datatype}  length=${lengths.join(",")} of ${capacity}${keyBits !== undefined ? ` keyBits=${keyBits}` : ""}`;
+    await runTest(name, () => runSortLengthTest({ type, datatype, capacity, lengths, keyBits }));
   }
 
   for (const [type, datatype, direction, size, keyBits] of sortNoCopyTests) {
@@ -1172,6 +1469,49 @@ ${randomBitsWGSL(this.rng)}
   ]) {
     await runTest(`perm  ${cls} n=${n} ${JSON.stringify(options)}`, () => runBijectionTest({ cls, n, options }));
   }
+  {
+    const hash = (i) => (Math.imul(i ^ 0x2545f491, 0x2c1b3c6d) ^ (i >>> 7)) >>> 0;
+    const f32Word = (x) => new Uint32Array(new Float32Array([x]).buffer)[0];
+    for (const [label, args] of [
+      ["radix 8 bits, keys only", { bins: new RadixBins({ shift: 24, bits: 8 }), n: 100003, keyOf: hash }],
+      ["radix 8 bits, key-value", { bins: new RadixBins({ shift: 8, bits: 8 }), n: 65536, keyOf: hash, type: "keyvalue" }],
+      ["radix 4 bits, values: index", { bins: new RadixBins({ shift: 0, bits: 4 }), n: 40000, keyOf: hash, values: "index" }],
+      ["radix 1 bit, skewed", { bins: new RadixBins({ shift: 31, bits: 1 }), n: 30000, keyOf: (i) => (i % 97 === 0 ? 0x80000000 : 5) }],
+      ["even u32 10 bins", { bins: new EvenBins({ datatype: "u32", numBins: 10, lower: 0, upper: 1000 }), n: 50001, keyOf: (i) => hash(i) % 1000 }],
+      ["even f32 256 bins, key-value", { bins: new EvenBins({ datatype: "f32", numBins: 256, lower: 0, upper: 1 }), n: 20000, keyOf: (i) => f32Word((hash(i) % 1000000) / 1e6), type: "keyvalue" }],
+      ["radix 8 bits, length 12345 of 50000", { bins: new RadixBins({ shift: 16, bits: 8 }), n: 50000, keyOf: hash, type: "keyvalue", length: 12345 }],
+      ["radix 8 bits, n = 1", { bins: new RadixBins({ shift: 0, bits: 8 }), n: 1, keyOf: () => 77, values: "index" }],
+    ]) {
+      await runTest(`msplit Multisplit ${label}`, () => runMultisplitTest(args));
+    }
+  }
+
+  for (const [input, sizes] of [
+    ["random4", [1, 2, 3, 7, 8, 1000, 4097]],
+    ["random2", [100, 10001]],
+    ["random256", [5, 65537]],
+    ["allA", [1, 2, 9, 1000]],
+    ["zeros", [6, 1000]],
+    ["periodic", [999]],
+    ["fibonacci", [4181]],
+    ["english", [20000]],
+  ]) {
+    for (const n of sizes) await runTest(`sa    SuffixArray ${input} n=${n}`, () => runSuffixArrayTest({ input, n }));
+  }
+  /* rounds submitted before the last count is read back (speculation), and not */
+  await runTest("sa    SuffixArray allA n=3001 speculating", () => runSuffixArrayTest({ input: "allA", n: 3001, expectSpeculation: true }));
+  await runTest("sa    SuffixArray allA n=3001 {speculate: false}", () =>
+    runSuffixArrayTest({ input: "allA", n: 3001, options: { speculate: false }, expectSpeculation: false })
+  );
+  /* local scatter (multisplit by destination block), forced on at small n */
+  for (const [input, n] of [["random4", 4097], ["random256", 65537], ["allA", 3001], ["english", 20000], ["fibonacci", 4181], ["random4", 1]]) {
+    await runTest(`sa    SuffixArray ${input} n=${n} {localScatter: true}`, () =>
+      runSuffixArrayTest({ input, n, options: { localScatter: true } })
+    );
+  }
+  await runTest("sa    SuffixArray english n=20000 {speculate: false}", () =>
+    runSuffixArrayTest({ input: "english", n: 20000, options: { speculate: false }, expectSpeculation: false })
+  );
 
   for (const [label, bins, n, gen, repeat] of histogramTests) {
     await runTest(`hist  ${label} n=${n}`, () => runHistogramTest({ bins, n, gen, repeat }));
@@ -1203,9 +1543,9 @@ ${randomBitsWGSL(this.rng)}
       await runLarge(name, () => runScanTest({ type, datatype, binop, size, Primitive: HierarchicalScan }));
     }
 
-    for (const [type, datatype, direction, size, keyBits] of largeSortTests) {
-      const name = `sort  ${type.padEnd(9)} ${datatype}  ${direction.padEnd(10)} size=${size}${keyBits !== undefined ? ` keyBits=${keyBits}` : ""}`;
-      await runLarge(name, () => runSortTest({ type, datatype, direction, size, keyBits }));
+    for (const [type, datatype, direction, size, keyBits, keys] of largeSortTests) {
+      const name = sortName(type, datatype, direction, size, keyBits, keys);
+      await runLarge(name, () => runSortTest({ type, datatype, direction, size, keyBits, keys }));
     }
 
     for (const [n, options] of largePermTests) {
@@ -1215,6 +1555,12 @@ ${randomBitsWGSL(this.rng)}
     await runLarge("perm  ShunPerm n=1048576 {}", () => runShunTest({ n: 1 << 20, options: {} }));
     for (const cls of ["FeistelPerm", "SwapOrNotPerm", "MitchellPerm"]) {
       await runLarge(`perm  ${cls} n=1048577 {}`, () => runBijectionTest({ cls, n: (1 << 20) + 1, options: {} }));
+    }
+    for (const [input, n] of [
+      ["random256", (1 << 22) + 3],
+      ["english", 1 << 22],
+    ]) {
+      await runLarge(`sa    SuffixArray ${input} n=${n}`, () => runSuffixArrayTest({ input, n }));
     }
 
     for (const [label, bins, n, gen] of largeHistogramTests) {
