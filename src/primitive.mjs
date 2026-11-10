@@ -927,7 +927,8 @@ export class BasePrimitive {
               clearItems.push({
                 clearPipeline,
                 clearBindGroup,
-                clearDispatch: divRoundUp(buf.size / 4, CLEAR_WORKGROUP_SIZE),
+                /* at most 65535 workgroups (the kernel strides over the rest) */
+                clearDispatch: Math.min(divRoundUp(buf.size / 4, CLEAR_WORKGROUP_SIZE), 65535),
               });
             }
           }

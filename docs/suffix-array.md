@@ -195,15 +195,46 @@ With the measured sort rate and per-access costs in place of copy bandwidth, the
 2. **When the initial round resolves every suffix, the output is a copy** of the sorted payload instead of a scatter by rank.
 3. **Unchanged ranks are not rewritten.** The first subgroup of each group keeps its rank, so update skips its scatter: on English-like text that is 57% of the rank writes (20% on the Fibonacci word, 12% on random ACGT, measured on the CPU at 2^17).
 4. **Speculative rounds** (decision 4) hide the per-round readback when the active count shrinks slowly.
+5. **Local scatter** (from n = 2^23, `localScatter`). The rank updates and the output no longer scatter directly. The (suffix, rank) pairs are first grouped by the suffix's block with [`Multisplit`](../multisplit/) (2^`localScatterBits` blocks, default 64), then written block by block, so each block's writes stay in cache. That replaces about 290 bytes of traffic per random write with about 32 streamed bytes.
+   - First M1 Max measurement (256 blocks, n = 2^24): GPU time fell 11% on random bytes (55 → 49 ms) and 16% on English-like text (278 → 232 ms); it did not change on the Fibonacci word, and it rose 13% on all "A", whose writes were already nearly sequential. At 2^22 it made no difference, hence the 2^23 threshold.
+   - The multisplit ran at only 80–240 GB/s. With 256 buckets, a 2048-pair tile averages 8 pairs per bucket, 32-byte runs against 128-byte cache lines, so fewer blocks seemed worth trying. A sweep (n = 2^24) found 16 and 64 blocks about equal and 256 slightly worse; the default is 64. GPU time against local scatter off:
+
+     | Input | 16 blocks | 64 blocks | 256 blocks | off |
+     |---|---|---|---|---|
+     | Random bytes | 46 ms | 48 ms | 51 ms | 55 ms |
+     | English-like | 234 ms | 233 ms | 233 ms | 256 ms |
+     | Fibonacci word | 951 ms | 944 ms | 954 ms | 1,001 ms |
+     | All "A" | 773 ms | 809 ms | 778 ms | 727 ms |
+
+   - The block count is not what limits the multisplit: it still moves its bytes at 100–130 GB/s on these inputs, like OneSweep's passes.
 
 **Next, in order of expected gain:**
 
-1. **Sort rate.** Find what limits OneSweep on 64-bit key-value data on this GPU (tile size under 32 KB of workgroup memory, the lookback, the scatter); the sort is half the time on every input.
-2. **Fewer key bits.** Later rounds sort 2b bits; replacing `rank[i]` with a dense id for its group (and dropping the sorted-by-construction high part) would save passes once few groups remain.
-3. **Local rank scatters.** Group the update's scatters by destination block before writing (Büren et al.), so each cache line is written once.
-4. **Fewer readbacks.** Let OneSweep take its length from a GPU buffer, so several rounds can be submitted together; this matters for repetitive inputs and small n.
+1. **Sort rate.** On the M1 Max, OneSweep's 64-bit key-value passes run at about 100 GB/s, and the default tile (12 keys per thread) is already the fastest valid one (`misc/onesweep_probe.mjs`; fewer than 8 keys per thread sort wrongly with 32-lane subgroups). The spin limit of the lookback does not matter. What limits a pass is still open.
+2. **Index-ordered active list** (done with local scatter). Pack's order does not matter, since the sort reorders everything. So with local scatter the active list is kept in index order, and pack reads `rank[i]` and `rank[i + h]` in nearly sequential order instead of at random. Bit 31 of each rank marks a suffix as still active; the local-scatter apply writes it with the rank, and a compaction over all n (flags, scan, compact: about 20 bytes per symbol per round) builds the next list.
+3. **Fewer key bits.** Later rounds sort 2b bits; replacing `rank[i]` with a dense id for its group would save passes once few groups remain.
 
 **How to measure:** `node misc/benchmark_suffixarray.mjs random256,random4,english,fibonacci,allA 20,22,24` prints the device rates at each size, then per input the rounds, work ratio, wall and GPU time, the overhead per submission, both models (copy bandwidth only, and calibrated with the device rates), and per phase the GPU time, modeled bytes and achieved bandwidth.
+
+### Measured: V100
+
+A Tesla V100 (daisy), through Dawn and Vulkan, with speculation, local scatter and the cheaper `execute()` (before the index-ordered active list). A copy kernel reaches 808 GB/s; `copyBufferToBuffer` only 307 GB/s, so the model's yardstick is now a copy kernel (`misc/device_rates.mjs`).
+
+| Input, n = 2^24 | Wall | GPU | Model at 808 GB/s |
+|---|---|---|---|
+| Random bytes | 19.4 ms (863 M symbols/s) | 14.7 ms | 7.2 ms |
+| Random over 4 symbols | 48.3 ms | 35.2 ms | 14.7 ms |
+| English-like text | 99.7 ms (168 M symbols/s) | 83.1 ms | 33.9 ms |
+| Fibonacci word | 348 ms | 334 ms | 144 ms |
+| All "A" | 285 ms | 249 ms | 146 ms |
+
+On English-like text the GPU time is 2.45 times the model's. The streaming kernels (heads, update, compact) run at 700–900 GB/s, at the model's rate. The gap is three kernels:
+
+- the sort, at 324 GB/s, 40% of copy bandwidth (57% of the time);
+- pack's random gathers, at 127 GB/s (14%);
+- the local scatter, at 246 GB/s (14%).
+
+Cutting the CPU cost of `execute()` (from 4 to 1.2 ms for a sort) brought wall time much closer to GPU time: at 2^20, English-like text went from 45 to 27 ms, and the Fibonacci word from 142 to 61 ms. About 2 ms per submission remains.
 
 ### 6. Input and alphabet
 

@@ -1201,6 +1201,12 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
       while (kpt > fewest && this.passWorkgroupBytes(kpt) > limit) kpt--;
       this.KEYS_PER_THREAD = kpt;
     }
+    if (this.passWorkgroupBytes(this.KEYS_PER_THREAD) > this.device.limits.maxComputeWorkgroupStorageSize) {
+      throw new Error(
+        `OneSweepSort: KEYS_PER_THREAD ${this.KEYS_PER_THREAD} needs ${this.passWorkgroupBytes(this.KEYS_PER_THREAD)} bytes of ` +
+          `workgroup memory; the device allows ${this.device.limits.maxComputeWorkgroupStorageSize}`
+      );
+    }
     this.PART_SIZE = this.KEYS_PER_THREAD * this.BLOCK_DIM;
     /* how many 32b words do we need to allocate PART_SIZE keys? */
     if (this.keyDatatype.bitsPerElement % 32 !== 0) {

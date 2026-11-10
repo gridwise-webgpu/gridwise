@@ -383,6 +383,46 @@ export class ShunPerm extends BasePrimitive {
 
 /** The suffix array of a byte string: prefix doubling over OneSweepSort of
  * the still-tied suffixes (docs/suffix-array.md) */
+/** Group elements by bucket (a bin function of the key, up to 256 buckets);
+ * unstable. docs/multisplit.md */
+export class Multisplit extends BasePrimitive {
+  bins: Bins;
+  type: "keysonly" | "keyvalue";
+  values?: "index";
+  length?: number;
+  constructor(args: {
+    device: GPUDevice;
+    bins: Bins;
+    type?: "keysonly" | "keyvalue";
+    values?: "index";
+    length?: number;
+    tileK?: number;
+    targetWorkgroups?: number;
+    [key: string]: any;
+  });
+  execute(args: {
+    keysIn: GPUBuffer;
+    keysOut: GPUBuffer;
+    valuesIn?: GPUBuffer;
+    valuesOut?: GPUBuffer;
+    bucketOffsets?: GPUBuffer;
+    [key: string]: any;
+  }): Promise<void>;
+  /** "" if the outputs are a multisplit of the inputs (typed arrays) */
+  validate(args: {
+    keysIn: Uint32Array;
+    valuesIn?: Uint32Array;
+    keysOut: Uint32Array;
+    valuesOut?: Uint32Array;
+    bucketOffsets?: Uint32Array;
+  }): string;
+}
+/** WGSL of one multisplit pass (hist_main, scatter_main), shared with MultisplitPerm */
+export function multisplitPassWGSL(
+  env: BasePrimitive,
+  options: { radix: number; K: number; stagedDigit?: "recompute" | "search"; definitions: string }
+): string;
+
 export class SuffixArray extends BasePrimitive {
   n: number;
   rankBits: number;
