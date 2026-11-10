@@ -1154,6 +1154,7 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
      * Emulated subgroups need at least RADIX / 32 = 8 keys per thread: their
      * eight 32-lane subgroups' histograms (8 x RADIX) share wg_warpHist with
      * the tile, and with 7 the sort is wrong. */
+    const keysPerThreadGiven = this.KEYS_PER_THREAD !== undefined;
     if (this.KEYS_PER_THREAD === undefined) {
       const limit = this.device.limits.maxComputeWorkgroupStorageSize;
       const fewest = this.useSubgroups ? 1 : Math.ceil(this.RADIX / 32);
@@ -1162,6 +1163,19 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
        * emulation), so stop at the fewest that work rather than go below */
       while (kpt > fewest && this.passWorkgroupBytes(kpt) > limit) kpt--;
       this.KEYS_PER_THREAD = kpt;
+    }
+    /* a KEYS_PER_THREAD the caller chose must fit workgroup memory. Only
+     * checked with hardware subgroups: with emulation passWorkgroupBytes is
+     * an upper bound (about 1 KB high), and would refuse tiles that fit */
+    if (
+      keysPerThreadGiven &&
+      this.useSubgroups &&
+      this.passWorkgroupBytes(this.KEYS_PER_THREAD) > this.device.limits.maxComputeWorkgroupStorageSize
+    ) {
+      throw new Error(
+        `OneSweepSort: KEYS_PER_THREAD ${this.KEYS_PER_THREAD} needs ${this.passWorkgroupBytes(this.KEYS_PER_THREAD)} bytes of ` +
+          `workgroup memory; the device allows ${this.device.limits.maxComputeWorkgroupStorageSize}`
+      );
     }
     this.PART_SIZE = this.KEYS_PER_THREAD * this.BLOCK_DIM;
     /* how many 32b words do we need to allocate PART_SIZE keys? */
