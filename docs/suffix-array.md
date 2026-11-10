@@ -197,7 +197,19 @@ With the measured sort rate and per-access costs in place of copy bandwidth, the
 
 ### Measured: V100
 
-A Tesla V100 (daisy), through Dawn and Vulkan, with speculation, the cheaper `execute()`, and local scatter (since removed; see future directions), before the index-ordered active list. A copy kernel reaches 808 GB/s; `copyBufferToBuffer` only 307 GB/s, so the model's yardstick is a copy kernel (`misc/device_rates.mjs`).
+The merged code (one path: index-ordered list, direct rank writes), at n = 2^24:
+
+| Input | Wall | GPU | Model at 808 GB/s |
+|---|---|---|---|
+| Random bytes | 23.6 ms (710 M symbols/s) | 20.3 ms | 6.3 ms |
+| Random over 4 symbols | 61.3 ms | 49.3 ms | 13.0 ms |
+| English-like text | 110 ms (152 M symbols/s) | 94.0 ms | 30.7 ms |
+| Fibonacci word | 399 ms | 378 ms | 127 ms |
+| All "A" | 241 ms | 228 ms | 129 ms |
+
+On English-like text: the sort 50% of the GPU time (324 GB/s), the rank writes 29% and the output scatter 9% (random writes, about 50–65 GB/s), and everything else at 550–830 GB/s.
+
+An earlier run, with speculation, the cheaper `execute()` and local scatter (since removed; see future directions), before the index-ordered active list: A copy kernel reaches 808 GB/s; `copyBufferToBuffer` only 307 GB/s, so the model's yardstick is a copy kernel (`misc/device_rates.mjs`).
 
 | Input, n = 2^24 | Wall | GPU | Model at 808 GB/s |
 |---|---|---|---|
@@ -242,7 +254,19 @@ With the index-ordered active list, pack ran at copy bandwidth on both GPUs, and
    | Fibonacci word | 951 ms | 944 ms | 954 ms | 1,001 ms |
    | All "A" | 773 ms | 809 ms | 778 ms | 727 ms |
 
-   A 6–16% gain on random and English-like text, none on the Fibonacci word, a loss on all "A" (whose writes are already nearly sequential), nothing at 2^22, and smaller on the V100. It cost a second code path (two compactions, two output paths), two more kernels and a multisplit per round. The multisplit itself ran at only 100–250 GB/s.
+   On the M1 Max: a 6–16% gain on random and English-like text, none on the Fibonacci word, a loss on all "A" (whose writes are already nearly sequential), and nothing at 2^22.
+
+   On the V100 the gain was larger, because a random 4-byte write there moves only about 50–65 GB/s of useful data once the rank array outgrows the cache. GPU time at 2^24, with local scatter (and the index-ordered list) against the merged code without it:
+
+   | Input | Local scatter | Direct writes | Difference |
+   |---|---|---|---|
+   | Random bytes | 14.9 ms | 20.3 ms | +36% |
+   | Random over 4 symbols | 32.2 ms | 49.3 ms | +53% |
+   | English-like | 73.1 ms | 94.0 ms | +29% |
+   | Fibonacci word | 284 ms | 378 ms | +33% |
+   | All "A" | 246 ms | 228 ms | −7% |
+
+   Without it, the rank writes (`update`) and the output scatter take 38% of the GPU time on English-like text (27.5 and 8.3 ms). It cost a second code path (two compactions, two output paths), two more kernels and a multisplit per round; the multisplit itself ran at only 100–250 GB/s. This is the largest gain among these directions, and the first to reconsider: as a single path (always on above a size), it would add back the multisplit and an apply kernel, but not the second compaction.
 
 2. **OneSweep's pass efficiency (measured; changes not made).** The sort is two thirds of the time, and a 64-bit key-value pass reaches about 38% of copy bandwidth on a V100 and about 30% on an M1 Max. Removing parts of a pass on the V100 (an ablation build of OneSweep, kept on the `onesweep-instruments` branch; see [sort performance notes](../sort/#measured-performance-and-where-a-passs-time-goes)) split its 1.31 ms (0.50 ms at copy bandwidth) into the scattered global writes (about 20%), the lookback (about 5%), and work inside the tile (the rest above the floor: about 0.5 ms). Larger tiles (14 or 16 keys per thread) were slower. The likely target inside the tile is staging: every key and payload passes through workgroup memory with atomic loads and stores, because the same array also holds the histograms.
    - WGSL cannot alias one workgroup array as both atomic and non-atomic. The `buffer_view` language feature (in Chrome and in Dawn's Node package) gives one `var<workgroup> wg: buffer<N>` several non-atomic views (`bufferView<T>(&wg, offset)`), but it forbids atomic views, because Metal cannot cast non-atomic memory to atomic ([proposal](https://github.com/gpuweb/gpuweb/blob/main/proposals/buffer-view.md), [issue #5338](https://github.com/gpuweb/gpuweb/issues/5338)). A plain staging array would therefore need its own workgroup memory beside the atomic histograms, which fits NVIDIA's 48 KB but not a 32 KB limit.
