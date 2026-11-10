@@ -270,7 +270,7 @@ The code as merged (index-ordered active list, speculation, local scatter from 2
 - **The calibrated model accounts for the GPU time.** GPU time is 0.90–1.16 times the calibrated model at 2^24 on both GPUs, so the time is where the model says it is.
 - **The speedup is the bandwidth ratio.** The A100 has 1.67 times the V100's copy bandwidth, and the suffix array runs 1.5–1.8 times faster.
 - **The sort is the cost.** It runs at 40–46% of copy bandwidth on the V100 and 39–42% on the A100, and takes 65% (V100) and 69% (A100) of the GPU time on English-like text. Its pass efficiency is a property of OneSweep, not of one GPU; see future direction 1.
-- **Small inputs are a different regime.** At 2^20 the A100 is no faster than the V100 (English-like text: 8.1 ms against 6.1 ms), and its sorts there reach only 100–180 GB/s, below the 288 GB/s it measures sorting 2^20 random keys. These runs are hundreds of small kernels (about 70 µs each on both GPUs), so they are bound by per-kernel latency rather than bandwidth; we have not looked further.
+- **Small inputs are a different regime.** At 2^20 the A100 is no faster than the V100 (English-like text: 8.1 ms against 6.1 ms), and its sorts there reach only 100–180 GB/s, below the 288 GB/s it measures sorting 2^20 random keys. These runs are hundreds of small kernels (50–80 µs of GPU time each, averaged over a run, on both GPUs), so they are bound by per-kernel latency rather than bandwidth; we have not looked further.
 
 ### 6. Input and alphabet
 
