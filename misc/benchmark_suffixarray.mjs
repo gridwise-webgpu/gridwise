@@ -140,9 +140,16 @@ for (const name of corpora) {
     const outputBuffer = device.createBuffer({ size: n * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
     const sa = new SuffixArray({ device, adapter, n, ...saOptions });
 
-    /* warm up (compiles pipelines, allocates), then the median of 3 wall times */
-    for (let i = 0; i < 2; i++) await sa.execute({ inputBuffer, outputBuffer });
-    await device.queue.onSubmittedWorkDone();
+    /* warm up: compile pipelines, allocate, and bring the GPU back to full
+     * clock after the CPU work between inputs (building and checking a 2^24
+     * input takes seconds; with two executes of warm-up, an A100 measured
+     * random bytes at 2^24 slower than a V100); at least 2 executes and 1 s.
+     * Then the median of 3 wall times. */
+    const warmEnd = performance.now() + 1000;
+    for (let i = 0; i < 2 || performance.now() < warmEnd; i++) {
+      await sa.execute({ inputBuffer, outputBuffer });
+      await device.queue.onSubmittedWorkDone();
+    }
     const walls = [];
     for (let i = 0; i < 3; i++) {
       const start = performance.now();
