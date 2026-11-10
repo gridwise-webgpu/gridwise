@@ -447,6 +447,9 @@ export class SuffixArray extends BasePrimitive {
     speculate?: boolean;
     /** options for both OneSweepSorts (e.g. KEYS_PER_THREAD) */
     sortOptions?: { [key: string]: any };
+    /** write ranks and the output through a Multisplit by destination block
+     * (default: n >= 2^23) */
+    localScatter?: boolean;
     [key: string]: any;
   });
   /** inputBuffer: the n bytes, 4 per u32 word, padded to a multiple of 4 bytes;
@@ -464,7 +467,13 @@ export function suffixArrayReference(text: Uint8Array): Uint32Array;
 /** "" if sa is text's suffix array (Burkhardt and Kärkkäinen's linear check) */
 export function checkSuffixArray(text: Uint8Array, sa: Uint32Array): string;
 /** modeled DRAM bytes by phase for a run's active counts (a lower bound) */
-export function suffixArrayTraffic(args: { n: number; activeCounts: number[]; capacities?: number[]; rankBits?: number }): {
+export function suffixArrayTraffic(args: {
+  n: number;
+  activeCounts: number[];
+  capacities?: number[];
+  localScatter?: boolean;
+  rankBits?: number;
+}): {
   bytes: { [phase: string]: number };
   random: { [phase: string]: number };
   total: number;

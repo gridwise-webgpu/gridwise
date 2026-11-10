@@ -27,7 +27,7 @@ The input holds the n bytes packed four to a u32 word, little-endian, so a `Uint
 - **two scans** that turn the sorted keys into new ranks;
 - a **compaction** that drops every suffix whose rank is now unique, keeping the rest in index order.
 
-Almost all the work is done by two existing Gridwise primitives: `OneSweepSort` (u64 keys, `KEY_BITS`, u32 payload) and `DLDFScan` (max and add). The new code is six small kernels and a host loop.
+Almost all the work is done by two existing Gridwise primitives: `OneSweepSort` (u64 keys, `KEY_BITS`, u32 payload) and `DLDFScan` (max and add); for large inputs (n ≥ 2^23), `Multisplit` writes the ranks. The new code is seven small kernels and a host loop.
 
 The design follows four priorities, in order: reuse of Gridwise primitives, simplicity, fit to WebGPU, then performance. The sections below take each decision in turn.
 
@@ -43,11 +43,11 @@ The design follows four priorities, in order: reuse of Gridwise primitives, simp
 2. **Sort** (`OneSweepSort`, `datatype: "u64"`, `KEY_BITS: 2b`, key-value) the first m elements. For n = 2^24 that is 48 bits, or 6 passes.
 3. **Find heads** (new kernel). At each sorted position p, record p if its key's high part (`rank[i]`) differs from position p − 1, giving the start of the old group. Separately, record p if its whole key differs, giving the start of the new subgroup.
 4. **Scan** (`DLDFScan`, `BinOpMax`, inclusive), twice. These give, for every p, its group start g and subgroup start q in the sorted list.
-5. **Update** (new kernel). The new rank is `rank[i] + (q − g)`, scattered to `rank[i]`, with bit 31 set while the suffix stays active. A suffix is retired (bit 31 clear) if its subgroup holds one element: p is a head and p + 1 is a head or the end. The write is skipped when neither the rank nor the active bit changes: the first subgroup of a group that stays active.
+5. **Update** (new kernel). The new rank is `rank[i] + (q − g)`, scattered to `rank[i]`, with bit 31 set while the suffix stays active. A suffix is retired (bit 31 clear) if its subgroup holds one element: p is a head and p + 1 is a head or the end. The write is skipped when neither the rank nor the active bit changes: the first subgroup of a group that stays active. For n ≥ 2^23 the writes go through **local scatter** instead: update writes each (suffix, rank) pair to a stream, a `Multisplit` groups the pairs by the suffix's block (64 blocks), and a small kernel writes them block by block, so each block's writes stay in cache.
 6. **Compact** (two kernels and `DLDFScan` add, over all n). Flag each suffix by its active bit, scan the flags, and write the active suffixes, in index order, as the next round's list; its length goes to a small buffer the host reads back.
 7. **Host:** read the count. If it is 0, stop; otherwise set h to 2h and go to step 1.
 
-**Output.** `SA[rank[i] − 1] = i`, one scatter; or, when the initial round resolves every suffix, a copy of the sorted payload, which is then the suffix array.
+**Output.** `SA[rank[i] − 1] = i`, one scatter (for n ≥ 2^23 through local scatter too); or, when the initial round resolves every suffix, a copy of the sorted payload, which is then the suffix array.
 
 **Correctness.** Every member of a non-singleton group is active, so a group occupies consecutive positions in the sorted active list, and its final range starts at its rank. That makes `rank[i] + (q − g)` the subgroup's start, which is the standard prefix-doubling invariant in final-position coordinates. Burkhardt and Kärkkäinen's linear-time check verifies the result in tests: SA is a permutation, and adjacent suffixes compare correctly by (first symbol, rank of the next suffix).
 
@@ -72,14 +72,15 @@ The chosen design is, in effect, one partition of Cascade's design, or a single-
   - The 64-bit path has regression tests: full keys, key-value, `KEY_BITS` crossing the word boundary, ties, and emulated subgroups.
 - **`DLDFScan`** with `BinOpMax` turns head flags into group and subgroup starts. With `BinOpAdd` it turns keep flags into compaction offsets.
 - **The new kernels** (initial keys, pack, heads, update, compaction flags and scatter) are elementwise or a single gather or scatter, written with the usual Gridwise kernel conventions: declared buffers, `UniformStruct` parameters and `computeLinearizedGridParametersSplit`.
-- **Not used:** a segmented sort, a merge and a multisplit. Gridwise has no segmented sort or merge, and the design avoids needing them. A multisplit was tried for the rank writes and measured, then left out ([future directions](#future-directions-more-performance-more-complexity)).
+- **[`Multisplit`](../multisplit/)** groups the rank writes by destination block for large inputs (local scatter).
+- **Not used:** a segmented sort and a merge. Gridwise has neither, and the design avoids needing them.
 
 ### 3. Simplicity
 
 - **No segmented sort.** Ranks are final-order positions, so sorting the active suffixes globally keeps each group inside its range. Segment boundaries come out of the head flags afterwards.
 - **No recursion and no skew frame.** That means no merge and no change of coordinate system between levels. The skew frame from the 2016 hybrid saves a third of the work, but needs a merge. It is listed as future work, to try only if measurements justify it.
-- **The same fixed sequence every round:** pack, sort, heads, two scans, update, compact. Only m and h change. One code path: no mode switches by input size or device.
-- **Pretty good and understandable over the last 20%.** Several changes measured faster on some inputs or some GPUs but added a second code path, another primitive per round, or changes to OneSweep's kernel. They are left out and recorded under [future directions](#future-directions-more-performance-more-complexity), with what they measured.
+- **The same fixed sequence every round:** pack, sort, heads, two scans, update, compact. Only m and h change. One compaction, and one switch, by input size alone (not by device or input): local scatter from n = 2^23.
+- **Pretty good and understandable over the last 20%.** Several changes measured faster on some inputs or some GPUs but would add a second code path or changes to OneSweep's kernel. They are left out and recorded under [future directions](#future-directions-more-performance-more-complexity), with what they measured. (Local scatter was one, until the V100 showed it was worth 29–53%; it is back as a single path.)
 
 ### 4. Fit to WebGPU
 
@@ -105,7 +106,7 @@ Per round, the cost is roughly proportional to m, the number of active suffixes:
 - the pack, reading two ranks per suffix in nearly sequential order;
 - a ⌈2b/8⌉-pass sort, moving about 24 bytes per element per pass;
 - two scans over m;
-- a scatter of new ranks (random writes, skipped where nothing changes);
+- a scatter of new ranks (random writes, skipped where nothing changes), or, from n = 2^23, a multisplit of the new ranks by block and a block-by-block write;
 - the compaction, over all n (about 20 bytes per symbol).
 
 **Retirement** makes m shrink quickly on typical text. The 2016 work found that dropping finished suffixes matters more than any other choice in prefix doubling.
@@ -193,11 +194,34 @@ With the measured sort rate and per-access costs in place of copy bandwidth, the
 4. **Speculative rounds** (decision 4) hide the per-round readback when the active count shrinks slowly: 7–23% of wall time on repetitive inputs.
 5. **Gridwise's `execute()` got cheaper** for every primitive: caching bind groups and shortening shader-module cache keys cut a sort's CPU cost per execute from 4.0 to 1.2 ms (see [WebGPU object caching](../webgpu-object-caching-strategy/)).
 
+6. **Local scatter, for n ≥ 2^23** (removed once for simplicity, then restored as a single path when the V100 showed its size). Group the rank writes, and the output's, by destination block with [`Multisplit`](../multisplit/), then write each block while it is in cache (Büren et al.'s technique). It replaces a random 4-byte write (about 290 bytes of traffic once the rank array outgrows the cache, on the M1 Max) with about 32 streamed bytes. GPU time at 2^24 on the M1 Max, against writing directly:
+
+   | Input | 16 blocks | 64 blocks | 256 blocks | Direct |
+   |---|---|---|---|---|
+   | Random bytes | 46 ms | 48 ms | 51 ms | 55 ms |
+   | English-like | 234 ms | 233 ms | 233 ms | 256 ms |
+   | Fibonacci word | 951 ms | 944 ms | 954 ms | 1,001 ms |
+   | All "A" | 773 ms | 809 ms | 778 ms | 727 ms |
+
+   On the M1 Max: a 6–16% gain on random and English-like text, none on the Fibonacci word, a loss on all "A" (whose writes are already nearly sequential), and nothing at 2^22.
+
+   On the V100 the gain was larger, because a random 4-byte write there moves only about 50–65 GB/s of useful data once the rank array outgrows the cache. GPU time at 2^24, with local scatter against direct writes (both with the index-ordered list):
+
+   | Input | Local scatter | Direct writes | Difference |
+   |---|---|---|---|
+   | Random bytes | 14.9 ms | 20.3 ms | +36% |
+   | Random over 4 symbols | 32.2 ms | 49.3 ms | +53% |
+   | English-like | 73.1 ms | 94.0 ms | +29% |
+   | Fibonacci word | 284 ms | 378 ms | +33% |
+   | All "A" | 246 ms | 228 ms | −7% |
+
+   Without it, the rank writes (`update`) and the output scatter take 38% of the GPU time on English-like text (27.5 and 8.3 ms). The multisplit itself runs at only 100–250 GB/s. It now runs as a single path, chosen by n alone: a multisplit and a small apply kernel for the ranks and for the output, with the one index-ordered compaction. All "A", whose writes are already nearly sequential, pays about 7%.
+
 **How to measure:** `node misc/benchmark_suffixarray.mjs random256,random4,english,fibonacci,allA 20,22,24` prints the device rates at each size, then per input the rounds, work ratio, wall and GPU time, the overhead per submission, both models (copy bandwidth only, and calibrated with the device rates), and per phase the GPU time, modeled bytes and achieved bandwidth.
 
 ### Measured: V100
 
-The merged code (one path: index-ordered list, direct rank writes), at n = 2^24:
+With direct rank writes (local scatter off; `--no-local-scatter`), at n = 2^24:
 
 | Input | Wall | GPU | Model at 808 GB/s |
 |---|---|---|---|
@@ -209,7 +233,9 @@ The merged code (one path: index-ordered list, direct rank writes), at n = 2^24:
 
 On English-like text: the sort 50% of the GPU time (324 GB/s), the rank writes 29% and the output scatter 9% (random writes, about 50–65 GB/s), and everything else at 550–830 GB/s.
 
-An earlier run, with speculation, the cheaper `execute()` and local scatter (since removed; see future directions), before the index-ordered active list: A copy kernel reaches 808 GB/s; `copyBufferToBuffer` only 307 GB/s, so the model's yardstick is a copy kernel (`misc/device_rates.mjs`).
+A copy kernel reaches 808 GB/s on the V100, but `copyBufferToBuffer` only 307 GB/s, so the model's yardstick is a copy kernel (`misc/device_rates.mjs`).
+
+An earlier run, with speculation, the cheaper `execute()` and local scatter, before the index-ordered active list:
 
 | Input, n = 2^24 | Wall | GPU | Model at 808 GB/s |
 |---|---|---|---|
@@ -245,43 +271,20 @@ With the index-ordered active list, pack ran at copy bandwidth on both GPUs, and
 
 `SuffixArray` aims for good performance with code that is easy to follow. Each direction below was measured, or estimated from measurements, and left out because its gain was modest, depended on the input or the GPU, or needed hard-to-maintain changes to OneSweep. They are worth revisiting if suffix-array speed comes to matter more than simplicity.
 
-1. **Local scatter (measured, removed).** Group the rank writes, and the output's, by destination block with [`Multisplit`](../multisplit/), then write each block while it is in cache (Büren et al.'s technique). It replaces a random 4-byte write (about 290 bytes of traffic once the rank array outgrows the cache, on the M1 Max) with about 32 streamed bytes. GPU time at 2^24 on the M1 Max, against writing directly:
-
-   | Input | 16 blocks | 64 blocks | 256 blocks | Direct |
-   |---|---|---|---|---|
-   | Random bytes | 46 ms | 48 ms | 51 ms | 55 ms |
-   | English-like | 234 ms | 233 ms | 233 ms | 256 ms |
-   | Fibonacci word | 951 ms | 944 ms | 954 ms | 1,001 ms |
-   | All "A" | 773 ms | 809 ms | 778 ms | 727 ms |
-
-   On the M1 Max: a 6–16% gain on random and English-like text, none on the Fibonacci word, a loss on all "A" (whose writes are already nearly sequential), and nothing at 2^22.
-
-   On the V100 the gain was larger, because a random 4-byte write there moves only about 50–65 GB/s of useful data once the rank array outgrows the cache. GPU time at 2^24, with local scatter (and the index-ordered list) against the merged code without it:
-
-   | Input | Local scatter | Direct writes | Difference |
-   |---|---|---|---|
-   | Random bytes | 14.9 ms | 20.3 ms | +36% |
-   | Random over 4 symbols | 32.2 ms | 49.3 ms | +53% |
-   | English-like | 73.1 ms | 94.0 ms | +29% |
-   | Fibonacci word | 284 ms | 378 ms | +33% |
-   | All "A" | 246 ms | 228 ms | −7% |
-
-   Without it, the rank writes (`update`) and the output scatter take 38% of the GPU time on English-like text (27.5 and 8.3 ms). It cost a second code path (two compactions, two output paths), two more kernels and a multisplit per round; the multisplit itself ran at only 100–250 GB/s. This is the largest gain among these directions, and the first to reconsider: as a single path (always on above a size), it would add back the multisplit and an apply kernel, but not the second compaction.
-
-2. **OneSweep's pass efficiency (measured; changes not made).** The sort is two thirds of the time, and a 64-bit key-value pass reaches about 38% of copy bandwidth on a V100 and about 30% on an M1 Max. Removing parts of a pass on the V100 (an ablation build of OneSweep, kept on the `onesweep-instruments` branch; see [sort performance notes](../sort/#measured-performance-and-where-a-passs-time-goes)) split its 1.31 ms (0.50 ms at copy bandwidth) into the scattered global writes (about 20%), the lookback (about 5%), and work inside the tile (the rest above the floor: about 0.5 ms). Larger tiles (14 or 16 keys per thread) were slower. The likely target inside the tile is staging: every key and payload passes through workgroup memory with atomic loads and stores, because the same array also holds the histograms.
+1. **OneSweep's pass efficiency (measured; changes not made).** The sort is two thirds of the time, and a 64-bit key-value pass reaches about 38% of copy bandwidth on a V100 and about 30% on an M1 Max. Removing parts of a pass on the V100 (an ablation build of OneSweep, kept on the `onesweep-instruments` branch; see [sort performance notes](../sort/#measured-performance-and-where-a-passs-time-goes)) split its 1.31 ms (0.50 ms at copy bandwidth) into the scattered global writes (about 20%), the lookback (about 5%), and work inside the tile (the rest above the floor: about 0.5 ms). Larger tiles (14 or 16 keys per thread) were slower. The likely target inside the tile is staging: every key and payload passes through workgroup memory with atomic loads and stores, because the same array also holds the histograms.
    - WGSL cannot alias one workgroup array as both atomic and non-atomic. The `buffer_view` language feature (in Chrome and in Dawn's Node package) gives one `var<workgroup> wg: buffer<N>` several non-atomic views (`bufferView<T>(&wg, offset)`), but it forbids atomic views, because Metal cannot cast non-atomic memory to atomic ([proposal](https://github.com/gpuweb/gpuweb/blob/main/proposals/buffer-view.md), [issue #5338](https://github.com/gpuweb/gpuweb/issues/5338)). A plain staging array would therefore need its own workgroup memory beside the atomic histograms, which fits NVIDIA's 48 KB but not a 32 KB limit.
    - The best 32-bit tile differs by GPU (15 keys per thread on the V100, 11 on the M1 Max), so any tuning would be per device.
    - This is OneSweep's hardest code; changing it for a suffix array is not worth the maintenance risk.
 
-3. **Fewer sort bits per round (not tried).** Later rounds sort 2b bits (50 at 2^24, 7 passes). Replacing `rank[i]` in the key with a dense id for its active group would shorten the key once few groups remain, saving one or two passes in late rounds; it needs a group-id assignment per round.
+2. **Fewer sort bits per round (not tried).** Later rounds sort 2b bits (50 at 2^24, 7 passes). Replacing `rank[i]` in the key with a dense id for its active group would shorten the key once few groups remain, saving one or two passes in late rounds; it needs a group-id assignment per round.
 
-4. **No readbacks (not tried).** Speculation hides most of the per-round readback; removing it needs OneSweep and DLDFScan to take their length from a GPU buffer (indirect dispatch), so that all rounds can be recorded at once, as `ShunPerm` does. About 1–2 ms per round on small inputs.
+3. **No readbacks (not tried).** Speculation hides most of the per-round readback; removing it needs OneSweep and DLDFScan to take their length from a GPU buffer (indirect dispatch), so that all rounds can be recorded at once, as `ShunPerm` does. About 1–2 ms per round on small inputs.
 
-5. **Less CPU per execute (partly done).** About 1.2 ms of CPU per sort execute remains, mostly regenerating WGSL text that has not changed. Caching it per primitive configuration would help every Gridwise primitive, but needs a reliable notion of "configuration".
+4. **Less CPU per execute (partly done).** About 1.2 ms of CPU per sort execute remains, mostly regenerating WGSL text that has not changed. Caching it per primitive configuration would help every Gridwise primitive, but needs a reliable notion of "configuration".
 
-6. **Difference covers for repetitive inputs (not tried).** The 2016 hybrid's skew first step, or a DC3/DC7 formulation, bounds the work independently of repeats (all "A" and the Fibonacci word cost about 20 sorts of n here). It needs a merge and wide-tuple sorts, both new to Gridwise.
+5. **Difference covers for repetitive inputs (not tried).** The 2016 hybrid's skew first step, or a DC3/DC7 formulation, bounds the work independently of repeats (all "A" and the Fibonacci word cost about 20 sorts of n here). It needs a merge and wide-tuple sorts, both new to Gridwise.
 
-7. **Less memory (not tried).** Reusing the sort's temporary buffers for the flags and scans, and the key buffer for the output, would bring the working set from about 49n to about 37n bytes, at the cost of tracking which buffer holds what in each phase.
+6. **Less memory (not tried).** Reusing the sort's temporary buffers for the flags and scans, and the key buffer for the output, would bring the working set from about 49n to about 37n bytes, at the cost of tracking which buffer holds what in each phase.
 
 ## Verification
 
