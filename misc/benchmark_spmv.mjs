@@ -16,7 +16,7 @@
  * --mtx: Matrix Market files (e.g. from the SuiteSparse collection,
  * sparse.tamu.edu): coordinate real, integer or pattern (values 1),
  * general or symmetric. --items: merge-path steps per invocation to try
- * (default 7).
+ * (default: MergePath's, 4).
  *
  * Per matrix: rows, nonzeros, mean and longest row; then per schedule the
  * GPU time (median after a 1 s warm-up), GFLOP/s (2 per nonzero), and the
@@ -32,7 +32,7 @@ import { copyBandwidth } from "./device_rates.mjs";
 const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const option = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const mtxFiles = option("mtx")?.split(",") ?? [];
-const itemsList = (option("items") ?? "7").split(",").map(Number);
+const itemsList = option("items")?.split(",").map(Number) ?? [undefined]; /* undefined: the library's default */
 const generated = mtxFiles.length && !positional.length ? [] : (positional[0] ?? "uniform,rmat,denserow").split(",");
 const logSizes = (positional[1] ?? "18,20,22").split(",").map(Number);
 
@@ -181,7 +181,7 @@ async function benchmark(name, m) {
   const runs = [
     ["thread", "thread", {}],
     ["workgroup", "workgroup", {}],
-    ...itemsList.map((K) => [`mergepath${itemsList.length > 1 ? ` K=${K}` : ""}`, "mergepath", { itemsPerThread: K }]),
+    ...itemsList.map((K) => [`mergepath${itemsList.length > 1 ? ` K=${K}` : ""}`, "mergepath", K === undefined ? {} : { itemsPerThread: K }]),
   ];
   for (const [label, schedule, extra] of runs) {
     const spmv = new SpMV({ device, adapter, rows, nnz, schedule, ...extra });
