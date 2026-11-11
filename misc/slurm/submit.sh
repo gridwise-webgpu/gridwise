@@ -6,6 +6,8 @@
 #   misc/slurm/submit.sh -r origin/onesweep-probe -n probe daisy:v100,wario:a100 \
 #     'node misc/onesweep_probe.mjs 24 u32 && node misc/onesweep_probe.mjs 24 u64kv'
 #
+# The job script is this checkout's misc/slurm/job.sh (sbatch copies it at
+# submission), so fixes to it apply to runs of any commit.
 # REF (default origin/main; a branch name alone means origin's) is fetched and checked out, once per commit, as a
 # git worktree in $GRIDWISE_RUNS/<commit> (default ~/gridwise-runs), where
 # `npm ci` installs the dependencies; each job runs COMMAND there, so jobs
@@ -54,7 +56,7 @@ for spec in ${gpus//,/ }; do
   id=$(sbatch --parsable -p "$node" -w "$node" --gres="gpu:$gpu:1" -t "$time" \
     --job-name="gw-$name" --chdir="$dir" --output="$out" \
     --export=ALL,GRIDWISE_ADAPTER="$gpu",GRIDWISE_COMMIT="${sha:0:12}" \
-    "$dir/misc/slurm/job.sh" "$command")
+    "$(dirname "$0")/job.sh" "$command")
   echo "job $id: $node $gpu -> ${out//%j/$id}"
 done
 echo "watch with: squeue -u ${USER:-$(whoami)}"
