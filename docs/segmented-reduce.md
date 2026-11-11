@@ -133,6 +133,21 @@ The regression tests (`segred`) check `SegmentedReduce` (u32 add, i32 max) and `
 
 `misc/benchmark_spmv.mjs` times both schedules on generated matrices (`uniform`, `rmat` scale-free graphs, `denserow` with one row holding half the nonzeros) and on Matrix Market files (`--mtx=`, e.g. from the [SuiteSparse collection](https://sparse.tamu.edu)), checks every result, and reports GFLOP/s and bandwidth against a copy kernel's.
 
+## Measured performance
+
+`node misc/benchmark_spmv.mjs uniform,rmat,denserow 18,20,22 --items=2,4,7`, on an Apple M1 Max (355 GB/s copy bandwidth), merge-path with 4 steps per invocation (the fastest of 2, 4 and 7 on every matrix). Every result was checked against a CPU SpMV.
+
+| Matrix, 2^22 rows, 67M nonzeros | Longest row | Thread-mapped | Merge-path | Merge-path, of which fixup | Speedup |
+|---|---|---|---|---|---|
+| uniform (16 per row) | 16 | 16.7 ms (8.1 GFLOP/s) | 7.7 ms (17.5 GFLOP/s) | 19 µs | 2.2× |
+| R-MAT (scale-free, 52% of rows empty) | 160,302 | 83.2 ms (1.6 GFLOP/s) | 7.0 ms (19.2 GFLOP/s) | 17 µs | 11.9× |
+| one row with half the nonzeros | 33,554,440 | 15,398 ms (0.01 GFLOP/s) | 7.6 ms (17.7 GFLOP/s) | 14 µs | 2,027× |
+
+- **Merge-path's time does not depend on the matrix's shape.** It runs at 17–21 GFLOP/s on all three matrices at every size from 2^18 to 2^22 rows. Thread-mapped runs at the speed of its longest row.
+- **Merge-path wins on the balanced matrix too.** Neighboring invocations' loads are `itemsPerThread` elements apart, against a row (16 elements) apart for thread-mapped. Of 2, 4 and 7 steps, 4 is fastest: more steps spread a subgroup's loads further, fewer cost more searches and carries.
+- **The fixup is almost free.** It is 0.2–0.3% of the time, even with one row spanning about 33,000 workgroups. The first version's walk-back fixup took 7,356 µs on that matrix, half of a 14.9 ms SpMV.
+- **Large matrices are bound by the random reads of x.** Each nonzero reads x at a random column. On a V100 and an A100, the random-read cost that `misc/device_rates.mjs` measures at 2^22 (0.107 and 0.052 ns per read) times 67M nonzeros is 7.2 and 3.5 ms, against 7.6 and 3.4 ms measured for merge-path SpMV on the uniform matrix.
+
 ## Possible improvements not made
 
 - **Coalesced loads.** Each invocation reads its atoms consecutively, so a subgroup's loads are strided by `itemsPerThread`. CUB stages a tile's atoms through workgroup memory first.
