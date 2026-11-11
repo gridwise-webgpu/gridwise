@@ -1149,7 +1149,7 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
   /* SegmentedReduce: each tile's reduction of data[atom] (u32 add or i32
    * max), equal to the CPU's; one primitive over several shapes in turn
    * (tiles and atoms change between executes) */
-  async function runSegmentedReduceTest({ shapes, tiles, binop, options = {}, fixupLevels }) {
+  async function runSegmentedReduceTest({ shapes, tiles, binop, options = {}, fixupLevels, trials = 1 }) {
     const T = binop.datatype;
     const TypedArray = T === "i32" ? Int32Array : Uint32Array;
     const primitive = new SegmentedReduce({
@@ -1169,7 +1169,7 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
       const data = TypedArray.from({ length: atoms }, (_, a) => (T === "i32" ? (srHash(a) | 0) >> 8 : srHash(a) & 0xffff));
       const buffers = { offsets: srBuffer(offsets), data: srBuffer(data), outputBuffer: srBuffer(new TypedArray(lengths.length)) };
       Object.assign(primitive, { tiles: lengths.length, atoms });
-      await primitive.execute({ ...buffers });
+      await primitive.execute({ ...buffers, trials });
       const out = await srRead(buffers.outputBuffer, TypedArray, lengths.length);
       const expected = segmentedReduceReference({ offsets, tiles: lengths.length, binop, atomValue: (a) => data[a] });
       const t = expected.findIndex((v, i) => out[i] !== (T === "i32" ? v | 0 : v >>> 0));
@@ -1186,7 +1186,7 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
   }
 
   /* SpMV: y = A x within f32 rounding of the CPU's f64 sums */
-  async function runSpMVTest({ shape, rows, cols, options = {} }) {
+  async function runSpMVTest({ shape, rows, cols, options = {}, trials = 1 }) {
     const lengths = srShapes[shape](rows);
     const offsets = srOffsets(lengths);
     const nnz = offsets[lengths.length];
@@ -1202,7 +1202,7 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
       y: srBuffer(new Float32Array(lengths.length)),
     };
     const primitive = new SpMV({ device, rows: lengths.length, nnz, ...options });
-    await primitive.execute({ ...buffers });
+    await primitive.execute({ ...buffers, trials });
     const y = await srRead(buffers.y, Float32Array, lengths.length);
     const expected = spmvReference({ offsets, indices, values, x });
     let errors = "";
@@ -1585,6 +1585,16 @@ ${randomBitsWGSL(this.rng)}
         fixupLevels: 3,
       })
     );
+    /* every kernel repeated in place (as benchmark() does) gives the same result */
+    await runTest("segred SegmentedReduce u32 add, mergepath, kernels repeated (trials: 3)", () =>
+      runSegmentedReduceTest({
+        shapes: ["skewed", "power law", "huge tile"],
+        tiles: 30011,
+        binop: new BinOpAdd({ datatype: "u32" }),
+        options: { schedule: "mergepath", itemsPerThread: 1 },
+        trials: 3,
+      })
+    );
     for (const schedule of ["thread", "mergepath"]) {
       await runTest(`segred SegmentedReduce i32 max, ${schedule}`, () =>
         runSegmentedReduceTest({ shapes: ["skewed", "all empty", "power law"], tiles: 5003, binop: new BinOpMax({ datatype: "i32" }), options: { schedule } })
@@ -1594,6 +1604,9 @@ ${randomBitsWGSL(this.rng)}
       );
       for (const shape of ["uniform", "power law", "skewed"]) {
         await runTest(`segred SpMV ${shape}, ${schedule}`, () => runSpMVTest({ shape, rows: 20000, cols: 5000, options: { schedule } }));
+        await runTest(`segred SpMV ${shape}, ${schedule}, trials: 2`, () =>
+          runSpMVTest({ shape, rows: 20000, cols: 5000, options: { schedule }, trials: 2 })
+        );
       }
     }
   }

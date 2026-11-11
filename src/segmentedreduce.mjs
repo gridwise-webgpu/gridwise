@@ -225,7 +225,7 @@ fn heads_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonu
   let w = gid;
   if (w == 0u || w >= sr.workgroups) { return; }
   if (${this.wgTileName}[sr.workgroups + w] == 1u) {
-    emitTile(${this.wgTileName}[w - 1u], ${this.wgValueName}[sr.workgroups + w]);
+    emitTile(${this.wgTileName}[w - 1u], ${this.wgValueName}[2u * sr.workgroups + w]);
   }
 }`;
   };
@@ -235,7 +235,8 @@ fn heads_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonu
    * the run (the same carried tile) that ends at workgroup w - 1, if w ends
    * that tile (w's head); runs start where the carried tiles, which are
    * nondecreasing, first equal w - 1's. Its emit adds the run's carries
-   * before w's head value, in place. (Tile W - 1 also takes the last
+   * before w's head value, into a third slot (never in place: a repeated
+   * kernel would add them twice). (Tile W - 1 also takes the last
    * workgroup's carry, past the last tile: the identity.) It reads and writes
    * only this level's carry buffers, so every level binds the same few. */
   fixupPrimitive() {
@@ -271,7 +272,7 @@ fn runStart(t: u32) -> u32 {
 }`,
       tileStart: (t) => `runStart(${t})`,
       atom: (a) => `${V}[${a}]`,
-      emit: (w, v) => `if (${w} > 0u && ${C}[sr.tiles + ${w}] == 1u) { ${head(w)} = binop(${v}, ${head(w)}); }`,
+      emit: (w, v) => `if (${w} > 0u && ${C}[sr.tiles + ${w}] == 1u) { ${V}[2u * sr.tiles + ${w}] = binop(${v}, ${head(w)}); }`,
     });
     return this.fixup;
   }
@@ -302,9 +303,11 @@ fn runStart(t: u32) -> u32 {
       );
     } else {
       actions.push(
-        /* per workgroup: carried tile and value, then head flag and value */
+        /* per workgroup: carried tile, then head flag; carried value, then
+         * head value, then the head's whole value (written by the fixup, not
+         * in place, so that every kernel can be repeated: trials) */
         new AllocateBuffer({ label: this.wgTileName, size: Math.max(16, 8 * workgroups), clearBufferOnReuse: false }),
-        new AllocateBuffer({ label: this.wgValueName, size: Math.max(16, 8 * workgroups), clearBufferOnReuse: false }),
+        new AllocateBuffer({ label: this.wgValueName, size: Math.max(16, 12 * workgroups), clearBufferOnReuse: false }),
         new Kernel({ kernel: this.mergepathWGSL, entryPoint: "mergepath_main", label: `${label} path`, buffers, getDispatchGeometry: dispatch(workgroups) })
       );
       /* one workgroup emits every tile itself; more need the fixup */

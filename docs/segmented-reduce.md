@@ -118,6 +118,7 @@ The last tile also takes the last workgroup's carry, which is past the end of th
 - **It reuses the abstraction.** The fixup is written exactly as a caller would write any `SegmentedReduce`: `atom` reads a carry, `tileStart` is the binary search, and `emit` writes into the head. Only the buffers differ.
 - **It keeps order.** Each run's carries are combined in order, and in front of the head value, so the binop need not be commutative.
 - **It binds few buffers.** A fixup level reads and writes only its parent's carry buffers, never the caller's, so the number of buffers a kernel binds doesn't grow with depth. (WebGPU guarantees only 8 storage buffers per shader stage.)
+- **Every kernel can be repeated.** The fixup's `emit` writes each head's whole value to a slot of its own, never back into the head value it reads, so running any kernel twice gives the same result. (`benchmark()` repeats kernels in place, and a first version that added into the head in place got wrong answers there.)
 - **Every tile is emitted exactly once, with its whole value.** So `emit` can be any WGSL: it is never asked to combine partial results, and no atomics are needed.
 
 ### Fit to WebGPU
