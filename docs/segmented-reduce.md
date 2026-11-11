@@ -69,22 +69,56 @@ This is code generation by string, and it is deliberately so: JavaScript compose
 
 **`mergepath`** (Merrill and Garland, SC 2016) walks the merge of two lists: the tiles' ends and the atom indices. Each step of the path either consumes an atom or ends a tile, so there are tiles + atoms steps, and every invocation takes `itemsPerThread` of them, whatever the tile sizes. A binary search over the offsets finds where each invocation's steps start.
 
-Tiles split between invocations are put back together in two stages:
+### How merge-path puts split tiles back together
 
-1. **Within a workgroup.** Each invocation emits the tiles it both starts and ends, and carries a partial value for the tile it is in at the end. A segmented inclusive scan of the carries, keyed by tile, gives each invocation what earlier invocations carried into the tile it started in.
-2. **Between workgroups.** A tile that began in an earlier workgroup is not emitted by the workgroup that ends it. That workgroup records the tile's value as its *head* instead, and every workgroup records what it carries out.
+Merge-path balances the work by cutting the path into equal pieces, wherever the cuts fall. So a tile can be cut between invocations, and a long tile between many workgroups. Each piece of a tile computes a partial value, and the partial values have to be combined, in order, into one value per tile before it is emitted. That happens in two stages: within a workgroup, then between workgroups.
 
-Combining the workgroups' carries is itself a segmented reduce, so `SegmentedReduce` does it with a second `SegmentedReduce` (the *fixup*):
+**Within a workgroup.** Each invocation walks its `itemsPerThread` steps:
 
-- its atoms are the workgroups' carries;
-- its tiles are the workgroups: tile w holds the run of carries in the tile that workgroup w ends (carried tiles are nondecreasing, so a binary search finds where the run starts), and none if w ends nothing it did not start;
-- its `atom` reads a carry, its `tileStart` is that binary search, and its `emit` adds the run's sum in front of workgroup w's head value.
+- a tile it both starts and ends is whole: it emits it right away;
+- the tile it ends first may have started in an earlier invocation, so it holds that partial value back;
+- the tile it is in when its steps run out is unfinished: its partial value is the invocation's *carry*.
 
-The fixup uses the merge-path schedule too, so it is load-balanced however many workgroups a tile spans, and it has its own fixup, recursively, until one workgroup suffices. Each level shrinks the problem by a factor of 512 (with 4 items per invocation), so 2^28 atoms take three levels. A last kernel emits the heads through the caller's `emit`.
+Tiles only increase along the path, so the invocations that carry the same tile sit next to each other. A segmented inclusive scan of the carries in workgroup memory, keyed by tile, gives each invocation the sum of what the invocations before it carried in its tile. The invocation that ends that tile adds it in front of its held-back value and emits the tile. The scan's loop bounds are constants, so its barriers satisfy WGSL's uniformity rules.
 
-So every tile is emitted exactly once, with its whole value, and `emit` can be any WGSL: it is never asked to combine partial results. The fixup levels bind only their own carry buffers, never the caller's, so the number of buffers a kernel binds does not grow with depth (WebGPU guarantees only 8 storage buffers per shader stage).
+**Between workgroups.** The first tile a workgroup ends may have started in an earlier workgroup, whose partial values this workgroup cannot see: workgroups don't wait for each other (WebGPU makes no promise that they run in any order, or at the same time). So the workgroup doesn't emit that tile. It records it as its *head* (a flag and the value so far), and records what it carries out of its last tile. (Workgroup 0 has nothing before it, so it emits its first tile.) What remains is to add, in front of each head, the carries of the earlier workgroups in that tile.
 
-The first version walked back over the carries with one invocation per finishing workgroup. On a matrix with one row holding half of 2^26 nonzeros, that walk crossed 33,000 workgroups in one invocation and took half the time (7.4 of 14.9 ms on an M1 Max).
+Here is an example with five workgroups and tiles A to E. Tile B is long: it starts in workgroup 0 and ends in workgroup 3. In SpMV the tiles are rows, so b0 is the part of row B's dot product computed in workgroup 0.
+
+| Workgroup | Starts in | Emits itself | Head (tile it ends first, value so far) | Carries out |
+|---|---|---|---|---|
+| 0 | A | A | (none: workgroup 0 emits A) | B: b0 |
+| 1 | B | | (none: ends nothing) | B: b1 |
+| 2 | B | | (none: ends nothing) | B: b2 |
+| 3 | B | C | B: b3 | D: d3 |
+| 4 | D | E | D: d4 | (past the end): identity |
+
+B's value is b0 + b1 + b2 + b3, and D's is d3 + d4. Each head needs the *run* of carries in its tile that ends just before it: workgroup 3's head needs carries 0–2, and workgroup 4's needs carry 3.
+
+**The fixup is a segmented reduce.** That last sentence describes a segmented reduce, so `SegmentedReduce` does it with another `SegmentedReduce`:
+
+- **Atoms:** the workgroups' carries, here b0, b1, b2, d3 and the identity.
+- **Tiles:** one per workgroup. Tile w holds the run of carries in the tile that workgroup w-1 carried out. That run ends at carry w-1, and it starts where the carried tiles first equal carry w-1's tile. The carried tiles are nondecreasing, so a binary search finds that start. Where workgroup w carries the same tile as w-1, the run hasn't ended, and tile w is empty.
+- **Its emit:** for each workgroup w that has a head, it adds the run's sum *in front of* w's head value, in place.
+
+In the example, the fixup's tile starts (its `tileStart`) are 0, 0, 0, 0, 3, 5, so:
+
+| Fixup tile (workgroup) | Its atoms (carries) | Its emit |
+|---|---|---|
+| 0, 1, 2 | none | (no heads) |
+| 3 | 0–2: b0, b1, b2 | head 3 = (b0 + b1 + b2) + b3 = B |
+| 4 | 3–4: d3, identity | head 4 = (d3 + identity) + d4 = D |
+
+The last tile also takes the last workgroup's carry, which is past the end of the tiles and holds the identity, so it changes nothing. Then one more kernel emits each head through the caller's `emit`: B from workgroup 3, D from workgroup 4.
+
+**Why this is the right structure:**
+
+- **It is load-balanced at every level.** The fixup's atoms and tiles go through the merge-path schedule too, so a tile spanning 30,000 workgroups costs the same as 30,000 short tiles. The first version instead had each head walk back over its run with one invocation. On a matrix with one row holding half of 2^26 nonzeros, that walk crossed 33,000 workgroups and took half the time (7.4 of 14.9 ms on an M1 Max).
+- **It recurses.** The fixup splits its own runs across its workgroups and has its own fixup, until one workgroup suffices. A level of W workgroups has W tiles and W atoms, so its path has 2W steps, and with 256 invocations of 4 steps each the next level has W / 512 workgroups. A path of 2^28 steps (tiles plus atoms) takes two levels of fixup.
+- **It reuses the abstraction.** The fixup is written exactly as a caller would write any `SegmentedReduce`: `atom` reads a carry, `tileStart` is the binary search, and `emit` writes into the head. Only the buffers differ.
+- **It keeps order.** Each run's carries are combined in order, and in front of the head value, so the binop need not be commutative.
+- **It binds few buffers.** A fixup level reads and writes only its parent's carry buffers, never the caller's, so the number of buffers a kernel binds doesn't grow with depth. (WebGPU guarantees only 8 storage buffers per shader stage.)
+- **Every tile is emitted exactly once, with its whole value.** So `emit` can be any WGSL: it is never asked to combine partial results, and no atomics are needed.
 
 ### Fit to WebGPU
 
