@@ -197,6 +197,16 @@ GFLOP/s (2 per nonzero) at 2^22 rows and 67M nonzeros, thread-mapped → merge-p
 
 That is 2.0–2.2× faster on the uniform matrix, 8–15× on R-MAT, and 1,500–2,800× with one dense row (thread-mapped takes 9.6–15.4 s there; merge-path 3.4–7.7 ms).
 
+Workgroup-mapped, GFLOP/s at 2^22 rows, beside the best of the other two (the A100's run did not reach 2^22):
+
+| Matrix | M1 Max: workgroup / thread / merge-path | V100: workgroup / thread / merge-path |
+|---|---|---|
+| uniform (16 per row) | 0.90 / 8.1 / 17.5 | 3.40 / 8.8 / 17.5 |
+| R-MAT | 0.90 / 1.6 / 19.2 | 3.47 / 2.3 / 18.4 |
+| one row with half the nonzeros | 0.90 / 0.01 / 17.7 | 0.89 / 0.01 / 17.5 |
+
+Workgroup-mapped beats thread-mapped where long rows hold thread-mapped up (R-MAT on the V100; the dense row, 152 ms against 11.8 s), and loses to it on short rows, where one row leaves most of a workgroup idle. Merge-path is 4–20× faster than it on every matrix, so there is no reason to choose it: it is here as a third schedule, to show that one can be added without changing `SegmentedReduce`.
+
 - **Merge-path's speed does not depend on the matrix's shape.** On each GPU it runs within 10% of the same GFLOP/s on all three matrices, at every size from 2^18 to 2^22 rows. Thread-mapped runs at the speed of its longest row.
 - **Merge-path also wins on the balanced matrix** on all three GPUs at 2^22. Neighboring invocations' loads are `itemsPerThread` elements apart, against a row (16 elements) apart for thread-mapped. Of 2, 4 and 7 steps, 4 was fastest or within 2% of it everywhere. (At 2^18 and 2^20 on the A100, the uniform matrix runs the same either way.)
 - **The recursive fixup removed the cost of long rows.** With the first version's walk-back fixup, the dense-row matrix took 9.2 ms on the A100 (5.8 ms of it fixup) and 14.9 ms on the M1 Max (7.4 ms); now 3.4 and 7.6 ms, the same as the uniform matrix.
