@@ -482,6 +482,73 @@ export function suffixArrayTraffic(args: {
 /** the phase a SuffixArray kernel label belongs to */
 export function suffixArrayPhase(label: string): string;
 
+/** For each tile (segment) of a CSR-style offsets array, the binop over its
+ * atoms' values, with a load-balancing schedule separate from the work
+ * (Osama et al., PPoPP 2023). docs/segmented-reduce.md */
+export interface SegmentedReduceOptions {
+  device: GPUDevice;
+  binop: BinOp;
+  /** number of tiles; offsets holds tiles + 1 entries (may change between executes) */
+  tiles: number;
+  /** offsets[tiles] (may change between executes) */
+  atoms: number;
+  /** WGSL expression of atom `atom` (in tile `tile`)'s value, given the names of the WGSL variables */
+  atom: (atom: string, tile: string) => string;
+  /** WGSL statement that consumes tile `tile`'s result `value` (default: outputBuffer[tile] = value;) */
+  emit?: (tile: string, value: string) => string;
+  /** the buffers atom and emit use, bound by name in execute() (access "read" unless given) */
+  buffers?: { name: string; type: string; access?: "read" | "read_write" }[];
+  /** "mergepath" (default) or "thread" */
+  schedule?: "mergepath" | "thread";
+  /** mergepath: path steps per invocation (default 7) */
+  itemsPerThread?: number;
+  adapter?: GPUAdapter;
+  [key: string]: any;
+}
+export class SegmentedReduce extends BasePrimitive {
+  tiles: number;
+  atoms: number;
+  schedule: "mergepath" | "thread";
+  constructor(args: SegmentedReduceOptions);
+  /** offsets (tiles + 1 u32s), the buffers named in options.buffers, and
+   * outputBuffer when there is no emit */
+  execute(args: { offsets: GPUBuffer; [buffer: string]: any }): Promise<void>;
+}
+/** the reduction on the CPU, for checking */
+export function segmentedReduceReference(args: {
+  offsets: Uint32Array;
+  tiles: number;
+  binop: BinOp;
+  atomValue: (atom: number, tile: number) => number;
+}): number[];
+
+/** y = A x, A in CSR form (f32): a SegmentedReduce over A's rows. docs/segmented-reduce.md */
+export class SpMV extends SegmentedReduce {
+  rows: number;
+  nnz: number;
+  constructor(args: {
+    device: GPUDevice;
+    rows: number;
+    nnz: number;
+    schedule?: "mergepath" | "thread";
+    itemsPerThread?: number;
+    adapter?: GPUAdapter;
+    [key: string]: any;
+  });
+  /** offsets: rows + 1 u32s; indices: nnz u32 columns; values: nnz f32s; x: f32 per column; y: rows f32s (written) */
+  execute(args: {
+    offsets: GPUBuffer;
+    indices: GPUBuffer;
+    values: GPUBuffer;
+    x: GPUBuffer;
+    y: GPUBuffer;
+    enableGPUTiming?: boolean;
+    [key: string]: any;
+  }): Promise<void>;
+}
+/** y = A x on the CPU (f64 sums) */
+export function spmvReference(args: { offsets: Uint32Array; indices: Uint32Array; values: Float32Array; x: Float32Array }): Float64Array;
+
 export function tuneMultisplitPerm(args: {
   device: GPUDevice;
   n: number;

@@ -25,6 +25,8 @@ export {
   suffixArrayTraffic,
   suffixArrayPhase,
 } from "./src/suffixarray.mjs";
+export { SegmentedReduce, segmentedReduceReference } from "./src/segmentedreduce.mjs";
+export { SpMV, spmvReference } from "./src/spmv.mjs";
 export {
   randomBitsWGSL,
   randomBitsJS,
