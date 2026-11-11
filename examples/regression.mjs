@@ -1110,6 +1110,35 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
     return errors;
   }
 
+  /* OneSweep's tile and subgroups for an adapter's narrowest subgroups (as
+   * reported; no sort runs): each subgroup's histogram must fit the tile, so
+   * KEYS_PER_THREAD >= RADIX / narrowest subgroup, and where that tile cannot
+   * fit, 32-lane emulated subgroups instead */
+  async function runOneSweepSubgroupWidthTest() {
+    const errors = [];
+    const keysInOut = device.createBuffer({ size: 4096 * 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
+    const limit = device.limits.maxComputeWorkgroupStorageSize;
+    for (const min of [4, 8, 16, 32, 64]) {
+      for (const datatype of ["u32", "u64"]) {
+        const adapter = { info: { vendor: "test", architecture: "test", subgroupMinSize: min, subgroupMaxSize: Math.max(min, 32) } };
+        const sort = new OneSweepSort({ device, adapter, datatype, type: datatype === "u64" ? "keyvalue" : "keysonly", direction: "ascending" });
+        sort.registerBuffer({ label: "keysInOut", buffer: keysInOut });
+        sort.finalizeRuntimeParameters();
+        const lanes = sort.useSubgroups ? min : 32;
+        const what = `${min}-lane ${datatype}: KEYS_PER_THREAD ${sort.KEYS_PER_THREAD}, subgroups ${sort.useSubgroups ? "hardware" : "emulated"}`;
+        if (sort.KEYS_PER_THREAD < 256 / lanes) errors.push(`${what}: fewer than RADIX / ${lanes}`);
+        if (sort.SUBGROUP_MIN_SIZE !== lanes) errors.push(`${what}: SUBGROUP_MIN_SIZE ${sort.SUBGROUP_MIN_SIZE}`);
+        if (!device.features.has("subgroups")) continue;
+        /* hardware subgroups exactly when their tile fits */
+        const fits = sort.passWorkgroupBytes(Math.ceil(256 / min)) <= limit;
+        if (sort.useSubgroups !== fits) errors.push(`${what}: the ${min}-lane tile ${fits ? "fits" : "does not fit"} ${limit} bytes`);
+        sort.destroy();
+      }
+    }
+    keysInOut.destroy();
+    return errors.length ? "\n" + errors.join("\n") : "";
+  }
+
   class RandomBitsTest extends BasePrimitive {
     constructor(args) {
       super(args);
@@ -1405,6 +1434,7 @@ ${randomBitsWGSL(this.rng)}
   }
 
   await runTest("core: indirect dispatch (counts 0, 5, past one dimension)", runIndirectDispatchTest);
+  await runTest("sort  OneSweep tile and subgroups for 4- to 64-lane adapters", runOneSweepSubgroupWidthTest);
   for (const [n, options] of [
     [2, {}],
     [1000, {}],
