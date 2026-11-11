@@ -295,7 +295,7 @@ fn runStart(t: u32) -> u32 {
       { name: "sr", buffer: "srParams", uniform: this.params },
     ];
     const dispatch = (count) => () => this.getSimpleDispatchGeometry({ workgroupCount: count });
-    const label = `SegmentedReduce (${this.schedule})`;
+    const label = this.level ? `SegmentedReduce fixup level ${this.level}` : `SegmentedReduce (${this.schedule})`;
     const actions = [this.params.allocate("srParams", { tiles: this.tiles, atoms: this.atoms, workgroups })];
     if (this.schedule === "thread") {
       actions.push(

@@ -135,22 +135,28 @@ The regression tests (`segred`) check `SegmentedReduce` (u32 add, i32 max) and `
 
 ## Measured performance
 
-`node misc/benchmark_spmv.mjs uniform,rmat,denserow 18,20,22 --items=2,4,7`, on an Apple M1 Max (355 GB/s copy bandwidth), merge-path with 4 steps per invocation (the fastest of 2, 4 and 7 on every matrix). Every result was checked against a CPU SpMV.
+`node misc/benchmark_spmv.mjs uniform,rmat,denserow 18,20,22 --items=2,4,7`, on an Apple M1 Max (355 GB/s copy bandwidth), an NVIDIA V100 (809 GB/s) and an A100 (PCIe, 1,351 GB/s), merge-path with 4 steps per invocation. Every result was checked against a CPU SpMV.
 
-| Matrix, 2^22 rows, 67M nonzeros | Longest row | Thread-mapped | Merge-path | Merge-path, of which fixup | Speedup |
-|---|---|---|---|---|---|
-| uniform (16 per row) | 16 | 16.7 ms (8.1 GFLOP/s) | 7.7 ms (17.5 GFLOP/s) | 19 µs | 2.2× |
-| R-MAT (scale-free, 52% of rows empty) | 160,302 | 83.2 ms (1.6 GFLOP/s) | 7.0 ms (19.2 GFLOP/s) | 17 µs | 11.9× |
-| one row with half the nonzeros | 33,554,440 | 15,398 ms (0.01 GFLOP/s) | 7.6 ms (17.7 GFLOP/s) | 14 µs | 2,027× |
+GFLOP/s (2 per nonzero) at 2^22 rows and 67M nonzeros, thread-mapped → merge-path:
 
-- **Merge-path's time does not depend on the matrix's shape.** It runs at 17–21 GFLOP/s on all three matrices at every size from 2^18 to 2^22 rows. Thread-mapped runs at the speed of its longest row.
-- **Merge-path wins on the balanced matrix too.** Neighboring invocations' loads are `itemsPerThread` elements apart, against a row (16 elements) apart for thread-mapped. Of 2, 4 and 7 steps, 4 is fastest: more steps spread a subgroup's loads further, fewer cost more searches and carries.
-- **The fixup is almost free.** It is 0.2–0.3% of the time, even with one row spanning about 33,000 workgroups. The first version's walk-back fixup took 7,356 µs on that matrix, half of a 14.9 ms SpMV.
-- **Large matrices are bound by the random reads of x.** Each nonzero reads x at a random column. On a V100 and an A100, the random-read cost that `misc/device_rates.mjs` measures at 2^22 (0.107 and 0.052 ns per read) times 67M nonzeros is 7.2 and 3.5 ms, against 7.6 and 3.4 ms measured for merge-path SpMV on the uniform matrix.
+| Matrix | Longest row | M1 Max | V100 | A100 |
+|---|---|---|---|---|
+| uniform (16 per row) | 16 | 8.1 → 17.5 | 8.8 → 17.5 | 18.6 → 38.8 |
+| R-MAT (scale-free, 52% of rows empty) | 160,302 | 1.6 → 19.2 | 2.3 → 18.4 | 2.6 → 39.9 |
+| one row with half the nonzeros | 33,554,440 | 0.01 → 17.7 | 0.01 → 17.5 | 0.01 → 39.0 |
+
+That is 2.0–2.2× faster on the uniform matrix, 8–15× on R-MAT, and 1,500–2,800× with one dense row (thread-mapped takes 10–15 s there; merge-path 3.4–7.7 ms).
+
+- **Merge-path's speed does not depend on the matrix's shape.** On each GPU it runs within 10% of the same GFLOP/s on all three matrices, at every size from 2^18 to 2^22 rows. Thread-mapped runs at the speed of its longest row.
+- **Merge-path also wins on the balanced matrix** on all three GPUs at 2^22. Neighboring invocations' loads are `itemsPerThread` elements apart, against a row (16 elements) apart for thread-mapped. Of 2, 4 and 7 steps, 4 was fastest or within 2% of it everywhere. (At 2^18 and 2^20 on the A100, the uniform matrix runs the same either way.)
+- **The recursive fixup removed the cost of long rows.** With the first version's walk-back fixup, the dense-row matrix took 9.2 ms on the A100 (5.8 ms of it fixup) and 14.9 ms on the M1 Max (7.4 ms); now 3.4 and 7.6 ms, the same as the uniform matrix.
+- **The fixup costs a few small kernels: about 30 µs.** Each level is a short merge-path kernel and a heads kernel. At 2^18 that is 15–25% of a 0.12–0.43 ms SpMV, where the walk-back fixup cost 3–8 µs on matrices without long rows; at 2^22 it is under 1%.
+- **Large matrices are bound by the random reads of x.** Each nonzero reads x at a random column. The random-read cost that `misc/device_rates.mjs` measures at 2^22 (V100 0.107 ns, A100 0.052 ns per read) times 67M nonzeros is 7.2 and 3.5 ms, against 7.7 and 3.5 ms measured for merge-path on the uniform matrix. So at this size, merge-path SpMV runs as fast as its reads of x allow, and loading the atoms better would not help.
 
 ## Possible improvements not made
 
-- **Coalesced loads.** Each invocation reads its atoms consecutively, so a subgroup's loads are strided by `itemsPerThread`. CUB stages a tile's atoms through workgroup memory first.
+- **Coalesced loads.** Each invocation reads its atoms consecutively, so a subgroup's loads are strided by `itemsPerThread`. CUB stages a tile's atoms through workgroup memory first. This could help only where x fits in cache (small matrices): large ones are bound by the reads of x.
+- **A cheaper fixup for small problems.** The recursive fixup's few kernels cost about 30 µs whatever the matrix. A single-kernel fixup when no tile spans many workgroups would save most of that on small matrices.
 - **One search per workgroup.** Each invocation searches the global offsets. CUB searches once per workgroup, then within a tile of row ends in workgroup memory.
 - **Atoms from the GPU.** The caller passes `atoms` (offsets[tiles]) to size the grid. An indirect dispatch could read it on the GPU instead, for offsets produced by an earlier kernel.
 - **More schedules.** Workgroup-mapped and subgroup-mapped schedules, as in the paper.
