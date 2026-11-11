@@ -7,7 +7,10 @@
  *
  * primitives: scan (DLDFScan), hscan (HierarchicalScan), sort (OneSweep,
  * u32 keys), histogram (256 even f32 bins), perm (MultisplitPerm), shun
- * (ShunPerm, parallel Fisher-Yates: one trial per execute); default all. Sizes default to 20,22,24. --kernels also prints each kernel's time.
+ * (ShunPerm, parallel Fisher-Yates: one trial per execute), feistel (FeistelPerm,
+ * 8 rounds), swapornot (SwapOrNotPerm), mitchell (MitchellPerm, Thrust's
+ * scan mode); default all. Sizes default to 20,22,24. --kernels also prints
+ * each kernel's time.
  * Throughput is elements per second. Sort sorts in place, so after the
  * first execute it sorts sorted keys.
  *
@@ -21,11 +24,12 @@ import { Histogram } from "../src/histogram.mjs";
 import { EvenBins } from "../src/bins.mjs";
 import { MultisplitPerm } from "../src/multisplitperm.mjs";
 import { ShunPerm } from "../src/shunperm.mjs";
+import { FeistelPerm, SwapOrNotPerm, MitchellPerm } from "../src/bijectionperm.mjs";
 import { BinOpAdd } from "../src/binop.mjs";
 
 const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const showKernels = process.argv.includes("--kernels");
-const which = (positional[0] ?? "scan,hscan,sort,histogram,perm,shun").split(",");
+const which = (positional[0] ?? "scan,hscan,sort,histogram,perm,shun,feistel,swapornot,mitchell").split(",");
 const logSizes = (positional[1] ?? "20,22,24").split(",").map(Number);
 
 const { adapter, device } = await createNodeDevice();
@@ -78,6 +82,19 @@ const setups = {
     const primitive = new ShunPerm({ device, adapter, n });
     return { primitive, args: { outputBuffer }, buffers: [outputBuffer] };
   },
+  ...Object.fromEntries(
+    [
+      ["feistel", (n) => new FeistelPerm({ device, adapter, n, rounds: 8 })],
+      ["swapornot", (n) => new SwapOrNotPerm({ device, adapter, n })],
+      ["mitchell", (n) => new MitchellPerm({ device, adapter, n })],
+    ].map(([name, make]) => [
+      name,
+      (n) => {
+        const outputBuffer = buffer(n * 4);
+        return { primitive: make(n), args: { outputBuffer }, buffers: [outputBuffer] };
+      },
+    ])
+  ),
 };
 
 for (const name of which) {

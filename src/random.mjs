@@ -67,13 +67,16 @@ fn pm_bounded(k: u32, key: u32, seed: u32, ctr: ptr<function, u32>) -> u32 {
 /** Philox4x32-10 (Salmon et al., SC 2011), checked against Random123's
  * known-answer vectors. WGSL has no 64-bit integers, so the high half of
  * each 32 x 32 product is assembled from 16-bit pieces. */
-export const PHILOX_WGSL = /* wgsl */ `
+/** philox_mulhi(a, b): the high 32 bits of the 64-bit product a * b. */
+export const MULHI_WGSL = /* wgsl */ `
 fn philox_mulhi(a: u32, b: u32) -> u32 {
   let al = a & 0xffffu; let ah = a >> 16u; let bl = b & 0xffffu; let bh = b >> 16u;
   let lh = al * bh; let hl = ah * bl;
   let mid = ((al * bl) >> 16u) + (lh & 0xffffu) + (hl & 0xffffu);
   return ah * bh + (lh >> 16u) + (hl >> 16u) + (mid >> 16u);
 }
+`;
+export const PHILOX_WGSL = MULHI_WGSL + /* wgsl */ `
 fn philox4x32(c: vec4u, k: vec2u) -> vec4u {
   var x = c;
   var key = k;
@@ -142,7 +145,8 @@ export function pmBoundedJS(k, key, seed, ctr = { value: 0 }, rand = pmRandJS) {
   }
   return 0;
 }
-function mulhiJS(a, b) {
+/** the high 32 bits of the 64-bit product a * b (philox_mulhi) */
+export function mulhiJS(a, b) {
   const al = a & 0xffff, ah = a >>> 16, bl = b & 0xffff, bh = b >>> 16;
   const lh = al * bh, hl = ah * bl, mid = ((al * bl) >>> 16) + (lh & 0xffff) + (hl & 0xffff);
   return (ah * bh + (lh >>> 16) + (hl >>> 16) + (mid >>> 16)) >>> 0;

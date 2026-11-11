@@ -17,6 +17,7 @@ export {
   localFinishReservedBytes,
 } from "./src/multisplitperm.mjs";
 export { ShunPerm } from "./src/shunperm.mjs";
+export { BijectionPerm, FeistelPerm, SwapOrNotPerm, MitchellPerm } from "./src/bijectionperm.mjs";
 export { Multisplit, multisplitPassWGSL } from "./src/multisplit.mjs";
 export {
   SuffixArray,
@@ -29,6 +30,8 @@ export {
   randomBitsWGSL,
   randomBitsJS,
   PHILOX_WGSL,
+  MULHI_WGSL,
+  mulhiJS,
   pmMixJS,
   pmRandJS,
   pmBoundedJS,
