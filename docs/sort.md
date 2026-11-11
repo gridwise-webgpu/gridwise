@@ -167,7 +167,9 @@ Descending key-value sort's ordering is more complicated to specify. Gridwise do
 
 ### Keys per thread (the tile size)
 
-Each pass works on tiles of `KEYS_PER_THREAD` × 256 keys. The default is 15 for 32-bit keys and 12 for 64-bit keys, reduced if the tile and the pass's other workgroup memory would not fit the device's limit. `KEYS_PER_THREAD` can also be given explicitly. Each subgroup's digit histogram is staged in the tile, so the tile must hold (256 / subgroup width) × 256 entries. That means at least 8 keys per thread with 32-lane subgroups, or with emulated subgroups; with fewer, the sort is silently wrong, so OneSweep refuses them. A tile that does not fit workgroup memory is refused too.
+Each pass works on tiles of `KEYS_PER_THREAD` × 256 keys. The default is 15 for 32-bit keys and 12 for 64-bit keys, reduced if the tile and the pass's other workgroup memory would not fit the device's limit. `KEYS_PER_THREAD` can also be given explicitly. Each subgroup's digit histogram is staged in the tile, so the tile must hold (256 / subgroup width) × 256 entries. That means at least 8 keys per thread with 32-lane subgroups, or with emulated subgroups, and 16 with 16-lane subgroups; with fewer, the sort is silently wrong, so OneSweep refuses them. A tile that does not fit workgroup memory is refused too.
+
+What counts is the narrowest subgroup the adapter reports (`subgroupMinSize`), since a device may run any width in its range. 8-lane subgroups (llvmpipe reports 8; Intel GPUs report 8 to 32) need 32 keys per thread, a 32 KB tile of 32-bit keys, which does not fit with the pass's other workgroup memory. When the narrowest hardware subgroups' tile would not fit, OneSweep emulates 32-lane subgroups instead: slower, but correct. (Before this, the floor assumed 32-lane subgroups whatever the adapter reported, and OneSweep sorted wrongly on llvmpipe's 8-lane subgroups.)
 
 ### Measured performance and where a pass's time goes
 

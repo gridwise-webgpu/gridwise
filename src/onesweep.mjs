@@ -16,6 +16,7 @@ import { divRoundUp } from "./util.mjs";
 import { BaseSort } from "./sort.mjs";
 import { BinOpAddU32 } from "./binop.mjs"; // used in emulated subgroupReduce/subgroupAdd
 import { Datatype } from "./datatype.mjs";
+import { wgslFunctionsWithoutSubgroupSupport } from "./wgslFunctions.mjs";
 
 export class OneSweepSort extends BaseSort {
   constructor(args) {
@@ -1141,9 +1142,6 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
       this.RADIX_LOG,
     );
 
-    /* the following better match what's in the shader! */
-    this.SUBGROUP_MIN_SIZE =
-      this.adapterInfo?.subgroupMinSize ?? this.RADIX; // this is fragile, if RADIX changes, check it
     this.BLOCK_DIM = this.BLOCK_DIM ?? 256;
     this.workgroupSize = this.BLOCK_DIM; // this is only for subgroup emulation
     /* Keys per thread sets the tile, which onesweep_pass stages in workgroup
@@ -1154,9 +1152,24 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
      * Each subgroup's histogram (RADIX counts) is staged in the tile, so
      * the tile must hold (BLOCK_DIM / subgroup size) x RADIX entries:
      * KEYS_PER_THREAD >= RADIX / subgroup size. Subgroups of 32 lanes (and
-     * emulated ones) need 8; with fewer the sort is wrong. Only an adapter
-     * whose subgroups are never narrower than 64 lanes allows 4. */
-    const narrowestSubgroup = this.useSubgroups ? Math.max(32, this.adapterInfo?.subgroupMinSize ?? 32) : 32;
+     * emulated ones) need 8; with fewer the sort is wrong. The narrowest
+     * subgroups the adapter may run count, not 32: 8-lane subgroups (llvmpipe;
+     * Intel reports 8 to 32) need 32 keys per thread, whose tile does not fit
+     * workgroup memory. When the narrowest hardware subgroups' tile would not
+     * fit, OneSweep emulates 32-lane subgroups instead (slower, but correct).
+     * Only an adapter whose subgroups are never narrower than 64 lanes
+     * allows 4. */
+    const limit = this.device.limits.maxComputeWorkgroupStorageSize;
+    const hardwareNarrowest = this.adapterInfo?.subgroupMinSize ?? 32;
+    if (this.useSubgroups && this.passWorkgroupBytes(Math.ceil(this.RADIX / hardwareNarrowest)) > limit) {
+      this.useSubgroups = false;
+      this.fnDeclarations = new wgslFunctionsWithoutSubgroupSupport(this);
+      this.subgroupsEmulatedBecauseNarrow = hardwareNarrowest;
+    }
+    const narrowestSubgroup = this.useSubgroups ? hardwareNarrowest : 32;
+    /* the shader sizes its scan memory by this: the narrowest subgroups that
+     * will run (emulated ones are 32 lanes) */
+    this.SUBGROUP_MIN_SIZE = narrowestSubgroup;
     const fewest = Math.ceil(this.RADIX / narrowestSubgroup);
     if (this.KEYS_PER_THREAD !== undefined && this.KEYS_PER_THREAD < fewest) {
       throw new Error(
@@ -1166,8 +1179,8 @@ ${this.fnDeclarations.subgroupDigitMatch({ key: "key", shift: "shift", bits: "RA
     }
     const keysPerThreadGiven = this.KEYS_PER_THREAD !== undefined;
     if (this.KEYS_PER_THREAD === undefined) {
-      const limit = this.device.limits.maxComputeWorkgroupStorageSize;
-      let kpt = this.keyDatatype.is64Bit ? 12 : 15;
+      /* at least the fewest the narrowest subgroups need (16-lane: 16) */
+      let kpt = Math.max(fewest, this.keyDatatype.is64Bit ? 12 : 15);
       /* passWorkgroupBytes is an upper bound (about 1 KB high with
        * emulation), so stop at the fewest that work rather than go below */
       while (kpt > fewest && this.passWorkgroupBytes(kpt) > limit) kpt--;
