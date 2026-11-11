@@ -17,6 +17,9 @@ Complete documentation for Gridwise's OneSweepSort implementation. Covers key-on
 ### [Histogram]({{ "/histogram/" | relative_url }})
 Counts of samples per bin, modeled on CUB's DeviceHistogram: equal-width or level-bounded bins (bin functions `EvenBins`, `RangeBins`, `RadixBins`), the workgroup-histogram helper shared with permutations, and options.
 
+### [Segmented Reduce and SpMV]({{ "/segmented-reduce/" | relative_url }})
+`SegmentedReduce`, a load-balanced reduction of each segment of a CSR-style array with the schedule (thread-mapped or merge-path) separate from the work, which the caller writes as JS functions that return WGSL; and `SpMV`, built on it.
+
 ### [Binary Operations]({{ "/binop/" | relative_url }})
 Guide to binary operations (monoids) used in Gridwise's scan and reduce. Documents standard operators (Add, Min, Max, Multiply) and shows how to specialize them by datatype or implement custom binary operators by extending the `BinOp` class.
 

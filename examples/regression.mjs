@@ -21,6 +21,9 @@ import { Multisplit } from "../src/multisplit.mjs";
 import { ShunPerm } from "../src/shunperm.mjs";
 import { SuffixArray, suffixArrayReference, checkSuffixArray } from "../src/suffixarray.mjs";
 import { Histogram } from "../src/histogram.mjs";
+import { SegmentedReduce, segmentedReduceReference } from "../src/segmentedreduce.mjs";
+import { Schedule } from "../src/schedules.mjs";
+import { SpMV, spmvReference } from "../src/spmv.mjs";
 import { EvenBins, RangeBins, RadixBins } from "../src/bins.mjs";
 
 export async function main(navigator) {
@@ -1110,6 +1113,135 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
     return errors;
   }
 
+  /* SegmentedReduce and SpMV inputs: tile (row) lengths by shape */
+  const srHash = (i) => (Math.imul(i ^ 0x2545f491, 0x2c1b3c6d) ^ (i >>> 7)) >>> 0;
+  const srShapes = {
+    uniform: (tiles) => Array(tiles).fill(8),
+    "one long tile": () => [70000],
+    /* with 1 item per invocation: 19500 workgroups, so three levels of fixup */
+    "huge tile": () => [3, 5000000, 5],
+    "all empty": (tiles) => Array(tiles).fill(0),
+    /* a few long tiles (spanning many workgroups) among short and empty ones */
+    skewed: (tiles) => Array.from({ length: tiles }, (_, i) => (i % 1009 === 3 ? 20000 + (i % 7) : srHash(i) % 5)),
+    /* power law: length ~ 1 / u */
+    "power law": (tiles) => Array.from({ length: tiles }, (_, i) => Math.min(50000, Math.floor(1 / ((srHash(i) + 1) / 2 ** 32)) - 1)),
+  };
+  function srOffsets(lengths) {
+    const offsets = new Uint32Array(lengths.length + 1);
+    lengths.forEach((l, i) => (offsets[i + 1] = offsets[i] + l));
+    return offsets;
+  }
+  const srBuffer = (array) => {
+    const buffer = device.createBuffer({ size: Math.max(16, array.byteLength), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+    device.queue.writeBuffer(buffer, 0, array);
+    return buffer;
+  };
+  async function srRead(buffer, TypedArray, length) {
+    const mappable = device.createBuffer({ size: Math.max(16, length * 4), usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const encoder = device.createCommandEncoder();
+    encoder.copyBufferToBuffer(buffer, 0, mappable, 0, Math.max(16, length * 4));
+    device.queue.submit([encoder.finish()]);
+    await mappable.mapAsync(GPUMapMode.READ);
+    const data = new TypedArray(mappable.getMappedRange().slice(0, length * 4));
+    mappable.destroy();
+    return data;
+  }
+
+  /* SegmentedReduce: each tile's reduction of data[atom] (u32 add or i32
+   * max), equal to the CPU's; one primitive over several shapes in turn
+   * (tiles and atoms change between executes) */
+  async function runSegmentedReduceTest({ shapes, tiles, binop, options = {}, fixupLevels, trials = 1 }) {
+    const T = binop.datatype;
+    const TypedArray = T === "i32" ? Int32Array : Uint32Array;
+    const primitive = new SegmentedReduce({
+      device,
+      binop,
+      tiles: 1,
+      atoms: 0,
+      buffers: [{ name: "data", type: `array<${T}>` }],
+      atom: (a) => `data[${a}]`,
+      ...options,
+    });
+    let errors = "";
+    for (const shape of shapes) {
+      const lengths = srShapes[shape](tiles);
+      const offsets = srOffsets(lengths);
+      const atoms = offsets[lengths.length];
+      const data = TypedArray.from({ length: atoms }, (_, a) => (T === "i32" ? (srHash(a) | 0) >> 8 : srHash(a) & 0xffff));
+      const buffers = { offsets: srBuffer(offsets), data: srBuffer(data), outputBuffer: srBuffer(new TypedArray(lengths.length)) };
+      Object.assign(primitive, { tiles: lengths.length, atoms });
+      await primitive.execute({ ...buffers, trials });
+      const out = await srRead(buffers.outputBuffer, TypedArray, lengths.length);
+      const expected = segmentedReduceReference({ offsets, tiles: lengths.length, binop, atomValue: (a) => data[a] });
+      const t = expected.findIndex((v, i) => out[i] !== (T === "i32" ? v | 0 : v >>> 0));
+      if (t >= 0) errors += `\n${shape}: tile ${t} (${lengths[t]} atoms) = ${out[t]}, expected ${expected[t]}`;
+      if (fixupLevels !== undefined) {
+        let levels = 0;
+        for (let p = primitive.children.fixup; p; p = p.children.fixup) levels++;
+        if (levels !== fixupLevels) errors += `\n${shape}: ${levels} levels of fixup, expected ${fixupLevels}`;
+      }
+      for (const b of Object.values(buffers)) b.destroy();
+    }
+    primitive.destroy();
+    return errors;
+  }
+
+  /* A schedule written outside SegmentedReduce, to check that one can be:
+   * one invocation does every tile */
+  class SerialSchedule extends Schedule {
+    name = "serial";
+    workgroups() {
+      return 1;
+    }
+    wgsl(sr) {
+      return /* wgsl */ `
+@compute @workgroup_size(256)
+fn serial_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
+  ${sr.fnDeclarations.computeLinearizedGridParametersSplit()}
+  if (gid != 0u) { return; }
+  for (var tile = 0u; tile < sr.tiles; tile++) {
+    var acc = IDENTITY;
+    for (var atom = tileStartOf(tile); atom < tileStartOf(tile + 1u); atom++) { acc = binop(acc, atomValue(atom, tile)); }
+    emitTile(tile, acc);
+  }
+}`;
+    }
+    actions(sr, { workgroups }) {
+      return [sr.kernel({ entryPoint: "serial_main", workgroups })];
+    }
+  }
+
+  /* SpMV: y = A x within f32 rounding of the CPU's f64 sums */
+  async function runSpMVTest({ shape, rows, cols, options = {}, trials = 1 }) {
+    const lengths = srShapes[shape](rows);
+    const offsets = srOffsets(lengths);
+    const nnz = offsets[lengths.length];
+    const unit = (i) => (srHash(i) / 2 ** 31) - 1;
+    const indices = Uint32Array.from({ length: nnz }, (_, k) => srHash(k + 7) % cols);
+    const values = Float32Array.from({ length: nnz }, (_, k) => unit(k));
+    const x = Float32Array.from({ length: cols }, (_, c) => unit(c + 99991));
+    const buffers = {
+      offsets: srBuffer(offsets),
+      indices: srBuffer(indices),
+      values: srBuffer(values),
+      x: srBuffer(x),
+      y: srBuffer(new Float32Array(lengths.length)),
+    };
+    const primitive = new SpMV({ device, rows: lengths.length, nnz, ...options });
+    await primitive.execute({ ...buffers, trials });
+    const y = await srRead(buffers.y, Float32Array, lengths.length);
+    const expected = spmvReference({ offsets, indices, values, x });
+    let errors = "";
+    for (let r = 0; r < lengths.length && !errors; r++) {
+      let magnitude = 0;
+      for (let k = offsets[r]; k < offsets[r + 1]; k++) magnitude += Math.abs(values[k] * x[indices[k]]);
+      if (!(Math.abs(y[r] - expected[r]) <= 1e-5 * magnitude + 1e-30)) errors = `\nrow ${r} (${lengths[r]} nonzeros): ${y[r]}, expected ${expected[r]}`;
+    }
+    primitive.destroy();
+    for (const b of Object.values(buffers)) b.destroy();
+    return errors;
+  }
+
   class RandomBitsTest extends BasePrimitive {
     constructor(args) {
       super(args);
@@ -1457,6 +1589,57 @@ ${randomBitsWGSL(this.rng)}
   await runTest("sa    SuffixArray english n=20000 {speculate: false}", () =>
     runSuffixArrayTest({ input: "english", n: 20000, options: { speculate: false }, expectSpeculation: false })
   );
+
+  {
+    const allShapes = ["uniform", "skewed", "one long tile", "all empty", "power law"];
+    for (const [label, schedule, extra] of [
+      ["thread", "thread", {}],
+      ["workgroup", "workgroup", {}],
+      ["mergepath", "mergepath", {}],
+      ["mergepath, 1 item per thread", "mergepath", { itemsPerThread: 1 }],
+      ["mergepath, 16 items per thread", "mergepath", { itemsPerThread: 16 }],
+    ]) {
+      await runTest(`segred SegmentedReduce u32 add, ${label}`, () =>
+        runSegmentedReduceTest({ shapes: allShapes, tiles: 30011, binop: new BinOpAdd({ datatype: "u32" }), options: { schedule, ...extra } })
+      );
+    }
+    await runTest("segred SegmentedReduce u32 add, mergepath, three levels of fixup", () =>
+      runSegmentedReduceTest({
+        shapes: ["huge tile"],
+        tiles: 3,
+        binop: new BinOpAdd({ datatype: "u32" }),
+        options: { schedule: "mergepath", itemsPerThread: 1 },
+        fixupLevels: 3,
+      })
+    );
+    /* every kernel repeated in place (as benchmark() does) gives the same result */
+    await runTest("segred SegmentedReduce u32 add, mergepath, kernels repeated (trials: 3)", () =>
+      runSegmentedReduceTest({
+        shapes: ["skewed", "power law", "huge tile"],
+        tiles: 30011,
+        binop: new BinOpAdd({ datatype: "u32" }),
+        options: { schedule: "mergepath", itemsPerThread: 1 },
+        trials: 3,
+      })
+    );
+    await runTest("segred SegmentedReduce u32 add, a schedule defined outside (serial)", () =>
+      runSegmentedReduceTest({ shapes: ["skewed", "all empty"], tiles: 2003, binop: new BinOpAdd({ datatype: "u32" }), options: { schedule: new SerialSchedule() } })
+    );
+    for (const schedule of ["thread", "workgroup", "mergepath"]) {
+      await runTest(`segred SegmentedReduce i32 max, ${schedule}`, () =>
+        runSegmentedReduceTest({ shapes: ["skewed", "all empty", "power law"], tiles: 5003, binop: new BinOpMax({ datatype: "i32" }), options: { schedule } })
+      );
+      await runTest(`segred SegmentedReduce one tile, ${schedule}`, () =>
+        runSegmentedReduceTest({ shapes: ["uniform", "all empty"], tiles: 1, binop: new BinOpAdd({ datatype: "u32" }), options: { schedule } })
+      );
+      for (const shape of ["uniform", "power law", "skewed"]) {
+        await runTest(`segred SpMV ${shape}, ${schedule}`, () => runSpMVTest({ shape, rows: 20000, cols: 5000, options: { schedule } }));
+        await runTest(`segred SpMV ${shape}, ${schedule}, trials: 2`, () =>
+          runSpMVTest({ shape, rows: 20000, cols: 5000, options: { schedule }, trials: 2 })
+        );
+      }
+    }
+  }
 
   for (const [label, bins, n, gen, repeat] of histogramTests) {
     await runTest(`hist  ${label} n=${n}`, () => runHistogramTest({ bins, n, gen, repeat }));
