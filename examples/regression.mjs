@@ -1117,6 +1117,8 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
   const srShapes = {
     uniform: (tiles) => Array(tiles).fill(8),
     "one long tile": () => [70000],
+    /* with 1 item per invocation: 19500 workgroups, so three levels of fixup */
+    "huge tile": () => [3, 5000000, 5],
     "all empty": (tiles) => Array(tiles).fill(0),
     /* a few long tiles (spanning many workgroups) among short and empty ones */
     skewed: (tiles) => Array.from({ length: tiles }, (_, i) => (i % 1009 === 3 ? 20000 + (i % 7) : srHash(i) % 5)),
@@ -1147,7 +1149,7 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
   /* SegmentedReduce: each tile's reduction of data[atom] (u32 add or i32
    * max), equal to the CPU's; one primitive over several shapes in turn
    * (tiles and atoms change between executes) */
-  async function runSegmentedReduceTest({ shapes, tiles, binop, options = {} }) {
+  async function runSegmentedReduceTest({ shapes, tiles, binop, options = {}, fixupLevels }) {
     const T = binop.datatype;
     const TypedArray = T === "i32" ? Int32Array : Uint32Array;
     const primitive = new SegmentedReduce({
@@ -1172,6 +1174,11 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
       const expected = segmentedReduceReference({ offsets, tiles: lengths.length, binop, atomValue: (a) => data[a] });
       const t = expected.findIndex((v, i) => out[i] !== (T === "i32" ? v | 0 : v >>> 0));
       if (t >= 0) errors += `\n${shape}: tile ${t} (${lengths[t]} atoms) = ${out[t]}, expected ${expected[t]}`;
+      if (fixupLevels !== undefined) {
+        let levels = 0;
+        for (let p = primitive.fixup; p; p = p.fixup) levels++;
+        if (levels !== fixupLevels) errors += `\n${shape}: ${levels} levels of fixup, expected ${fixupLevels}`;
+      }
       for (const b of Object.values(buffers)) b.destroy();
     }
     primitive.destroy();
@@ -1569,6 +1576,15 @@ ${randomBitsWGSL(this.rng)}
         runSegmentedReduceTest({ shapes: allShapes, tiles: 30011, binop: new BinOpAdd({ datatype: "u32" }), options: { schedule, ...extra } })
       );
     }
+    await runTest("segred SegmentedReduce u32 add, mergepath, three levels of fixup", () =>
+      runSegmentedReduceTest({
+        shapes: ["huge tile"],
+        tiles: 3,
+        binop: new BinOpAdd({ datatype: "u32" }),
+        options: { schedule: "mergepath", itemsPerThread: 1 },
+        fixupLevels: 3,
+      })
+    );
     for (const schedule of ["thread", "mergepath"]) {
       await runTest(`segred SegmentedReduce i32 max, ${schedule}`, () =>
         runSegmentedReduceTest({ shapes: ["skewed", "all empty", "power law"], tiles: 5003, binop: new BinOpMax({ datatype: "i32" }), options: { schedule } })

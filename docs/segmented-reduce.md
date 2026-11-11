@@ -58,8 +58,10 @@ This is code generation by string, and it is deliberately so: JavaScript compose
 - `binop` (required): any `BinOp`; it may be non-commutative, since atoms are combined in order;
 - `tiles`, `atoms` (required): the number of tiles, and `offsets[tiles]`; both may change between executes;
 - `atom` (required), `emit`, `buffers`: above;
+- `tileStart: (t) => expression`: tile t's first atom, for t from 0 to `tiles`, in place of an `offsets` buffer (the paper's iterators over a sparse format);
+- `wgsl`: more WGSL declarations, such as functions that `atom`, `emit` or `tileStart` call;
 - `schedule`: `"mergepath"` (default) or `"thread"`;
-- `itemsPerThread`: merge-path steps per invocation (default 7).
+- `itemsPerThread`: merge-path steps per invocation (default 4, the fastest on an M1 Max, a V100 and an A100).
 
 ## Schedules
 
@@ -70,19 +72,29 @@ This is code generation by string, and it is deliberately so: JavaScript compose
 Tiles split between invocations are put back together in two stages:
 
 1. **Within a workgroup.** Each invocation emits the tiles it both starts and ends, and carries a partial value for the tile it is in at the end. A segmented inclusive scan of the carries, keyed by tile, gives each invocation what earlier invocations carried into the tile it started in.
-2. **Between workgroups.** A tile that began in an earlier workgroup is not emitted by the workgroup that ends it. That workgroup records its value instead, and a second kernel (`fixup`) adds what the earlier workgroups carried in that tile, walking back over them, and emits it.
+2. **Between workgroups.** A tile that began in an earlier workgroup is not emitted by the workgroup that ends it. That workgroup records the tile's value as its *head* instead, and every workgroup records what it carries out.
 
-So every tile is emitted exactly once, with its whole value, and `emit` can be any WGSL: it is never asked to combine partial results.
+Combining the workgroups' carries is itself a segmented reduce, so `SegmentedReduce` does it with a second `SegmentedReduce` (the *fixup*):
+
+- its atoms are the workgroups' carries;
+- its tiles are the workgroups: tile w holds the run of carries in the tile that workgroup w ends (carried tiles are nondecreasing, so a binary search finds where the run starts), and none if w ends nothing it did not start;
+- its `atom` reads a carry, its `tileStart` is that binary search, and its `emit` adds the run's sum in front of workgroup w's head value.
+
+The fixup uses the merge-path schedule too, so it is load-balanced however many workgroups a tile spans, and it has its own fixup, recursively, until one workgroup suffices. Each level shrinks the problem by a factor of 512 (with 4 items per invocation), so 2^28 atoms take three levels. A last kernel emits the heads through the caller's `emit`.
+
+So every tile is emitted exactly once, with its whole value, and `emit` can be any WGSL: it is never asked to combine partial results. The fixup levels bind only their own carry buffers, never the caller's, so the number of buffers a kernel binds does not grow with depth (WebGPU guarantees only 8 storage buffers per shader stage).
+
+The first version walked back over the carries with one invocation per finishing workgroup. On a matrix with one row holding half of 2^26 nonzeros, that walk crossed 33,000 workgroups in one invocation and took half the time (7.4 of 14.9 ms on an M1 Max).
 
 ### Fit to WebGPU
 
 - **Barriers in uniform control flow.** WGSL requires `workgroupBarrier()` where control flow is provably uniform across the workgroup. Merge-path's per-invocation loops have no barriers; its only barriers are in the workgroup scan, whose loop bounds are constants. A block-mapped schedule (a workgroup per tile, scanning atom counts per tile) would need its loop bounds made uniform with `workgroupUniformLoad`.
-- **No float atomics.** CUDA merge-path SpMV can finish split rows with `atomicAdd` on floats. WebGPU atomics are 32-bit integers only, so the fixup kernel combines split tiles instead, which also keeps the result deterministic.
+- **No float atomics.** CUDA merge-path SpMV can finish split rows with `atomicAdd` on floats. WebGPU atomics are 32-bit integers only, so the fixup combines split tiles instead, which also keeps the result deterministic.
 - **No subgroups needed.** Both schedules use only workgroup memory and barriers, so they run the same on every device, including those without subgroups.
 
 ## Testing and measuring
 
-The regression tests (`segred`) check `SegmentedReduce` (u32 add, i32 max) and `SpMV` against the CPU on several shapes: uniform tiles, a power law, a few tiles spanning many workgroups, one tile, all tiles empty. They cover both schedules and 1, 7 and 16 items per invocation, and change `tiles` and `atoms` between executes.
+The regression tests (`segred`) check `SegmentedReduce` (u32 add, i32 max) and `SpMV` against the CPU on several shapes: uniform tiles, a power law, a few tiles spanning many workgroups, one tile, all tiles empty. They cover both schedules, 1, 7 and 16 items per invocation, three levels of fixup (one tile of 5 million atoms, one item per invocation), and change `tiles` and `atoms` between executes.
 
 `misc/benchmark_spmv.mjs` times both schedules on generated matrices (`uniform`, `rmat` scale-free graphs, `denserow` with one row holding half the nonzeros) and on Matrix Market files (`--mtx=`, e.g. from the [SuiteSparse collection](https://sparse.tamu.edu)), checks every result, and reports GFLOP/s and bandwidth against a copy kernel's.
 
@@ -90,6 +102,5 @@ The regression tests (`segred`) check `SegmentedReduce` (u32 add, i32 max) and `
 
 - **Coalesced loads.** Each invocation reads its atoms consecutively, so a subgroup's loads are strided by `itemsPerThread`. CUB stages a tile's atoms through workgroup memory first.
 - **One search per workgroup.** Each invocation searches the global offsets. CUB searches once per workgroup, then within a tile of row ends in workgroup memory.
-- **A parallel fixup.** A tile spanning w workgroups makes one invocation walk back over w carries. A segmented scan of the carries would bound that for very long tiles.
 - **Atoms from the GPU.** The caller passes `atoms` (offsets[tiles]) to size the grid. An indirect dispatch could read it on the GPU instead, for offsets produced by an earlier kernel.
 - **More schedules.** Workgroup-mapped and subgroup-mapped schedules, as in the paper.

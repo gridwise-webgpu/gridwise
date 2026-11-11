@@ -191,12 +191,12 @@ async function benchmark(name, m) {
       if (!(Math.abs(y[r] - expected[r]) <= 1e-4 * magnitude + 1e-30)) bad = r;
     }
     spmv.destroy();
-    const fixup = kernels.find((k) => k.label?.includes("fixup"));
+    const fixupNS = kernels.filter((k) => /fixup|heads/.test(k.label ?? "")).reduce((a, k) => a + k.ns, 0);
     results.push({ label, ns });
     console.log(
       `  ${label.padEnd(14)} ${(ns / 1e6).toFixed(3).padStart(9)} ms  ${((2 * nnz) / ns).toFixed(2).padStart(7)} GFLOP/s  ` +
         `${(bytes / ns).toFixed(1).padStart(7)} GB/s (${((100 * bytes) / ns / copyGBps).toFixed(0).padStart(3)}% of copy)` +
-        (fixup ? `  fixup ${(fixup.ns / 1e3).toFixed(1)} µs` : "") +
+        (fixupNS ? `  fixup ${(fixupNS / 1e3).toFixed(1)} µs` : "") +
         (bad >= 0 ? `  WRONG: row ${bad} = ${y[bad]}, expected ${expected[bad]}` : "")
     );
   }

@@ -32,8 +32,11 @@
  *
  * Options: binop (required); tiles and atoms (required: the number of tiles,
  * and offsets[tiles]; both may change between executes); atom (required),
- * emit, buffers; schedule ("mergepath", default, or "thread");
- * itemsPerThread (mergepath: path steps per invocation, default 7).
+ * emit, buffers; tileStart ((t) => WGSL expression of tile t's first atom,
+ * for t in [0, tiles], instead of an offsets buffer); wgsl (more WGSL
+ * declarations, e.g. functions that atom, emit or tileStart call);
+ * schedule ("mergepath", default, or "thread"); itemsPerThread (mergepath:
+ * path steps per invocation, default 4).
  *
  * Schedules (the paper's names):
  *   thread     one invocation per tile, striding over the tiles. Balanced
@@ -43,12 +46,18 @@
  *              and Garland, SC 2016): tiles + atoms steps, split evenly, so
  *              every invocation does itemsPerThread steps whatever the tile
  *              sizes. A tile split between invocations is combined by a
- *              segmented scan in the workgroup, and between workgroups by a
- *              second kernel (fixup) that walks back over the workgroups the
- *              tile spans: each tile is emitted exactly once, with its whole
- *              value, so emit may be any WGSL (it is never asked to combine).
+ *              segmented scan in the workgroup. Between workgroups, combining
+ *              is itself a segmented reduce: each workgroup's carry is an
+ *              atom, and the tiles are the runs of carries in the same tile,
+ *              each ending at the workgroup that finishes it. So a second
+ *              SegmentedReduce (merge-path, on the carries; recursively, until
+ *              one workgroup suffices) combines them into the finishing
+ *              workgroups' head values, however many workgroups a tile spans,
+ *              and a last kernel emits the heads. Each tile is emitted exactly
+ *              once, with its whole value, so emit may be any WGSL (it is
+ *              never asked to combine).
  */
-import { BasePrimitive, Kernel, AllocateBuffer, UniformStruct } from "./primitive.mjs";
+import { BasePrimitive, Kernel, AllocateBuffer, ExecutePrimitive, UniformStruct } from "./primitive.mjs";
 
 const WORKGROUP_SIZE = 256;
 const SCHEDULES = ["mergepath", "thread"];
@@ -60,7 +69,7 @@ export class SegmentedReduce extends BasePrimitive {
     if (typeof this.atom !== "function") throw new Error("SegmentedReduce: requires atom: (atom, tile) => WGSL expression");
     this.schedule ??= "mergepath";
     if (!SCHEDULES.includes(this.schedule)) throw new Error(`SegmentedReduce: schedule must be one of ${SCHEDULES.join(", ")}`);
-    this.itemsPerThread ??= 7;
+    this.itemsPerThread ??= 4;
     if (!(Number.isInteger(this.itemsPerThread) && this.itemsPerThread >= 1)) throw new Error("SegmentedReduce: itemsPerThread must be a positive integer");
     this.datatype = this.binop.datatype;
     this.userBuffers = (this.buffers ?? []).map((b) => ({ access: "read", ...b }));
@@ -68,7 +77,11 @@ export class SegmentedReduce extends BasePrimitive {
       this.emit = (t, v) => `outputBuffer[${t}] = ${v};`;
       this.userBuffers.push({ name: "outputBuffer", access: "read_write", type: `array<${this.datatype}>` });
     }
-    this.knownBuffers = ["offsets", ...this.userBuffers.map((b) => b.name)];
+    this.level ??= 0; /* 0 for the caller's; n for the nth level of fixup */
+    this.wgTileName = `wgTile${this.level}`;
+    this.wgValueName = `wgValue${this.level}`;
+    this.knownBuffers = [...(this.tileStart ? [] : ["offsets"]), ...this.userBuffers.map((b) => b.name)];
+    this.tileStart ??= (t) => `offsets[${t}]`;
     this.workgroupSize = WORKGROUP_SIZE;
     this.params = new UniformStruct("SRParams", { tiles: "u32", atoms: "u32", workgroups: "u32" });
     if (!("label" in args)) this.label += this.makeParamString(["schedule"]);
@@ -87,6 +100,8 @@ export class SegmentedReduce extends BasePrimitive {
     return /* wgsl */ `
 ${this.binop.wgslfn}
 const IDENTITY: ${T} = ${T}(${this.binop.identity});
+${this.wgsl ?? ""}
+fn tileStartOf(t: u32) -> u32 { return ${this.tileStart("t")}; }
 fn atomValue(atom: u32, tile: u32) -> ${T} { return ${this.atom("atom", "tile")}; }
 fn emitTile(tile: u32, value: ${T}) { ${this.emit("tile", "value")} }`;
   }
@@ -99,8 +114,8 @@ fn thread_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNon
   ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
   for (var tile = gid; tile < sr.tiles; tile += totalThreadCount) {
     var acc = IDENTITY;
-    let end = offsets[tile + 1u];
-    for (var atom = offsets[tile]; atom < end; atom++) { acc = binop(acc, atomValue(atom, tile)); }
+    let end = tileStartOf(tile + 1u);
+    for (var atom = tileStartOf(tile); atom < end; atom++) { acc = binop(acc, atomValue(atom, tile)); }
     emitTile(tile, acc);
   }
 }`;
@@ -138,11 +153,11 @@ fn mergepath_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: Builtins
   var hi = min(diag, sr.tiles);
   while (lo < hi) {
     let mid = (lo + hi) / 2u;
-    if (offsets[mid + 1u] <= diag - mid - 1u) { lo = mid + 1u; } else { hi = mid; }
+    if (tileStartOf(mid + 1u) <= diag - mid - 1u) { lo = mid + 1u; } else { hi = mid; }
   }
   var tile = lo;
   var atom = diag - lo;
-  var tileEnd = select(sr.atoms, offsets[tile + 1u], tile < sr.tiles);
+  var tileEnd = select(sr.atoms, tileStartOf(tile + 1u), tile < sr.tiles);
   let stepEnd = min(diag + K, total);
   var acc = IDENTITY;
   var firstDone = false;   /* ended the tile it started in? */
@@ -157,7 +172,7 @@ fn mergepath_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: Builtins
       if (!firstDone) { firstDone = true; firstValue = acc; } else { emitTile(tile, acc); }
       acc = IDENTITY;
       tile++;
-      tileEnd = select(sr.atoms, offsets[tile + 1u], tile < sr.tiles);
+      tileEnd = select(sr.atoms, tileStartOf(tile + 1u), tile < sr.tiles);
     }
   }
   if (lidx == 0u) {
@@ -184,7 +199,7 @@ fn mergepath_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: Builtins
     if (lidx > 0u && scanTile[lidx - 1u] == lo) { value = binop(scanValue[lidx - 1u], value); }
     if (wgid > 0u && lo == wgStart) {
       /* the workgroup's first tile (one invocation ends it), possibly begun
-       * in earlier workgroups: the fixup kernel adds theirs and emits it */
+       * in earlier workgroups: the fixup adds theirs and emits it */
       headDone = 1u;
       headValue = value;
     } else {
@@ -195,32 +210,71 @@ fn mergepath_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: Builtins
   if (lidx == ${W - 1}u) {
     /* what this workgroup carries out (to the tile unfinished at its end),
      * and its first tile's value if it ended here */
-    wgTile[wgid] = scanTile[${W - 1}u];
-    wgValue[wgid] = scanValue[${W - 1}u];
-    wgTile[sr.workgroups + wgid] = headDone;
-    wgValue[sr.workgroups + wgid] = headValue;
+    ${this.wgTileName}[wgid] = scanTile[${W - 1}u];
+    ${this.wgValueName}[wgid] = scanValue[${W - 1}u];
+    ${this.wgTileName}[sr.workgroups + wgid] = headDone;
+    ${this.wgValueName}[sr.workgroups + wgid] = headValue;
   }
 }
 
-/* Workgroup w (> 0) that ended the tile it started in (its head) adds what
- * the earlier workgroups carried in that tile, walking back while they
- * carried it, and emits it. */
+/* after the fixup has added the earlier workgroups' carries into each head
+ * value: emit the heads */
 @compute @workgroup_size(${W})
-fn fixup_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
+fn heads_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
   ${this.fnDeclarations.computeLinearizedGridParametersSplit()}
   let w = gid;
   if (w == 0u || w >= sr.workgroups) { return; }
-  if (wgTile[sr.workgroups + w] == 0u) { return; }
-  let tile = wgTile[w - 1u];
-  var value = wgValue[sr.workgroups + w];
-  var v = w;
-  while (v > 0u && wgTile[v - 1u] == tile) {
-    v--;
-    value = binop(wgValue[v], value);
+  if (${this.wgTileName}[sr.workgroups + w] == 1u) {
+    emitTile(${this.wgTileName}[w - 1u], ${this.wgValueName}[sr.workgroups + w]);
   }
-  emitTile(tile, value);
 }`;
   };
+
+  /** The fixup: a SegmentedReduce over this one's W workgroup carries,
+   * whose tiles are this one's workgroups. Tile w's atoms are the carries of
+   * the run (the same carried tile) that ends at workgroup w - 1, if w ends
+   * that tile (w's head); runs start where the carried tiles, which are
+   * nondecreasing, first equal w - 1's. Its emit adds the run's carries
+   * before w's head value, in place. (Tile W - 1 also takes the last
+   * workgroup's carry, past the last tile: the identity.) It reads and writes
+   * only this level's carry buffers, so every level binds the same few. */
+  fixupPrimitive() {
+    const C = this.wgTileName;
+    const V = this.wgValueName;
+    const head = (w) => `${V}[sr.tiles + ${w}]`;
+    this.fixup ??= new SegmentedReduce({
+      device: this.device,
+      adapter: this.adapter,
+      label: `${this.label} fixup`,
+      binop: this.binop,
+      schedule: "mergepath",
+      itemsPerThread: this.itemsPerThread,
+      level: this.level + 1,
+      tiles: 1,
+      atoms: 0,
+      buffers: [
+        { name: C, type: "array<u32>" },
+        { name: V, type: `array<${this.datatype}>`, access: "read_write" },
+      ],
+      wgsl: /* wgsl */ `
+fn runStart(t: u32) -> u32 {
+  if (t == 0u) { return 0u; }
+  if (t >= sr.tiles) { return sr.tiles; }
+  let key = ${C}[t - 1u];
+  var lo = 0u;
+  var hi = t - 1u;
+  while (lo < hi) {
+    let mid = (lo + hi) / 2u;
+    if (${C}[mid] < key) { lo = mid + 1u; } else { hi = mid; }
+  }
+  return lo;
+}`,
+      tileStart: (t) => `runStart(${t})`,
+      atom: (a) => `${V}[${a}]`,
+      emit: (w, v) => `if (${w} > 0u && ${C}[sr.tiles + ${w}] == 1u) { ${head(w)} = binop(${v}, ${head(w)}); }`,
+    });
+    return this.fixup;
+  }
 
   compute() {
     if (!(Number.isInteger(this.tiles) && this.tiles >= 1)) throw new Error(`SegmentedReduce: tiles (${this.tiles}) must be a positive integer`);
@@ -229,12 +283,12 @@ fn fixup_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonu
     const workgroups = this.workgroupCount();
     const T = this.datatype;
     const buffers = [
-      { name: "offsets", access: "read", type: "array<u32>" },
+      ...(this.knownBuffers.includes("offsets") ? [{ name: "offsets", access: "read", type: "array<u32>" }] : []),
       ...this.userBuffers,
       ...(this.schedule === "mergepath"
         ? [
-            { name: "wgTile", access: "read_write", type: "array<u32>" },
-            { name: "wgValue", access: "read_write", type: `array<${T}>` },
+            { name: this.wgTileName, access: "read_write", type: "array<u32>" },
+            { name: this.wgValueName, access: "read_write", type: `array<${T}>` },
           ]
         : []),
       { name: "sr", buffer: "srParams", uniform: this.params },
@@ -249,19 +303,33 @@ fn fixup_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonu
     } else {
       actions.push(
         /* per workgroup: carried tile and value, then head flag and value */
-        new AllocateBuffer({ label: "wgTile", size: Math.max(16, 8 * workgroups), clearBufferOnReuse: false }),
-        new AllocateBuffer({ label: "wgValue", size: Math.max(16, 8 * workgroups), clearBufferOnReuse: false }),
-        new Kernel({ kernel: this.mergepathWGSL, entryPoint: "mergepath_main", label: `${label} path`, buffers, getDispatchGeometry: dispatch(workgroups) }),
-        new Kernel({
-          kernel: this.mergepathWGSL,
-          entryPoint: "fixup_main",
-          label: `${label} fixup`,
-          buffers,
-          getDispatchGeometry: dispatch(Math.ceil(workgroups / WORKGROUP_SIZE)),
-        })
+        new AllocateBuffer({ label: this.wgTileName, size: Math.max(16, 8 * workgroups), clearBufferOnReuse: false }),
+        new AllocateBuffer({ label: this.wgValueName, size: Math.max(16, 8 * workgroups), clearBufferOnReuse: false }),
+        new Kernel({ kernel: this.mergepathWGSL, entryPoint: "mergepath_main", label: `${label} path`, buffers, getDispatchGeometry: dispatch(workgroups) })
       );
+      /* one workgroup emits every tile itself; more need the fixup */
+      if (workgroups > 1) {
+        const fixup = this.fixupPrimitive();
+        Object.assign(fixup, { tiles: workgroups, atoms: workgroups });
+        const names = [this.wgTileName, this.wgValueName];
+        actions.push(
+          new ExecutePrimitive({ primitive: fixup, buffers: Object.fromEntries(names.map((n) => [n, n])) }),
+          new Kernel({
+            kernel: this.mergepathWGSL,
+            entryPoint: "heads_main",
+            label: `${label} heads`,
+            buffers,
+            getDispatchGeometry: dispatch(Math.ceil(workgroups / WORKGROUP_SIZE)),
+          })
+        );
+      }
     }
     return actions;
+  }
+
+  destroy() {
+    this.fixup?.destroy();
+    super.destroy();
   }
 }
 
