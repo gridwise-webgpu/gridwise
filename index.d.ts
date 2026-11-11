@@ -498,18 +498,37 @@ export interface SegmentedReduceOptions {
   emit?: (tile: string, value: string) => string;
   /** the buffers atom and emit use, bound by name in execute() (access "read" unless given) */
   buffers?: { name: string; type: string; access?: "read" | "read_write" }[];
-  /** "mergepath" (default) or "thread" */
-  schedule?: "mergepath" | "thread";
-  /** mergepath: path steps per invocation (default 7) */
+  /** a Schedule, or a name in SegmentedReduce.schedules: "mergepath" (default), "thread", "workgroup" */
+  schedule?: Schedule | string;
+  /** passed to a schedule given by name (merge-path: steps per invocation, default 4) */
   itemsPerThread?: number;
+  /** tile t's first atom (t in [0, tiles]) as a WGSL expression, in place of an offsets buffer */
+  tileStart?: (t: string) => string;
+  /** more WGSL declarations (e.g. functions atom, emit or tileStart call) */
+  wgsl?: string;
   adapter?: GPUAdapter;
   [key: string]: any;
 }
 export class SegmentedReduce extends BasePrimitive {
+  /** schedules by name */
+  static schedules: { [name: string]: new (options?: { [key: string]: any }) => Schedule };
   tiles: number;
   atoms: number;
-  schedule: "mergepath" | "thread";
+  schedule: Schedule;
+  datatype: string;
+  /** nesting depth (0 for the caller's; schedules' children are deeper) */
+  level: number;
+  /** child primitives a schedule made (e.g. merge-path's fixup) */
+  children: { [key: string]: SegmentedReduce };
   constructor(args: SegmentedReduceOptions);
+  /** for schedules: a Kernel running one entry point of the schedule's WGSL */
+  kernel(args: { entryPoint: string; workgroups: number; label?: string }): Kernel;
+  /** for schedules: a scratch buffer */
+  allocate(args: { label: string; size: number }): AllocateBuffer;
+  /** for schedules: a child SegmentedReduce, made once and kept under key */
+  child(key: string, options: { [key: string]: any }): SegmentedReduce;
+  /** for schedules: run a child primitive, binding these buffers by the same names */
+  run(primitive: BasePrimitive, names: string[]): ExecutePrimitive;
   /** offsets (tiles + 1 u32s), the buffers named in options.buffers, and
    * outputBuffer when there is no emit */
   execute(args: { offsets: GPUBuffer; [buffer: string]: any }): Promise<void>;
@@ -522,6 +541,31 @@ export function segmentedReduceReference(args: {
   atomValue: (atom: number, tile: number) => number;
 }): number[];
 
+/** A load-balancing schedule for SegmentedReduce: writes the kernels; calls
+ * the work through binop, IDENTITY, tileStartOf, atomValue, emitTile and the
+ * uniform sr (tiles, atoms, workgroups). schedules.mjs */
+export class Schedule {
+  name: string;
+  constructor(options?: { [key: string]: any });
+  /** workgroups of the main kernel */
+  workgroups(args: { tiles: number; atoms: number }): number;
+  /** WGSL of the schedule's kernels */
+  wgsl(sr: SegmentedReduce): string;
+  /** buffers its kernels bind beyond the caller's */
+  buffers(sr: SegmentedReduce): KernelBuffer[];
+  /** the actions of one execute */
+  actions(sr: SegmentedReduce, args: { workgroups: number }): any[];
+}
+/** one invocation per tile */
+export class ThreadMapped extends Schedule {}
+/** one workgroup per tile (the paper's block-mapped) */
+export class WorkgroupMapped extends Schedule {}
+/** merge path over tile ends and atoms, with a recursive SegmentedReduce fixup */
+export class MergePath extends Schedule {
+  itemsPerThread: number;
+  constructor(options?: { itemsPerThread?: number });
+}
+
 /** y = A x, A in CSR form (f32): a SegmentedReduce over A's rows. docs/segmented-reduce.md */
 export class SpMV extends SegmentedReduce {
   rows: number;
@@ -530,7 +574,7 @@ export class SpMV extends SegmentedReduce {
     device: GPUDevice;
     rows: number;
     nnz: number;
-    schedule?: "mergepath" | "thread";
+    schedule?: Schedule | string;
     itemsPerThread?: number;
     adapter?: GPUAdapter;
     [key: string]: any;

@@ -9,7 +9,8 @@
  * [offsets[r], offsets[r + 1])), indices (nnz u32 column indices), values
  * (nnz f32), x (f32, one per column), y (rows f32, written).
  * Options: rows, nnz (both may change between executes), schedule
- * ("mergepath", default, or "thread"), itemsPerThread; see SegmentedReduce.
+ * ("mergepath", default, "thread", "workgroup", or a Schedule: see
+ * schedules.mjs), itemsPerThread; see SegmentedReduce.
  */
 import { SegmentedReduce } from "./segmentedreduce.mjs";
 import { BinOpAdd } from "./binop.mjs";

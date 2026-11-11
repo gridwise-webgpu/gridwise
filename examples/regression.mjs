@@ -22,6 +22,7 @@ import { ShunPerm } from "../src/shunperm.mjs";
 import { SuffixArray, suffixArrayReference, checkSuffixArray } from "../src/suffixarray.mjs";
 import { Histogram } from "../src/histogram.mjs";
 import { SegmentedReduce, segmentedReduceReference } from "../src/segmentedreduce.mjs";
+import { Schedule } from "../src/schedules.mjs";
 import { SpMV, spmvReference } from "../src/spmv.mjs";
 import { EvenBins, RangeBins, RadixBins } from "../src/bins.mjs";
 
@@ -1176,13 +1177,38 @@ ${this.fnDeclarations.include("computeLinearizedGridParametersSplit")}
       if (t >= 0) errors += `\n${shape}: tile ${t} (${lengths[t]} atoms) = ${out[t]}, expected ${expected[t]}`;
       if (fixupLevels !== undefined) {
         let levels = 0;
-        for (let p = primitive.fixup; p; p = p.fixup) levels++;
+        for (let p = primitive.children.fixup; p; p = p.children.fixup) levels++;
         if (levels !== fixupLevels) errors += `\n${shape}: ${levels} levels of fixup, expected ${fixupLevels}`;
       }
       for (const b of Object.values(buffers)) b.destroy();
     }
     primitive.destroy();
     return errors;
+  }
+
+  /* A schedule written outside SegmentedReduce, to check that one can be:
+   * one invocation does every tile */
+  class SerialSchedule extends Schedule {
+    name = "serial";
+    workgroups() {
+      return 1;
+    }
+    wgsl(sr) {
+      return /* wgsl */ `
+@compute @workgroup_size(256)
+fn serial_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
+  ${sr.fnDeclarations.computeLinearizedGridParametersSplit()}
+  if (gid != 0u) { return; }
+  for (var tile = 0u; tile < sr.tiles; tile++) {
+    var acc = IDENTITY;
+    for (var atom = tileStartOf(tile); atom < tileStartOf(tile + 1u); atom++) { acc = binop(acc, atomValue(atom, tile)); }
+    emitTile(tile, acc);
+  }
+}`;
+    }
+    actions(sr, { workgroups }) {
+      return [sr.kernel({ entryPoint: "serial_main", workgroups })];
+    }
   }
 
   /* SpMV: y = A x within f32 rounding of the CPU's f64 sums */
@@ -1568,6 +1594,7 @@ ${randomBitsWGSL(this.rng)}
     const allShapes = ["uniform", "skewed", "one long tile", "all empty", "power law"];
     for (const [label, schedule, extra] of [
       ["thread", "thread", {}],
+      ["workgroup", "workgroup", {}],
       ["mergepath", "mergepath", {}],
       ["mergepath, 1 item per thread", "mergepath", { itemsPerThread: 1 }],
       ["mergepath, 16 items per thread", "mergepath", { itemsPerThread: 16 }],
@@ -1595,7 +1622,10 @@ ${randomBitsWGSL(this.rng)}
         trials: 3,
       })
     );
-    for (const schedule of ["thread", "mergepath"]) {
+    await runTest("segred SegmentedReduce u32 add, a schedule defined outside (serial)", () =>
+      runSegmentedReduceTest({ shapes: ["skewed", "all empty"], tiles: 2003, binop: new BinOpAdd({ datatype: "u32" }), options: { schedule: new SerialSchedule() } })
+    );
+    for (const schedule of ["thread", "workgroup", "mergepath"]) {
       await runTest(`segred SegmentedReduce i32 max, ${schedule}`, () =>
         runSegmentedReduceTest({ shapes: ["skewed", "all empty", "power law"], tiles: 5003, binop: new BinOpMax({ datatype: "i32" }), options: { schedule } })
       );

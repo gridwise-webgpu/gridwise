@@ -26,6 +26,7 @@ export {
   suffixArrayPhase,
 } from "./src/suffixarray.mjs";
 export { SegmentedReduce, segmentedReduceReference } from "./src/segmentedreduce.mjs";
+export { Schedule, ThreadMapped, WorkgroupMapped, MergePath } from "./src/schedules.mjs";
 export { SpMV, spmvReference } from "./src/spmv.mjs";
 export {
   randomBitsWGSL,

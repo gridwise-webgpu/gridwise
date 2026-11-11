@@ -1,5 +1,6 @@
-/* Benchmark SpMV (SegmentedReduce) schedules in Node (Dawn): thread-mapped
- * against merge-path, on balanced and unbalanced sparse matrices.
+/* Benchmark SpMV (SegmentedReduce) schedules in Node (Dawn): thread-mapped,
+ * workgroup-mapped and merge-path, on balanced and unbalanced sparse
+ * matrices.
  *
  *   node misc/benchmark_spmv.mjs [matrices] [log2 sizes] [--mtx=file.mtx,...] [--items=K,...]
  *   node misc/benchmark_spmv.mjs uniform,rmat,denserow 18,20,22
@@ -177,9 +178,12 @@ async function benchmark(name, m) {
   const expected = spmvReference({ offsets, indices, values, x });
   const bytes = 12 * nnz + 8 * rows;
   const results = [];
-  const runs = [["thread", {}], ...itemsList.map((K) => [`mergepath${itemsList.length > 1 ? ` K=${K}` : ""}`, { itemsPerThread: K }])];
-  for (const [label, extra] of runs) {
-    const schedule = label.startsWith("thread") ? "thread" : "mergepath";
+  const runs = [
+    ["thread", "thread", {}],
+    ["workgroup", "workgroup", {}],
+    ...itemsList.map((K) => [`mergepath${itemsList.length > 1 ? ` K=${K}` : ""}`, "mergepath", { itemsPerThread: K }]),
+  ];
+  for (const [label, schedule, extra] of runs) {
     const spmv = new SpMV({ device, adapter, rows, nnz, schedule, ...extra });
     device.queue.writeBuffer(buffers.y, 0, new Float32Array(rows));
     const { ns, kernels } = await spmv.benchmark({ ...buffers, warmMs: 1000 });
@@ -192,7 +196,7 @@ async function benchmark(name, m) {
     }
     spmv.destroy();
     const fixupNS = kernels.filter((k) => /fixup|heads/.test(k.label ?? "")).reduce((a, k) => a + k.ns, 0);
-    results.push({ label, ns });
+    results.push({ schedule, ns });
     console.log(
       `  ${label.padEnd(14)} ${(ns / 1e6).toFixed(3).padStart(9)} ms  ${((2 * nnz) / ns).toFixed(2).padStart(7)} GFLOP/s  ` +
         `${(bytes / ns).toFixed(1).padStart(7)} GB/s (${((100 * bytes) / ns / copyGBps).toFixed(0).padStart(3)}% of copy)` +
@@ -200,9 +204,9 @@ async function benchmark(name, m) {
         (bad >= 0 ? `  WRONG: row ${bad} = ${y[bad]}, expected ${expected[bad]}` : "")
     );
   }
-  const thread = results[0].ns;
-  const best = Math.min(...results.slice(1).map((r) => r.ns));
-  console.log(`  merge-path / thread: ${(thread / best).toFixed(2)}x faster\n`);
+  const best = (s) => Math.min(...results.filter((r) => r.schedule === s).map((r) => r.ns));
+  const mergepath = best("mergepath");
+  console.log(`  merge-path is ${(best("thread") / mergepath).toFixed(2)}x thread-mapped's speed, ${(best("workgroup") / mergepath).toFixed(2)}x workgroup-mapped's\n`);
   for (const b of Object.values(buffers)) b.destroy();
 }
 

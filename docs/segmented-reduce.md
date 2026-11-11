@@ -60,14 +60,64 @@ This is code generation by string, and it is deliberately so: JavaScript compose
 - `atom` (required), `emit`, `buffers`: above;
 - `tileStart: (t) => expression`: tile t's first atom, for t from 0 to `tiles`, in place of an `offsets` buffer (the paper's iterators over a sparse format);
 - `wgsl`: more WGSL declarations, such as functions that `atom`, `emit` or `tileStart` call;
-- `schedule`: `"mergepath"` (default) or `"thread"`;
-- `itemsPerThread`: merge-path steps per invocation (default 4, the fastest on an M1 Max, a V100 and an A100).
+- `schedule`: a `Schedule` (`new MergePath({ itemsPerThread: 7 })`), or the name of one: `"mergepath"` (default), `"thread"` or `"workgroup"`;
+- `itemsPerThread`: passed to a schedule given by name; merge-path's steps per invocation (default 4, the fastest on an M1 Max, a V100 and an A100).
 
 ## Schedules
 
-**`thread`** gives each invocation one tile at a time, striding over the tiles. It is balanced only when tiles are about the same size. One long tile holds up the whole kernel, because a single invocation walks all of it.
+A schedule is a class of its own (`src/schedules.mjs`). `SegmentedReduce` holds the work and asks its schedule for the kernels; it knows no schedule by more than its name. There are three:
 
-**`mergepath`** (Merrill and Garland, SC 2016) walks the merge of two lists: the tiles' ends and the atom indices. Each step of the path either consumes an atom or ends a tile, so there are tiles + atoms steps, and every invocation takes `itemsPerThread` of them, whatever the tile sizes. A binary search over the offsets finds where each invocation's steps start.
+**`ThreadMapped`** (`"thread"`) gives each invocation one tile at a time, striding over the tiles. It is balanced only when tiles are about the same size. One long tile holds up the whole kernel, because a single invocation walks all of it.
+
+**`WorkgroupMapped`** (`"workgroup"`, the paper's block-mapped) gives each workgroup one tile at a time. Its invocations stride over the tile's atoms, then reduce their partial values in workgroup memory. It suits long tiles of about the same size. A short tile leaves most of the workgroup idle, and one very long tile still holds up the kernel, though 256 times less than with thread-mapped.
+
+**`MergePath`** (`"mergepath"`; Merrill and Garland, SC 2016) walks the merge of two lists: the tiles' ends and the atom indices. Each step of the path either consumes an atom or ends a tile, so there are tiles + atoms steps, and every invocation takes `itemsPerThread` of them, whatever the tile sizes. A binary search over the offsets finds where each invocation's steps start.
+
+### Writing a schedule
+
+A schedule writes the loops and never sees the work. It calls the work through WGSL that `SegmentedReduce` puts in the same module:
+
+| Name | What it is |
+|---|---|
+| `binop(a, b)`, `IDENTITY` | the reduction |
+| `tileStartOf(t)` | tile t's first atom, for t from 0 to `sr.tiles` |
+| `atomValue(atom, tile)` | an atom's value |
+| `emitTile(tile, value)` | a tile's result, to be called once per tile |
+| `sr.tiles`, `sr.atoms`, `sr.workgroups` | uniform parameters |
+
+A schedule is a class with four methods:
+
+- `workgroups({ tiles, atoms })`: how many workgroups its main kernel needs;
+- `wgsl(sr)`: the WGSL of its kernels (256 invocations per workgroup);
+- `buffers(sr)` (optional): buffers its kernels bind beyond the caller's;
+- `actions(sr, { workgroups })`: what runs in one execute, made with `sr.kernel({ entryPoint, workgroups })`, `sr.allocate()` for scratch buffers, and `sr.child()` and `sr.run()` for another `SegmentedReduce` it runs (as merge-path runs its fixup).
+
+The regression tests define one outside the library, in which one invocation does every tile:
+
+```js
+class SerialSchedule extends Schedule {
+  name = "serial";
+  workgroups() { return 1; }
+  wgsl(sr) {
+    return /* wgsl */ `
+@compute @workgroup_size(256)
+fn serial_main(builtinsUniform: BuiltinsUniform, builtinsNonuniform: BuiltinsNonuniform) {
+  ${sr.fnDeclarations.computeLinearizedGridParametersSplit()}
+  if (gid != 0u) { return; }
+  for (var tile = 0u; tile < sr.tiles; tile++) {
+    var acc = IDENTITY;
+    for (var atom = tileStartOf(tile); atom < tileStartOf(tile + 1u); atom++) { acc = binop(acc, atomValue(atom, tile)); }
+    emitTile(tile, acc);
+  }
+}`;
+  }
+  actions(sr, { workgroups }) { return [sr.kernel({ entryPoint: "serial_main", workgroups })]; }
+}
+
+new SegmentedReduce({ ..., schedule: new SerialSchedule() });
+```
+
+To use one by name, register it: `SegmentedReduce.schedules.serial = SerialSchedule`.
 
 ### How merge-path puts split tiles back together
 
@@ -123,15 +173,15 @@ The last tile also takes the last workgroup's carry, which is past the end of th
 
 ### Fit to WebGPU
 
-- **Barriers in uniform control flow.** WGSL requires `workgroupBarrier()` where control flow is provably uniform across the workgroup. Merge-path's per-invocation loops have no barriers; its only barriers are in the workgroup scan, whose loop bounds are constants. A block-mapped schedule (a workgroup per tile, scanning atom counts per tile) would need its loop bounds made uniform with `workgroupUniformLoad`.
+- **Barriers in uniform control flow.** WGSL requires `workgroupBarrier()` where control flow is provably uniform across the workgroup. Merge-path's per-invocation loops have no barriers; its only barriers are in the workgroup scan, whose loop bounds are constants. Workgroup-mapped has barriers inside its loop over tiles, which is allowed because that loop's index comes from the workgroup id and its bound is a uniform parameter; the atom loop, whose bounds come from storage, has none.
 - **No float atomics.** CUDA merge-path SpMV can finish split rows with `atomicAdd` on floats. WebGPU atomics are 32-bit integers only, so the fixup combines split tiles instead, which also keeps the result deterministic.
-- **No subgroups needed.** Both schedules use only workgroup memory and barriers, so they run the same on every device, including those without subgroups.
+- **No subgroups needed.** All three schedules use only workgroup memory and barriers, so they run the same on every device, including those without subgroups.
 
 ## Testing and measuring
 
-The regression tests (`segred`) check `SegmentedReduce` (u32 add, i32 max) and `SpMV` against the CPU on several shapes: uniform tiles, a power law, a few tiles spanning many workgroups, one tile, all tiles empty. They cover both schedules, 1, 7 and 16 items per invocation, three levels of fixup (one tile of 5 million atoms, one item per invocation), and change `tiles` and `atoms` between executes.
+The regression tests (`segred`) check `SegmentedReduce` (u32 add, i32 max) and `SpMV` against the CPU on several shapes: uniform tiles, a power law, a few tiles spanning many workgroups, one tile, all tiles empty. They cover all three schedules and one defined outside the library, 1, 7 and 16 items per invocation, kernels repeated in place, three levels of fixup (one tile of 5 million atoms, one item per invocation), and change `tiles` and `atoms` between executes.
 
-`misc/benchmark_spmv.mjs` times both schedules on generated matrices (`uniform`, `rmat` scale-free graphs, `denserow` with one row holding half the nonzeros) and on Matrix Market files (`--mtx=`, e.g. from the [SuiteSparse collection](https://sparse.tamu.edu)), checks every result, and reports GFLOP/s and bandwidth against a copy kernel's.
+`misc/benchmark_spmv.mjs` times the three schedules on generated matrices (`uniform`, `rmat` scale-free graphs, `denserow` with one row holding half the nonzeros) and on Matrix Market files (`--mtx=`, e.g. from the [SuiteSparse collection](https://sparse.tamu.edu)), checks every result, and reports GFLOP/s and bandwidth against a copy kernel's.
 
 ## Measured performance
 
@@ -159,4 +209,4 @@ That is 2.0–2.2× faster on the uniform matrix, 8–15× on R-MAT, and 1,500�
 - **A cheaper fixup for small problems.** The recursive fixup's few kernels cost about 30 µs whatever the matrix. A single-kernel fixup when no tile spans many workgroups would save most of that on small matrices.
 - **One search per workgroup.** Each invocation searches the global offsets. CUB searches once per workgroup, then within a tile of row ends in workgroup memory.
 - **Atoms from the GPU.** The caller passes `atoms` (offsets[tiles]) to size the grid. An indirect dispatch could read it on the GPU instead, for offsets produced by an earlier kernel.
-- **More schedules.** Workgroup-mapped and subgroup-mapped schedules, as in the paper.
+- **More schedules.** A subgroup-mapped schedule, as in the paper: it would depend on the device's subgroup size, which WebGPU reports only as a range.
